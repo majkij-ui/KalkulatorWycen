@@ -1,0 +1,206 @@
+'use client'
+
+import { motion, AnimatePresence } from 'framer-motion'
+import { FileText, Calendar, UserCheck, MapPin } from 'lucide-react'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Slider } from '@/components/ui/slider'
+import { Separator } from '@/components/ui/separator'
+import { GlassCard } from '@/components/glass-card'
+import { useQuote } from '@/lib/quote-context'
+import type { ScenarioType } from '@/lib/quote-types'
+
+const container = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 },
+  },
+}
+
+const item = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0 },
+}
+
+export function PreprodukcjaTab() {
+  const { data, updateField } = useQuote()
+  const isDetailed = data.isDetailedPrepro
+
+  const dniValue = data.dniDokumentacji
+  const setDni = (v: number) => updateField('dniDokumentacji', v)
+
+  return (
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-5"
+    >
+      {/* Part 1: Dni dokumentacji (top, always visible) */}
+      <motion.div variants={item}>
+        <GlassCard className={isDetailed ? 'opacity-60' : ''}>
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Calendar className="size-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-white">Dni dokumentacji</h3>
+              <p className="text-xs text-zinc-400">
+                Liczba dni potrzebnych na przygotowanie
+                {isDetailed && ' (nieużywane w trybie szczegółowym)'}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-zinc-400">Dni</span>
+              <span className="text-lg font-semibold tabular-nums text-white">
+                {dniValue % 1 === 0 ? dniValue : dniValue.toFixed(1).replace('.', ',')}
+              </span>
+            </div>
+            <Slider
+              value={[dniValue]}
+              onValueChange={([v]) => setDni(v)}
+              min={0}
+              max={10}
+              step={0.5}
+              className="py-2"
+              disabled={isDetailed}
+            />
+            <div className="flex justify-between text-xs text-zinc-400">
+              <span>0</span>
+              <span>10 dni</span>
+            </div>
+          </div>
+        </GlassCard>
+      </motion.div>
+
+      {/* Divider + Toggle */}
+      <motion.div variants={item} className="space-y-4">
+        <Separator className="bg-white/10" />
+        <div className="rounded-xl border-t border-l border-white/10 bg-zinc-900/30 p-4 backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-white">Szczegółowa wycena preprodukcji</p>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                Przełącz na precyzyjny dobór elementów zamiast wyceny dniowej.
+              </p>
+            </div>
+            <Switch
+              checked={isDetailed}
+              onCheckedChange={(v) => updateField('isDetailedPrepro', v)}
+              aria-label="Szczegółowa wycena preprodukcji"
+            />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Part 2: Detailed section (AnimatePresence) */}
+      <AnimatePresence initial={false}>
+        {isDetailed && (
+          <motion.div
+            key="detailed-prepro"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            {/* Re-trigger the container variants so children become visible */}
+            <motion.div
+              variants={container}
+              initial="hidden"
+              animate="show"
+              className="space-y-5 pt-1 pb-1"
+            >
+              <motion.div variants={item}>
+                <GlassCard>
+                  <div className="mb-4 flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FileText className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Scenariusz</h3>
+                    <p className="text-xs text-zinc-400">Wybierz poziom rozbudowy scenariusza</p>
+                    </div>
+                  </div>
+                  <RadioGroup
+                  value={data.scenariusz}
+                  onValueChange={(val) => updateField('scenariusz', val as ScenarioType)}
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                >
+                  {([
+                    { value: 'brak', label: 'Brak', desc: 'Bez scenariusza' },
+                    { value: 'podstawowy', label: 'Podstawowy', desc: 'Zarys i kluczowe sceny' },
+                    { value: 'rozbudowany', label: 'Rozbudowany', desc: 'Pełny scenariusz z dialogami' },
+                  ] as const).map((opt) => (
+                    <Label
+                      key={opt.value}
+                      htmlFor={`scenario-${opt.value}`}
+                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${
+                        data.scenariusz === opt.value
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
+                      }`}
+                    >
+                      <RadioGroupItem value={opt.value} id={`scenario-${opt.value}`} className="mt-0.5" />
+                      <div>
+                        <span className="text-sm font-medium text-white">{opt.label}</span>
+                        <p className="text-xs text-zinc-400">{opt.desc}</p>
+                      </div>
+                    </Label>
+                  ))}
+                  </RadioGroup>
+                </GlassCard>
+              </motion.div>
+
+              <motion.div variants={item}>
+                <GlassCard>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <MapPin className="size-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white">Wizja lokalna</h3>
+                        <p className="text-xs text-zinc-400">Sprawdzenie lokacji przed zdjęciami</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={data.wizjaLokalna}
+                      onCheckedChange={(val) => updateField('wizjaLokalna', val)}
+                      aria-label="Wizja lokalna"
+                    />
+                  </div>
+                </GlassCard>
+              </motion.div>
+
+              <motion.div variants={item}>
+                <GlassCard>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <UserCheck className="size-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white">Kierownik produkcji</h3>
+                        <p className="text-xs text-zinc-400">Dedykowany koordynator projektu</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={data.kierownikProdukcji}
+                      onCheckedChange={(val) => updateField('kierownikProdukcji', val)}
+                      aria-label="Kierownik produkcji"
+                    />
+                  </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}

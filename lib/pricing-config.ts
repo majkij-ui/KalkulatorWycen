@@ -1,0 +1,93 @@
+/**
+ * Konfiguracja stawek netto (PLN) dla kalkulatora wyceny wideo.
+ * Trzy poziomy: Tani (Freelancer), Standard (Boutique), Agresywny (Agency).
+ */
+
+export type PricingTier = 'tani' | 'standard' | 'agresywny'
+
+export interface TierPrices {
+  tani: number
+  standard: number
+  agresywny: number
+}
+
+export interface PricingConfigShape {
+  preprodukcja: {
+    dzienDokumentacji: TierPrices
+    scenariuszPodstawowy: TierPrices
+    scenariuszRozbudowany: TierPrices
+    wizjaLokalna: TierPrices
+    kierownikProdukcji: TierPrices
+  }
+  produkcja: {
+    dzienZdjeciowyEkipa: TierPrices
+    sprzetRental: TierPrices
+  }
+  postprodukcja: {
+    montazZaDzien: TierPrices
+    korekcjaBarwna: TierPrices
+    lektor: TierPrices
+  }
+}
+
+export const DEFAULT_PRICING: PricingConfigShape = {
+  preprodukcja: {
+    dzienDokumentacji: { tani: 600, standard: 1200, agresywny: 2500 },
+    scenariuszPodstawowy: { tani: 800, standard: 1800, agresywny: 4500 },
+    scenariuszRozbudowany: { tani: 1500, standard: 3500, agresywny: 8000 },
+    wizjaLokalna: { tani: 400, standard: 800, agresywny: 1500 },
+    kierownikProdukcji: { tani: 600, standard: 1500, agresywny: 3000 },
+  },
+  produkcja: {
+    dzienZdjeciowyEkipa: { tani: 1500, standard: 3500, agresywny: 8000 },
+    sprzetRental: { tani: 500, standard: 1500, agresywny: 4000 },
+  },
+  postprodukcja: {
+    montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },
+    korekcjaBarwna: { tani: 400, standard: 1200, agresywny: 2500 },
+    lektor: { tani: 300, standard: 700, agresywny: 1500 },
+  },
+}
+
+const STORAGE_KEY = 'quote-gen-pricing-config'
+
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+export function getPricingConfig(): PricingConfigShape {
+  if (typeof window === 'undefined') return deepClone(DEFAULT_PRICING)
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return deepClone(DEFAULT_PRICING)
+    const parsed = JSON.parse(raw) as PricingConfigShape
+    const merged = deepClone(DEFAULT_PRICING)
+    if (parsed.preprodukcja) merged.preprodukcja = { ...merged.preprodukcja, ...parsed.preprodukcja }
+    if (parsed.produkcja) merged.produkcja = { ...merged.produkcja, ...parsed.produkcja }
+    if (parsed.postprodukcja) merged.postprodukcja = { ...merged.postprodukcja, ...parsed.postprodukcja }
+    return merged
+  } catch {
+    return deepClone(DEFAULT_PRICING)
+  }
+}
+
+export function savePricingConfig(config: PricingConfigShape): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
+  } catch {
+    // ignore
+  }
+}
+
+export function resetPricingToDefault(): PricingConfigShape {
+  const def = deepClone(DEFAULT_PRICING)
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+  }
+  return def
+}
