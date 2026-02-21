@@ -1,6 +1,6 @@
 'use client'
 
-import type { QuoteData } from './quote-types'
+import type { QuoteData, ShootingDay } from './quote-types'
 import type { PricingConfigShape, PricingTier } from './pricing-config'
 
 const VAT_RATE = 0.23
@@ -34,13 +34,9 @@ function applyMargin(value: number, marginPercent: number): number {
   return value * (1 + marginPercent / 100)
 }
 
-/** Oblicza ilość/jednostkę dla pozycji z cennika na podstawie QuoteData (produkcja, postprodukcja) */
+/** Oblicza ilość/jednostkę dla pozycji z cennika na podstawie QuoteData (postprodukcja) */
 function getQuantity(key: string, data: QuoteData): number {
   switch (key) {
-    case 'dzienZdjeciowyEkipa':
-      return data.dniZdjeciowe
-    case 'sprzetRental':
-      return data.dniZdjeciowe
     case 'montazZaDzien':
       return data.dniMontazu
     case 'korekcjaBarwna':
@@ -55,10 +51,6 @@ function getQuantity(key: string, data: QuoteData): number {
 function getQuantityLabel(key: string, data: QuoteData): string {
   const q = getQuantity(key, data)
   switch (key) {
-    case 'dzienZdjeciowyEkipa':
-      return `${q} dni`
-    case 'sprzetRental':
-      return `${q} dni`
     case 'montazZaDzien':
       return `${q} dni`
     case 'korekcjaBarwna':
@@ -71,11 +63,30 @@ function getQuantityLabel(key: string, data: QuoteData): string {
 }
 
 const LABELS: Record<string, string> = {
-  dzienZdjeciowyEkipa: 'Dzień zdjęciowy (Ekipa)',
-  sprzetRental: 'Sprzęt (Rental)',
   montazZaDzien: 'Montaż (za dzień)',
   korekcjaBarwna: 'Korekcja barwna',
   lektor: 'Lektor',
+}
+
+function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja'], tier: PricingTier): number {
+  let total = 0
+  total += day.rezOp * pro.rezOp[tier]
+  total += day.asystent * pro.asystentOperator[tier]
+  total += day.gafer * pro.gafer[tier]
+  total += day.dzwiekowiec * pro.dzwiekowiec[tier]
+  total += day.mua * pro.mua[tier]
+  total += day.aktor * pro.aktor[tier]
+  total += day.model * pro.model[tier]
+  total += day.statysta * pro.statystaEpizodysta[tier]
+  total += day.kameraSony * pro.kameraSonyMirrorless[tier]
+  total += day.kameraRed * pro.kameraRedKomodoX[tier]
+  if (day.obiektywy === 'rental') total += pro.obiektywyRental[tier]
+  if (day.stabilizacja === 'rental') total += pro.stabilizacjaRental[tier]
+  if (day.podglad === 'rental') total += pro.podgladRental[tier]
+  if (day.swiatlo === 'rental') total += pro.swiatloRental[tier]
+  if (day.dron === 'dji') total += pro.dronDji[tier]
+  if (day.dron === 'fpv') total += pro.dronFpv[tier]
+  return total
 }
 
 export function getBreakdownWithPricing(
@@ -88,11 +99,10 @@ export function getBreakdownWithPricing(
   const proItems: LineItemRow[] = []
   const postItems: LineItemRow[] = []
 
-  const add = (
+  const addPost = (
     list: LineItemRow[],
-    key: keyof PricingConfigShape['produkcja'] | keyof PricingConfigShape['postprodukcja'],
-    unitPrice: number,
-    category: 'pro' | 'post'
+    key: keyof PricingConfigShape['postprodukcja'],
+    unitPrice: number
   ) => {
     const q = getQuantity(key as string, data)
     const label = LABELS[key as string] ?? key
@@ -141,13 +151,43 @@ export function getBreakdownWithPricing(
   }
 
   const pro = pricing.produkcja
-  add(proItems, 'dzienZdjeciowyEkipa', pro.dzienZdjeciowyEkipa[tier], 'pro')
-  add(proItems, 'sprzetRental', pro.sprzetRental[tier], 'pro')
+  if (!data.isDetailedProdukcja) {
+    const days = data.dniZdjeciowe
+    const dayRate = pro.dzienZdjeciowyEkipa[tier]
+    const pakietKey = data.klasaSprzetu
+    const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
+    const pakietLabel = pakietKey === 'minimalistyczny' ? 'Minimalistyczny' : pakietKey === 'kinowy' ? 'Kinowy' : 'Standard'
+    proItems.push({
+      label: 'Dzień zdjęciowy (Crude)',
+      value: `${days} dni`,
+      quantity: days,
+      unitPriceNet: dayRate,
+      lineNetto: applyMargin(dayRate * days, marginPercent),
+    })
+    proItems.push({
+      label: 'Pakiet sprzętowy',
+      value: pakietLabel,
+      quantity: days,
+      unitPriceNet: pakiet,
+      lineNetto: applyMargin(pakiet * days, marginPercent),
+    })
+  } else {
+    data.detailedShootingDays.forEach((day, i) => {
+      const dayNet = computeShootingDayNet(day, pro, tier)
+      proItems.push({
+        label: `Dzień zdjęciowy ${i + 1}`,
+        value: 'Szczegółowa wycena',
+        quantity: 1,
+        unitPriceNet: dayNet,
+        lineNetto: applyMargin(dayNet, marginPercent),
+      })
+    })
+  }
 
   const post = pricing.postprodukcja
-  add(postItems, 'montazZaDzien', post.montazZaDzien[tier], 'post')
-  add(postItems, 'korekcjaBarwna', post.korekcjaBarwna[tier], 'post')
-  add(postItems, 'lektor', post.lektor[tier], 'post')
+  addPost(postItems, 'montazZaDzien', post.montazZaDzien[tier])
+  addPost(postItems, 'korekcjaBarwna', post.korekcjaBarwna[tier])
+  addPost(postItems, 'lektor', post.lektor[tier])
 
   const toPhase = (category: string, items: LineItemRow[]): PhaseBreakdown => ({
     category,

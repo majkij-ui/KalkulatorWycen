@@ -38,44 +38,57 @@ export function PreprodukcjaTab() {
       animate="show"
       className="space-y-5"
     >
-      {/* Part 1: Dni dokumentacji (top, always visible) */}
-      <motion.div variants={item}>
-        <GlassCard className={isDetailed ? 'opacity-60' : ''}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Calendar className="size-4" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-white">Dni dokumentacji</h3>
-              <p className="text-xs text-zinc-400">
-                Liczba dni potrzebnych na przygotowanie
-                {isDetailed && ' (nieużywane w trybie szczegółowym)'}
-              </p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-400">Dni</span>
-              <span className="text-lg font-semibold tabular-nums text-white">
-                {dniValue % 1 === 0 ? dniValue : dniValue.toFixed(1).replace('.', ',')}
-              </span>
-            </div>
-            <Slider
-              value={[dniValue]}
-              onValueChange={([v]) => setDni(v)}
-              min={0}
-              max={10}
-              step={0.5}
-              className="py-2"
-              disabled={isDetailed}
-            />
-            <div className="flex justify-between text-xs text-zinc-400">
-              <span>0</span>
-              <span>10 dni</span>
-            </div>
-          </div>
-        </GlassCard>
-      </motion.div>
+      {/* Part 1: Dni dokumentacji (crude) – hidden when detailed mode is ON */}
+      <AnimatePresence initial={false}>
+        {!isDetailed && (
+          <motion.div
+            key="crude-prepro"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <motion.div variants={container} initial="hidden" animate="show" className="pb-5">
+              <motion.div variants={item}>
+                <GlassCard>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Calendar className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Dni dokumentacji</h3>
+                    <p className="text-xs text-zinc-400">
+                      Liczba dni potrzebnych na przygotowanie
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-zinc-400">Dni</span>
+                    <span className="text-lg font-semibold tabular-nums text-white">
+                      {dniValue % 1 === 0 ? dniValue : dniValue.toFixed(1).replace('.', ',')}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[dniValue]}
+                    onValueChange={([v]) => setDni(v)}
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    className="py-2"
+                  />
+                  <div className="flex justify-between text-xs text-zinc-400">
+                    <span>0</span>
+                    <span>10 dni</span>
+                  </div>
+                </div>
+                </GlassCard>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Divider + Toggle */}
       <motion.div variants={item} className="space-y-4">

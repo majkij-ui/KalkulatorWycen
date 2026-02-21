@@ -21,7 +21,25 @@ export interface PricingConfigShape {
   }
   produkcja: {
     dzienZdjeciowyEkipa: TierPrices
-    sprzetRental: TierPrices
+    pakietSprzetowyMinimalistyczny: TierPrices
+    pakietSprzetowyStandard: TierPrices
+    pakietSprzetowyKinowy: TierPrices
+    rezOp: TierPrices
+    asystentOperator: TierPrices
+    gafer: TierPrices
+    dzwiekowiec: TierPrices
+    mua: TierPrices
+    aktor: TierPrices
+    model: TierPrices
+    statystaEpizodysta: TierPrices
+    kameraSonyMirrorless: TierPrices
+    kameraRedKomodoX: TierPrices
+    obiektywyRental: TierPrices
+    stabilizacjaRental: TierPrices
+    podgladRental: TierPrices
+    swiatloRental: TierPrices
+    dronDji: TierPrices
+    dronFpv: TierPrices
   }
   postprodukcja: {
     montazZaDzien: TierPrices
@@ -40,7 +58,25 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   },
   produkcja: {
     dzienZdjeciowyEkipa: { tani: 1500, standard: 3500, agresywny: 8000 },
-    sprzetRental: { tani: 500, standard: 1500, agresywny: 4000 },
+    pakietSprzetowyMinimalistyczny: { tani: 300, standard: 800, agresywny: 1500 },
+    pakietSprzetowyStandard: { tani: 600, standard: 1500, agresywny: 3000 },
+    pakietSprzetowyKinowy: { tani: 1500, standard: 3500, agresywny: 7000 },
+    rezOp: { tani: 1500, standard: 2500, agresywny: 4000 },
+    asystentOperator: { tani: 800, standard: 1500, agresywny: 2500 },
+    gafer: { tani: 800, standard: 1500, agresywny: 2500 },
+    dzwiekowiec: { tani: 800, standard: 1500, agresywny: 2500 },
+    mua: { tani: 600, standard: 1200, agresywny: 2000 },
+    aktor: { tani: 1000, standard: 2500, agresywny: 5000 },
+    model: { tani: 800, standard: 1500, agresywny: 3000 },
+    statystaEpizodysta: { tani: 200, standard: 400, agresywny: 800 },
+    kameraSonyMirrorless: { tani: 300, standard: 600, agresywny: 1000 },
+    kameraRedKomodoX: { tani: 800, standard: 1500, agresywny: 3000 },
+    obiektywyRental: { tani: 600, standard: 1500, agresywny: 3000 },
+    stabilizacjaRental: { tani: 400, standard: 800, agresywny: 1500 },
+    podgladRental: { tani: 300, standard: 600, agresywny: 1200 },
+    swiatloRental: { tani: 800, standard: 2000, agresywny: 5000 },
+    dronDji: { tani: 300, standard: 600, agresywny: 1200 },
+    dronFpv: { tani: 800, standard: 1500, agresywny: 3000 },
   },
   postprodukcja: {
     montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },

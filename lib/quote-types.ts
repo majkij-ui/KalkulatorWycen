@@ -1,7 +1,55 @@
 export type ScenarioType = 'brak' | 'podstawowy' | 'rozbudowany'
-export type EquipmentClass = 'standard' | 'cinema' | 'premium'
+/** Pakiet sprzętowy w trybie szybkiej wyceny (Produkcja) */
+export type PakietSprzetu = 'minimalistyczny' | 'standard' | 'kinowy'
 export type AnimationType = 'brak' | '2d' | '3d'
 export type MusicLicense = 'stock' | 'premium' | 'kompozytor'
+
+export type SprzetOpcja = 'brak' | 'standard' | 'rental'
+export type DronOpcja = 'brak' | 'dji' | 'fpv'
+
+export interface ShootingDay {
+  id: string
+  rezOp: number
+  asystent: number
+  gafer: number
+  dzwiekowiec: number
+  mua: number
+  aktor: number
+  model: number
+  statysta: number
+  kameraSony: number
+  kameraRed: number
+  obiektywy: SprzetOpcja
+  stabilizacja: SprzetOpcja
+  podglad: SprzetOpcja
+  swiatlo: SprzetOpcja
+  dron: DronOpcja
+}
+
+function createShootingDayId(): string {
+  return `day-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+export function createDefaultShootingDay(): ShootingDay {
+  return {
+    id: createShootingDayId(),
+    rezOp: 0,
+    asystent: 0,
+    gafer: 0,
+    dzwiekowiec: 0,
+    mua: 0,
+    aktor: 0,
+    model: 0,
+    statysta: 0,
+    kameraSony: 0,
+    kameraRed: 0,
+    obiektywy: 'brak',
+    stabilizacja: 'brak',
+    podglad: 'brak',
+    swiatlo: 'brak',
+    dron: 'brak',
+  }
+}
 
 export interface QuoteData {
   // Preprodukcja
@@ -12,9 +60,12 @@ export interface QuoteData {
   kierownikProdukcji: boolean
 
   // Produkcja
+  isDetailedProdukcja: boolean
   dniZdjeciowe: number
   wielkoscEkipy: number
-  klasaSprzetu: EquipmentClass
+  /** Pakiet sprzętowy (szybka wycena): minimalistyczny | standard | kinowy */
+  klasaSprzetu: PakietSprzetu
+  detailedShootingDays: ShootingDay[]
 
   // Postprodukcja
   dniMontazu: number
@@ -33,9 +84,11 @@ export const defaultQuoteData: QuoteData = {
   dniDokumentacji: 1,
   wizjaLokalna: false,
   kierownikProdukcji: false,
+  isDetailedProdukcja: false,
   dniZdjeciowe: 1,
   wielkoscEkipy: 2,
   klasaSprzetu: 'standard',
+  detailedShootingDays: [createDefaultShootingDay()],
   dniMontazu: 2,
   korekcjaBarwna: false,
   animacje: 'brak',
@@ -58,6 +111,7 @@ export const presets: Preset[] = [
       dniDokumentacji: 1,
       wizjaLokalna: false,
       kierownikProdukcji: false,
+      isDetailedProdukcja: false,
       dniZdjeciowe: 1,
       wielkoscEkipy: 2,
       klasaSprzetu: 'standard',
@@ -77,9 +131,10 @@ export const presets: Preset[] = [
       dniDokumentacji: 2,
       wizjaLokalna: false,
       kierownikProdukcji: false,
+      isDetailedProdukcja: false,
       dniZdjeciowe: 2,
       wielkoscEkipy: 3,
-      klasaSprzetu: 'cinema',
+      klasaSprzetu: 'kinowy',
       dniMontazu: 3,
       korekcjaBarwna: true,
       animacje: '2d',
@@ -96,9 +151,10 @@ export const presets: Preset[] = [
       dniDokumentacji: 5,
       wizjaLokalna: true,
       kierownikProdukcji: true,
+      isDetailedProdukcja: false,
       dniZdjeciowe: 5,
       wielkoscEkipy: 8,
-      klasaSprzetu: 'premium',
+      klasaSprzetu: 'kinowy',
       dniMontazu: 7,
       korekcjaBarwna: true,
       animacje: '3d',
@@ -120,9 +176,9 @@ export const PRICES = {
   dniZdjeciowe: 3500,
   wielkoscEkipy: 1200,
   klasaSprzetu: {
+    minimalistyczny: 0,
     standard: 0,
-    cinema: 2500,
-    premium: 6000,
+    kinowy: 0,
   },
   dniMontazu: 1800,
   korekcjaBarwna: 1500,
@@ -194,7 +250,7 @@ export function getBreakdown(data: QuoteData) {
         },
         {
           label: 'Klasa sprzetu',
-          value: data.klasaSprzetu === 'standard' ? 'Standard' : data.klasaSprzetu === 'cinema' ? 'Cinema' : 'Premium',
+          value: data.klasaSprzetu === 'minimalistyczny' ? 'Minimalistyczny' : data.klasaSprzetu === 'standard' ? 'Standard' : 'Kinowy',
           cost: PRICES.klasaSprzetu[data.klasaSprzetu],
         },
       ],

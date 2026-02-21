@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { QuoteData, defaultQuoteData, presets } from './quote-types'
+import { QuoteData, defaultQuoteData, presets, createDefaultShootingDay, type ShootingDay } from './quote-types'
 import type { PricingTier, PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
@@ -25,6 +25,10 @@ interface QuoteContextValue {
   setPricingConfig: (config: PricingConfigShape) => void
   reloadPricingFromStorage: () => void
   resetPricingToDefault: () => void
+  // Produkcja detailed: shooting days
+  addShootingDay: () => void
+  removeShootingDay: (id: string) => void
+  updateShootingDay: <K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => void
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
@@ -64,6 +68,29 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setData(prev => ({ ...prev, [key]: value }))
   }, [])
 
+  const addShootingDay = useCallback(() => {
+    setData(prev => ({
+      ...prev,
+      detailedShootingDays: [...prev.detailedShootingDays, createDefaultShootingDay()],
+    }))
+  }, [])
+
+  const removeShootingDay = useCallback((id: string) => {
+    setData(prev => ({
+      ...prev,
+      detailedShootingDays: prev.detailedShootingDays.filter(d => d.id !== id),
+    }))
+  }, [])
+
+  const updateShootingDay = useCallback(<K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => {
+    setData(prev => ({
+      ...prev,
+      detailedShootingDays: prev.detailedShootingDays.map(d =>
+        d.id === id ? { ...d, [field]: value } : d
+      ),
+    }))
+  }, [])
+
   const applyPreset = useCallback((presetIndex: number) => {
     const preset = presets[presetIndex]
     if (!preset) return
@@ -99,6 +126,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setPricingConfig,
     reloadPricingFromStorage,
     resetPricingToDefault: resetPricing,
+    addShootingDay,
+    removeShootingDay,
+    updateShootingDay,
   }
 
   return (
