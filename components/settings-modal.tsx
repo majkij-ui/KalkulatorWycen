@@ -17,6 +17,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { Switch } from '@/components/ui/switch'
 import { useQuote } from '@/lib/quote-context'
 import { TIER_LABELS } from '@/lib/quote-context'
 import type { PricingConfigShape, PricingTier } from '@/lib/pricing-config'
@@ -122,9 +123,12 @@ function isTierPrices(
   )
 }
 
+const INPUT_COL_WIDTH = 'w-20'
+
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { pricingConfig, setPricingConfig, resetPricingToDefault } = useQuote()
   const [local, setLocal] = useState<PricingConfigShape>(pricingConfig)
+  const [showAdvancedTiers, setShowAdvancedTiers] = useState(false)
 
   const syncFromContext = useCallback(() => {
     setLocal(pricingConfig)
@@ -173,8 +177,22 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </p>
         </DialogHeader>
 
+        <div className="rounded-xl border border-white/10 bg-zinc-900/30 p-4 mb-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-white">Pokaż skrajne stawki</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Wyświetl kolumny Tani i Agresywny</p>
+            </div>
+            <Switch
+              checked={showAdvancedTiers}
+              onCheckedChange={setShowAdvancedTiers}
+              aria-label="Pokaż skrajne stawki"
+            />
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
-          <Accordion type="multiple" className="w-full" defaultValue={['preprodukcja', 'produkcja', 'postprodukcja', 'dodatkowe']}>
+          <Accordion type="multiple" className="w-full">
             {PRICING_STRUCTURE.map(({ category, title, rows }) => {
               const categoryData = local[category] as Record<string, { tani: number; standard: number; agresywny: number }> | undefined
               if (!categoryData) return null
@@ -189,14 +207,22 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                         <div className="flex-1 text-[10px] font-medium uppercase text-zinc-500">
                           Puste
                         </div>
-                        {TIERS.map((t) => (
-                          <span
-                            key={t}
-                            className="w-20 text-right text-[10px] font-medium uppercase text-zinc-500"
-                          >
-                            {TIER_LABELS[t].split(' ')[0]}
-                          </span>
-                        ))}
+                        <div className={`flex justify-end gap-2 ${showAdvancedTiers ? 'w-[16rem]' : 'w-20'}`}>
+                          {showAdvancedTiers ? (
+                            TIERS.map((t) => (
+                              <span
+                                key={t}
+                                className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}
+                              >
+                                {TIER_LABELS[t].split(' ')[0]}
+                              </span>
+                            ))
+                          ) : (
+                            <span className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}>
+                              Standard
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {rows.map((row) => {
                         const itemVal = categoryData[row.key]
@@ -218,19 +244,34 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                 </Badge>
                               )}
                             </div>
-                            {TIERS.map((t) => (
-                              <Input
-                                key={t}
-                                type="number"
-                                min={0}
-                                step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
-                                value={itemVal[t] ?? 0}
-                                onChange={(e) =>
-                                  update(category, row.key, t, Number(e.target.value) || 0)
-                                }
-                                className="w-20 h-8 text-right bg-black/40 border-white/10 text-sm"
-                              />
-                            ))}
+                            <div className={`flex justify-end gap-2 ${showAdvancedTiers ? 'w-[16rem]' : 'w-20'}`}>
+                              {showAdvancedTiers ? (
+                                TIERS.map((t) => (
+                                  <Input
+                                    key={t}
+                                    type="number"
+                                    min={0}
+                                    step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
+                                    value={itemVal[t] ?? 0}
+                                    onChange={(e) =>
+                                      update(category, row.key, t, Number(e.target.value) || 0)
+                                    }
+                                    className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
+                                  />
+                                ))
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
+                                  value={itemVal.standard ?? 0}
+                                  onChange={(e) =>
+                                    update(category, row.key, 'standard', Number(e.target.value) || 0)
+                                  }
+                                  className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
+                                />
+                              )}
+                            </div>
                           </div>
                         )
                       })}
