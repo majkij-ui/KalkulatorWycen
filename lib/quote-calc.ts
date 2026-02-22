@@ -30,8 +30,8 @@ export interface Totals {
   sumaBrutto: number
 }
 
-function applyMargin(value: number, marginPercent: number): number {
-  return value * (1 + marginPercent / 100)
+function applyMargin(value: number, marginMultiplier: number): number {
+  return value * marginMultiplier
 }
 
 function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja'], tier: PricingTier): number {
@@ -80,7 +80,7 @@ function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produk
 export function getBreakdownWithPricing(
   data: QuoteData,
   tier: PricingTier,
-  marginPercent: number,
+  marginMultiplier: number,
   pricing: PricingConfigShape
 ): PhaseBreakdown[] {
   const preItems: LineItemRow[] = []
@@ -98,7 +98,7 @@ export function getBreakdownWithPricing(
       value,
       quantity: q,
       unitPriceNet: unitPrice,
-      lineNetto: applyMargin(unitPrice * q, marginPercent),
+      lineNetto: applyMargin(unitPrice * q, marginMultiplier),
     })
   } else {
     const scenariuszNet = data.scenariusz === 'brak' ? 0 : data.scenariusz === 'podstawowy' ? pre.scenariuszPodstawowy[tier] : pre.scenariuszRozbudowany[tier]
@@ -107,7 +107,7 @@ export function getBreakdownWithPricing(
       value: data.scenariusz === 'brak' ? 'Brak' : data.scenariusz === 'podstawowy' ? 'Podstawowy' : 'Rozbudowany',
       quantity: 1,
       unitPriceNet: scenariuszNet,
-      lineNetto: applyMargin(scenariuszNet, marginPercent),
+      lineNetto: applyMargin(scenariuszNet, marginMultiplier),
     })
     const wizjaNet = data.wizjaLokalna ? pre.wizjaLokalna[tier] : 0
     preItems.push({
@@ -115,7 +115,7 @@ export function getBreakdownWithPricing(
       value: data.wizjaLokalna ? 'Tak' : 'Nie',
       quantity: data.wizjaLokalna ? 1 : 0,
       unitPriceNet: pre.wizjaLokalna[tier],
-      lineNetto: applyMargin(wizjaNet, marginPercent),
+      lineNetto: applyMargin(wizjaNet, marginMultiplier),
     })
     const kierNet = data.kierownikProdukcji ? pre.kierownikProdukcji[tier] : 0
     preItems.push({
@@ -123,7 +123,7 @@ export function getBreakdownWithPricing(
       value: data.kierownikProdukcji ? 'Tak' : 'Nie',
       quantity: data.kierownikProdukcji ? 1 : 0,
       unitPriceNet: pre.kierownikProdukcji[tier],
-      lineNetto: applyMargin(kierNet, marginPercent),
+      lineNetto: applyMargin(kierNet, marginMultiplier),
     })
   }
 
@@ -136,7 +136,7 @@ export function getBreakdownWithPricing(
     const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
     const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
     const dayRate = crew * stawkaOp + pakiet + doplataRezOp
-    const lineNetto = applyMargin(dayRate * days, marginPercent)
+    const lineNetto = applyMargin(dayRate * days, marginMultiplier)
     proItems.push({
       label: 'Szybka wycena produkcji',
       value: `${days} dni × (${crew} os. × stawka + pakiet${data.crudeRezOpSurcharge ? ' + Reż-Op' : ''})`,
@@ -152,7 +152,7 @@ export function getBreakdownWithPricing(
         value: 'Szczegółowa wycena',
         quantity: 1,
         unitPriceNet: dayNet,
-        lineNetto: applyMargin(dayNet, marginPercent),
+        lineNetto: applyMargin(dayNet, marginMultiplier),
       })
     })
   }
@@ -170,7 +170,7 @@ export function getBreakdownWithPricing(
       value,
       quantity: q,
       unitPriceNet: unitPrice,
-      lineNetto: applyMargin(unitPrice * q, marginPercent),
+      lineNetto: applyMargin(unitPrice * q, marginMultiplier),
     })
   } else {
     data.detailedDeliverables.forEach((del, i) => {
@@ -181,7 +181,7 @@ export function getBreakdownWithPricing(
         value: `${del.ilosc}× ${formatLabel}`,
         quantity: 1,
         unitPriceNet: net,
-        lineNetto: applyMargin(net, marginPercent),
+        lineNetto: applyMargin(net, marginMultiplier),
       })
     })
   }
@@ -194,7 +194,7 @@ export function getBreakdownWithPricing(
     value: `${km} km`,
     quantity: km,
     unitPriceNet: kmRate,
-    lineNetto: applyMargin(kmRate * km, marginPercent),
+    lineNetto: applyMargin(kmRate * km, marginMultiplier),
   })
 
   const toPhase = (category: string, items: LineItemRow[]): PhaseBreakdown => ({
@@ -214,10 +214,10 @@ export function getBreakdownWithPricing(
 export function getTotals(
   data: QuoteData,
   tier: PricingTier,
-  marginPercent: number,
+  marginMultiplier: number,
   pricing: PricingConfigShape
 ): Totals {
-  const phases = getBreakdownWithPricing(data, tier, marginPercent, pricing)
+  const phases = getBreakdownWithPricing(data, tier, marginMultiplier, pricing)
   const sumaNetto = phases.reduce((s, p) => s + p.phaseNetto, 0)
   const vat = sumaNetto * VAT_RATE
   const sumaBrutto = sumaNetto + vat

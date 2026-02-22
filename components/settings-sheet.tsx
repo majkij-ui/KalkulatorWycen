@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,8 +43,6 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
     loadTemplate,
     pricingTier,
     setPricingTier,
-    marginPercent,
-    setMarginPercent,
   } = useQuote()
   const [priceEditorOpen, setPriceEditorOpen] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
@@ -62,7 +59,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
-          className="border-white/10 bg-slate-900/95 text-white backdrop-blur-xl sm:max-w-sm"
+          className="border-l border-white/10 bg-zinc-950/70 text-white backdrop-blur-2xl sm:max-w-sm"
         >
           <SheetHeader className="pb-6">
             <SheetTitle className="text-xl font-bold tracking-tight text-white">
@@ -150,21 +147,6 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-zinc-400">Marża</Label>
-                <span className="text-sm font-medium tabular-nums text-white">{marginPercent}%</span>
-              </div>
-              <Slider
-                value={[marginPercent]}
-                onValueChange={([v]) => setMarginPercent(v)}
-                min={0}
-                max={50}
-                step={5}
-                className="py-2"
-              />
             </div>
           </div>
         </SheetContent>

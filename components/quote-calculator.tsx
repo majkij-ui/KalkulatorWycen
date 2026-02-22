@@ -34,15 +34,15 @@ function QuoteCalculatorInner() {
 
       <main className="relative mx-auto max-w-4xl px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="sticky top-[7rem] z-40 -mx-4 mb-6 border-b border-white/5 bg-transparent px-4 pb-4 backdrop-blur-xl sm:top-[8rem]">
-            <TabsList className="grid h-auto w-full grid-cols-5 gap-1 rounded-xl bg-white/[0.03] border-t border-l border-white/10 p-1.5 backdrop-blur-xl">
+          <div className="flex justify-center mb-8">
+            <TabsList className="inline-flex items-center justify-center rounded-full border border-white/5 bg-black/60 p-1 backdrop-blur-xl">
               {tabs.map((tab) => {
                 const Icon = tab.icon
                 return (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs font-medium text-zinc-400 transition-all data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none sm:flex-row sm:gap-2 sm:text-sm"
+                    className="inline-flex items-center gap-2 rounded-full px-6 py-2 text-sm text-zinc-400 data-[state=active]:bg-zinc-800 data-[state=active]:text-white transition-all"
                   >
                     <Icon className="size-4 shrink-0" />
                     <span className="hidden sm:inline">{tab.label}</span>
@@ -90,6 +90,11 @@ function QuoteCalculatorInner() {
           <p className="text-xs text-zinc-400">
             Przedstawione kwoty mają charakter szacunkowy i mogą ulec zmianie.
           </p>
+          {process.env.NEXT_PUBLIC_GIT_VERSION && (
+            <p className="mt-2 text-[10px] text-zinc-500 tabular-nums">
+              {process.env.NEXT_PUBLIC_GIT_VERSION}
+            </p>
+          )}
         </footer>
       </main>
     </div>

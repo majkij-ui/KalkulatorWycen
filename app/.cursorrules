@@ -1,0 +1,30 @@
+# PROJECT OVERVIEW
+This is a sleek, premium Video Production Quote Calculator (Kalkulator Wyceny Wideo).
+Target Audience: High-end B2B clients in Poland.
+Language: ALL visible UI text, labels, and placeholders MUST be in Polish.
+
+# TECH STACK
+- Next.js (App Router)
+- Tailwind CSS
+- UI Components: shadcn/ui
+- Icons: lucide-react
+- Animations: Framer Motion
+- PDF Generation: @react-pdf/renderer (Planned/Active)
+
+# UI / UX VIBE (Strict Rules)
+- Theme: Strictly Dark Mode. 
+- Glassmorphism: Use `bg-zinc-900/30` or `bg-zinc-950/70` with `backdrop-blur-xl` and subtle borders (`border-white/10`).
+- Micro-interactions: Use Framer Motion for smooth tab switching, accordion toggles, and expanding sections. Use the "blur-fade" transition style where applicable.
+- Layout: Breathable, minimalist, high-end "Apple-like" or "Boutique Agency" feel. 
+
+# ARCHITECTURE & STATE
+- Global State: Managed via a React Context (`QuoteContext`).
+- Default State: All numerical quantities start at 0. 
+- Dual-Mode Tabs: The Preprodukcja, Produkcja, and Postprodukcja tabs use a toggle to switch between "Szybka wycena" (Crude/Simple mode) and "Szczegółowa wycena" (Detailed mode with arrays of days/deliverables).
+- Pricing Engine (`cennik`): Prices are managed dynamically across 3 tiers (Tani, Standard, Agresywny) and multiplied by the quantities in the context.
+- Margin: There is a global margin multiplier (`marginMultiplier`) ranging from 0.5 to 1.5.
+
+# CODING STANDARDS
+- Write clean, modular functional React components.
+- Avoid hardcoding Polish prices in the UI; always reference the pricing configuration.
+- Keep the `AnimatePresence` variant chains intact so children components don't become invisible.

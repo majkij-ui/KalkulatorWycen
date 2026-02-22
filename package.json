@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NEXT_PUBLIC_GIT_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') next build",
     "start": "next start",
     "lint": "eslint ."
   },

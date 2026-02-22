@@ -20,7 +20,8 @@ export interface PricingConfigShape {
     kierownikProdukcji: TierPrices
   }
   produkcja: {
-    dzienZdjeciowyEkipa: TierPrices
+    stawkaOperatoraSzybkaWycena: TierPrices
+    doplataRezOpSzybkaWycena: TierPrices
     pakietSprzetowyMinimalistyczny: TierPrices
     pakietSprzetowyStandard: TierPrices
     pakietSprzetowyKinowy: TierPrices
@@ -44,8 +45,6 @@ export interface PricingConfigShape {
     swiatloRental: TierPrices
     dronDji: TierPrices
     dronFpv: TierPrices
-    stawkaOperatoraSzybkaWycena: TierPrices
-    doplataRezOpSzybkaWycena: TierPrices
   }
   postprodukcja: {
     montazZaDzien: TierPrices
@@ -79,7 +78,8 @@ export const DEFAULT_PRICING: PricingConfigShape = {
     kierownikProdukcji: { tani: 600, standard: 1500, agresywny: 3000 },
   },
   produkcja: {
-    dzienZdjeciowyEkipa: { tani: 1500, standard: 3500, agresywny: 8000 },
+    stawkaOperatoraSzybkaWycena: { tani: 800, standard: 1500, agresywny: 2500 },
+    doplataRezOpSzybkaWycena: { tani: 500, standard: 1000, agresywny: 2000 },
     pakietSprzetowyMinimalistyczny: { tani: 300, standard: 800, agresywny: 1500 },
     pakietSprzetowyStandard: { tani: 600, standard: 1500, agresywny: 3000 },
     pakietSprzetowyKinowy: { tani: 1500, standard: 3500, agresywny: 7000 },
@@ -103,8 +103,6 @@ export const DEFAULT_PRICING: PricingConfigShape = {
     swiatloRental: { tani: 800, standard: 2000, agresywny: 5000 },
     dronDji: { tani: 300, standard: 600, agresywny: 1200 },
     dronFpv: { tani: 800, standard: 1500, agresywny: 3000 },
-    stawkaOperatoraSzybkaWycena: { tani: 800, standard: 1500, agresywny: 2500 },
-    doplataRezOpSzybkaWycena: { tani: 500, standard: 1000, agresywny: 2000 },
   },
   postprodukcja: {
     montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },

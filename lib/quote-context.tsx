@@ -19,8 +19,8 @@ interface QuoteContextValue {
   // Pricing tier & margin
   pricingTier: PricingTier
   setPricingTier: (tier: PricingTier) => void
-  marginPercent: number
-  setMarginPercent: (value: number) => void
+  marginMultiplier: number
+  setMarginMultiplier: (value: number) => void
   // Breakdown for summary & PDF
   breakdown: PhaseBreakdown[]
   // Settings: custom pricing (persisted in localStorage)
@@ -74,7 +74,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<QuoteData>(defaultQuoteData)
   const [isCalculating, setIsCalculating] = useState(false)
   const [pricingTier, setPricingTierState] = useState<PricingTier>('standard')
-  const [marginPercent, setMarginPercent] = useState(0)
+  const [marginMultiplier, setMarginMultiplier] = useState(1.0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
 
@@ -152,6 +152,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   const resetToZero = useCallback(() => {
     setData({ ...defaultQuoteData })
+    setMarginMultiplier(1.0)
   }, [])
 
   const saveTemplate = useCallback((name: string) => {
@@ -196,8 +197,8 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setIsCalculating(false), 500)
   }, [])
 
-  const totals = getTotals(data, pricingTier, marginPercent, pricingConfig)
-  const breakdown = getBreakdownWithPricing(data, pricingTier, marginPercent, pricingConfig)
+  const totals = getTotals(data, pricingTier, marginMultiplier, pricingConfig)
+  const breakdown = getBreakdownWithPricing(data, pricingTier, marginMultiplier, pricingConfig)
 
   const value: QuoteContextValue = {
     data,
@@ -211,8 +212,8 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     isCalculating,
     pricingTier,
     setPricingTier,
-    marginPercent,
-    setMarginPercent,
+    marginMultiplier,
+    setMarginMultiplier,
     breakdown,
     pricingConfig,
     setPricingConfig,
