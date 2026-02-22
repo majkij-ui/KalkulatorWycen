@@ -33,6 +33,7 @@ interface QuoteContextValue {
   addDeliverable: () => void
   removeDeliverable: (id: string) => void
   updateDeliverable: <K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => void
+  resetToZero: () => void
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
@@ -118,6 +119,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const resetToZero = useCallback(() => {
+    setData({ ...defaultQuoteData })
+  }, [])
+
   const applyPreset = useCallback((presetIndex: number) => {
     const preset = presets[presetIndex]
     if (!preset) return
@@ -163,6 +168,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     addDeliverable,
     removeDeliverable,
     updateDeliverable,
+    resetToZero,
   }
 
   return (

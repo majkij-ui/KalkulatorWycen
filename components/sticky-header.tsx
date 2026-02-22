@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Settings } from 'lucide-react'
+import { Settings, RotateCcw } from 'lucide-react'
 import { useQuote } from '@/lib/quote-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
 import { SettingsSheet } from '@/components/settings-sheet'
 
 export function StickyHeader() {
-  const { totals, formatCurrency } = useQuote()
+  const { totals, formatCurrency, resetToZero } = useQuote()
   const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
@@ -47,14 +47,25 @@ export function StickyHeader() {
                 duration={0.5}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => setSheetOpen(true)}
-              className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:size-11"
-              aria-label="Ustawienia wyceny"
-            >
-              <Settings className="size-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={resetToZero}
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:size-11"
+                aria-label="Resetuj wycenę"
+                title="Resetuj wycenę"
+              >
+                <RotateCcw className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white sm:size-11"
+                aria-label="Ustawienia wyceny"
+              >
+                <Settings className="size-5" />
+              </button>
+            </div>
           </div>
         </div>
       </header>

@@ -284,13 +284,13 @@ export function PostprodukcjaTab() {
                     <Slider
                       value={[count]}
                       onValueChange={([v]) => updateField('crudeEditCount', v)}
-                      min={unit === 'dni' ? 0.5 : 1}
+                      min={0}
                       max={sliderMax}
                       step={sliderStep}
                       className="py-2"
                     />
                     <div className="flex justify-between text-xs text-zinc-400">
-                      <span>{unit === 'dni' ? '0,5' : '1'}</span>
+                      <span>0</span>
                       <span>{sliderMax} {unit === 'dni' ? 'dni' : 'godz.'}</span>
                     </div>
                   </div>

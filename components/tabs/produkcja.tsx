@@ -223,13 +223,13 @@ export function ProdukcjaTab() {
                   <Slider
                     value={[data.dniZdjeciowe]}
                     onValueChange={([val]) => updateField('dniZdjeciowe', val)}
-                    min={1}
+                    min={0}
                     max={14}
                     step={1}
                     className="py-2"
                   />
                   <div className="flex justify-between text-xs text-zinc-400">
-                    <span>1 dzień</span>
+                    <span>0 dni</span>
                     <span>14 dni</span>
                   </div>
                 </div>
@@ -251,7 +251,7 @@ export function ProdukcjaTab() {
                     label="Osoby w ekipie"
                     value={data.wielkoscEkipy}
                     onChange={(val) => updateField('wielkoscEkipy', val)}
-                    min={1}
+                    min={0}
                     max={20}
                   />
                 </div>

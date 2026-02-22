@@ -34,9 +34,13 @@ export interface PricingConfigShape {
     statystaEpizodysta: TierPrices
     kameraSonyMirrorless: TierPrices
     kameraRedKomodoX: TierPrices
+    obiektywyStandard: TierPrices
     obiektywyRental: TierPrices
+    stabilizacjaStandard: TierPrices
     stabilizacjaRental: TierPrices
+    podgladStandard: TierPrices
     podgladRental: TierPrices
+    swiatloStandard: TierPrices
     swiatloRental: TierPrices
     dronDji: TierPrices
     dronFpv: TierPrices
@@ -58,6 +62,9 @@ export interface PricingConfigShape {
     masterDzwiekuZlozony: TierPrices
     lektorAi: TierPrices
     lektorStudio: TierPrices
+  }
+  dodatkowe: {
+    kosztDojazduKm: TierPrices
   }
 }
 
@@ -84,9 +91,13 @@ export const DEFAULT_PRICING: PricingConfigShape = {
     statystaEpizodysta: { tani: 200, standard: 400, agresywny: 800 },
     kameraSonyMirrorless: { tani: 300, standard: 600, agresywny: 1000 },
     kameraRedKomodoX: { tani: 800, standard: 1500, agresywny: 3000 },
+    obiektywyStandard: { tani: 200, standard: 500, agresywny: 1000 },
     obiektywyRental: { tani: 600, standard: 1500, agresywny: 3000 },
+    stabilizacjaStandard: { tani: 200, standard: 400, agresywny: 800 },
     stabilizacjaRental: { tani: 400, standard: 800, agresywny: 1500 },
+    podgladStandard: { tani: 150, standard: 300, agresywny: 600 },
     podgladRental: { tani: 300, standard: 600, agresywny: 1200 },
+    swiatloStandard: { tani: 400, standard: 1000, agresywny: 2500 },
     swiatloRental: { tani: 800, standard: 2000, agresywny: 5000 },
     dronDji: { tani: 300, standard: 600, agresywny: 1200 },
     dronFpv: { tani: 800, standard: 1500, agresywny: 3000 },
@@ -109,6 +120,9 @@ export const DEFAULT_PRICING: PricingConfigShape = {
     lektorAi: { tani: 100, standard: 250, agresywny: 500 },
     lektorStudio: { tani: 400, standard: 1000, agresywny: 2500 },
   },
+  dodatkowe: {
+    kosztDojazduKm: { tani: 1.5, standard: 2.5, agresywny: 4 },
+  },
 }
 
 const STORAGE_KEY = 'quote-gen-pricing-config'
@@ -127,6 +141,7 @@ export function getPricingConfig(): PricingConfigShape {
     if (parsed.preprodukcja) merged.preprodukcja = { ...merged.preprodukcja, ...parsed.preprodukcja }
     if (parsed.produkcja) merged.produkcja = { ...merged.produkcja, ...parsed.produkcja }
     if (parsed.postprodukcja) merged.postprodukcja = { ...merged.postprodukcja, ...parsed.postprodukcja }
+    if (parsed.dodatkowe) merged.dodatkowe = { ...merged.dodatkowe, ...parsed.dodatkowe }
     return merged
   } catch {
     return deepClone(DEFAULT_PRICING)

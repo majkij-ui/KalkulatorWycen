@@ -10,7 +10,13 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { useQuote } from '@/lib/quote-context'
 import { TIER_LABELS } from '@/lib/quote-context'
 import type { PricingConfigShape, PricingTier } from '@/lib/pricing-config'
@@ -23,18 +29,87 @@ interface SettingsModalProps {
 
 const TIERS: PricingTier[] = ['tani', 'standard', 'agresywny']
 
-/** Convert camelCase key to display label (e.g. "dzienZdjeciowyEkipa" -> "Dzien zdjeciowy ekipa") */
-function keyToLabel(key: string): string {
-  const withSpaces = key.replace(/([A-Z])/g, ' $1').trim()
-  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase()
+type CategoryKey = keyof PricingConfigShape
+
+interface PricingRowDef {
+  key: string
+  label: string
+  isKeyMetric?: boolean
 }
 
-/** Convert category key to display name (e.g. "preprodukcja" -> "Preprodukcja") */
-function categoryToLabel(key: string): string {
-  return key.charAt(0).toUpperCase() + key.slice(1).toLowerCase()
-}
+const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRowDef[] }[] = [
+  {
+    category: 'preprodukcja',
+    title: 'PREPRODUKCJA',
+    rows: [
+      { key: 'dzienDokumentacji', label: 'Dzień dokumentacji', isKeyMetric: true },
+      { key: 'scenariuszPodstawowy', label: 'Scenariusz podstawowy' },
+      { key: 'scenariuszRozbudowany', label: 'Scenariusz rozbudowany' },
+      { key: 'wizjaLokalna', label: 'Wizja lokalna' },
+      { key: 'kierownikProdukcji', label: 'Kierownik produkcji' },
+    ],
+  },
+  {
+    category: 'produkcja',
+    title: 'PRODUKCJA',
+    rows: [
+      { key: 'dzienZdjeciowyEkipa', label: 'Dzień zdjęciowy (Ekipa)', isKeyMetric: true },
+      { key: 'pakietSprzetowyMinimalistyczny', label: 'Pakiet sprzętowy (Minimalistyczny)', isKeyMetric: true },
+      { key: 'pakietSprzetowyStandard', label: 'Pakiet sprzętowy (Standard)', isKeyMetric: true },
+      { key: 'pakietSprzetowyKinowy', label: 'Pakiet sprzętowy (Kinowy)', isKeyMetric: true },
+      { key: 'rezOp', label: 'ReżOp' },
+      { key: 'asystentOperator', label: 'Asystent/Operator' },
+      { key: 'gafer', label: 'Gafer' },
+      { key: 'dzwiekowiec', label: 'Dźwiękowiec' },
+      { key: 'mua', label: 'MUA' },
+      { key: 'aktor', label: 'Aktor' },
+      { key: 'model', label: 'Model' },
+      { key: 'statystaEpizodysta', label: 'Statysta' },
+      { key: 'kameraSonyMirrorless', label: 'Kamera Sony' },
+      { key: 'kameraRedKomodoX', label: 'Kamera Red' },
+      { key: 'obiektywyStandard', label: 'Obiektywy (Standard)' },
+      { key: 'obiektywyRental', label: 'Obiektywy (Rental)' },
+      { key: 'stabilizacjaStandard', label: 'Stabilizacja (Standard)' },
+      { key: 'stabilizacjaRental', label: 'Stabilizacja (Rental)' },
+      { key: 'podgladStandard', label: 'Podgląd (Standard)' },
+      { key: 'podgladRental', label: 'Podgląd (Rental)' },
+      { key: 'swiatloStandard', label: 'Światło (Standard)' },
+      { key: 'swiatloRental', label: 'Światło (Rental)' },
+      { key: 'dronDji', label: 'Dron (DJI)' },
+      { key: 'dronFpv', label: 'Dron (FPV)' },
+    ],
+  },
+  {
+    category: 'postprodukcja',
+    title: 'POSTPRODUKCJA',
+    rows: [
+      { key: 'montazZaDzien', label: 'Montaż (Dzień)', isKeyMetric: true },
+      { key: 'montazZaGodzine', label: 'Montaż (Godzina)', isKeyMetric: true },
+      { key: 'formatShortsReel', label: 'Format Shorts/Reel' },
+      { key: 'formatReportaz', label: 'Format Reportaż' },
+      { key: 'korekcjaBarwnaPodstawowa', label: 'Korekcja barwna (Podstawowa)' },
+      { key: 'korekcjaBarwnaZaawansowana', label: 'Korekcja barwna (Zaawansowana)' },
+      { key: 'animacje2d', label: 'Animacje (2D)' },
+      { key: 'animacjeAi', label: 'Animacje (AI)' },
+      { key: 'muzykaCopyfree', label: 'Muzyka (Copy-free)' },
+      { key: 'muzykaKompozytor', label: 'Muzyka (Kompozytor)' },
+      { key: 'soundDesignProsty', label: 'Sound Design (Prosty)' },
+      { key: 'soundDesignZlozony', label: 'Sound Design (Złożony)' },
+      { key: 'masterDzwiekuPodstawowy', label: 'Master dźwięku (Podstawowy)' },
+      { key: 'masterDzwiekuZlozony', label: 'Master dźwięku (Złożony)' },
+      { key: 'lektorAi', label: 'Lektor (AI)' },
+      { key: 'lektorStudio', label: 'Lektor (Studio)' },
+    ],
+  },
+  {
+    category: 'dodatkowe',
+    title: 'DODATKOWE',
+    rows: [
+      { key: 'kosztDojazduKm', label: 'Koszty dojazdu (za km)', isKeyMetric: true },
+    ],
+  },
+]
 
-/** Type guard for tier prices object */
 function isTierPrices(
   val: unknown
 ): val is { tani: number; standard: number; agresywny: number } {
@@ -64,7 +139,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   )
 
   const update = useCallback(
-    (category: keyof PricingConfigShape, itemKey: string, tier: PricingTier, value: number) => {
+    (category: CategoryKey, itemKey: string, tier: PricingTier, value: number) => {
       setLocal((prev) => {
         const cat = { ...(prev[category] as Record<string, { tani: number; standard: number; agresywny: number }>) }
         const item = { ...(cat[itemKey] ?? { tani: 0, standard: 0, agresywny: 0 }), [tier]: value }
@@ -85,12 +160,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     resetPricingToDefault()
   }, [resetPricingToDefault])
 
-  const categories = Object.entries(local) as [keyof PricingConfigShape, Record<string, { tani: number; standard: number; agresywny: number }>][]
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-2xl"
+        className="max-h-[90vh] flex flex-col overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-2xl"
         showCloseButton={true}
       >
         <DialogHeader>
@@ -100,43 +173,76 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </p>
         </DialogHeader>
 
-        <div className="overflow-y-auto max-h-[50vh] space-y-6 pr-2">
-          {categories.map(([categoryKey, categoryObj]) => (
-            <div key={categoryKey}>
-              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary/80">
-                {categoryToLabel(categoryKey)}
-              </h4>
-              <div className="space-y-3">
-                {Object.entries(categoryObj).map(([itemKey, itemVal]) => {
-                  if (!isTierPrices(itemVal)) return null
-                  return (
-                    <div
-                      key={itemKey}
-                      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-3"
-                    >
-                      <Label className="text-sm text-zinc-400">{keyToLabel(itemKey)}</Label>
-                      {TIERS.map((t) => (
-                        <div key={t} className="flex flex-col gap-1">
-                          <span className="text-[10px] text-zinc-400">{TIER_LABELS[t].split(' ')[0]}</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            step={50}
-                            value={itemVal[t] ?? 0}
-                            onChange={(e) => update(categoryKey, itemKey, t, Number(e.target.value) || 0)}
-                            className="w-24 border-white/10 bg-white/5 text-foreground"
-                          />
+        <div className="flex-1 overflow-y-auto pr-2 min-h-0">
+          <Accordion type="multiple" className="w-full" defaultValue={['preprodukcja', 'produkcja', 'postprodukcja', 'dodatkowe']}>
+            {PRICING_STRUCTURE.map(({ category, title, rows }) => {
+              const categoryData = local[category] as Record<string, { tani: number; standard: number; agresywny: number }> | undefined
+              if (!categoryData) return null
+              return (
+                <AccordionItem key={category} value={category} className="border-white/10">
+                  <AccordionTrigger className="text-sm font-semibold text-white hover:text-white/90 py-3">
+                    {title}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="rounded-xl border border-white/10 bg-zinc-900/20 divide-y divide-white/5 overflow-hidden">
+                      <div className="flex items-center gap-4 p-3 bg-zinc-900/40">
+                        <div className="flex-1 text-[10px] font-medium uppercase text-zinc-500">
+                          Puste
                         </div>
-                      ))}
+                        {TIERS.map((t) => (
+                          <span
+                            key={t}
+                            className="w-20 text-right text-[10px] font-medium uppercase text-zinc-500"
+                          >
+                            {TIER_LABELS[t].split(' ')[0]}
+                          </span>
+                        ))}
+                      </div>
+                      {rows.map((row) => {
+                        const itemVal = categoryData[row.key]
+                        if (!isTierPrices(itemVal)) return null
+                        const isKey = row.isKeyMetric === true
+                        return (
+                          <div
+                            key={row.key}
+                            className={`flex items-center gap-4 p-3 ${isKey ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                          >
+                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                              <span className="text-sm text-white truncate">{row.label}</span>
+                              {isKey && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 shrink-0 text-[10px] text-primary border-primary/20 bg-primary/10"
+                                >
+                                  Szybka wycena
+                                </Badge>
+                              )}
+                            </div>
+                            {TIERS.map((t) => (
+                              <Input
+                                key={t}
+                                type="number"
+                                min={0}
+                                step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
+                                value={itemVal[t] ?? 0}
+                                onChange={(e) =>
+                                  update(category, row.key, t, Number(e.target.value) || 0)
+                                }
+                                className="w-20 h-8 text-right bg-black/40 border-white/10 text-sm"
+                              />
+                            ))}
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+                  </AccordionContent>
+                </AccordionItem>
+              )
+            })}
+          </Accordion>
         </div>
 
-        <DialogFooter className="flex-row gap-2 border-t border-white/10 pt-4">
+        <DialogFooter className="flex-shrink-0 flex-row gap-2 border-t border-white/10 pt-4 mt-4">
           <Button
             type="button"
             variant="outline"
@@ -146,7 +252,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
             Przywróć domyślne
           </Button>
           <Button type="button" onClick={save} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            Zapisz i zamknij
+            Zapisz
           </Button>
         </DialogFooter>
       </DialogContent>

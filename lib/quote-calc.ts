@@ -64,9 +64,13 @@ function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produk
   total += day.statysta * pro.statystaEpizodysta[tier]
   total += day.kameraSony * pro.kameraSonyMirrorless[tier]
   total += day.kameraRed * pro.kameraRedKomodoX[tier]
+  if (day.obiektywy === 'standard') total += pro.obiektywyStandard[tier]
   if (day.obiektywy === 'rental') total += pro.obiektywyRental[tier]
+  if (day.stabilizacja === 'standard') total += pro.stabilizacjaStandard[tier]
   if (day.stabilizacja === 'rental') total += pro.stabilizacjaRental[tier]
+  if (day.podglad === 'standard') total += pro.podgladStandard[tier]
   if (day.podglad === 'rental') total += pro.podgladRental[tier]
+  if (day.swiatlo === 'standard') total += pro.swiatloStandard[tier]
   if (day.swiatlo === 'rental') total += pro.swiatloRental[tier]
   if (day.dron === 'dji') total += pro.dronDji[tier]
   if (day.dron === 'fpv') total += pro.dronFpv[tier]
@@ -82,6 +86,7 @@ export function getBreakdownWithPricing(
   const preItems: LineItemRow[] = []
   const proItems: LineItemRow[] = []
   const postItems: LineItemRow[] = []
+  const dodatkoweItems: LineItemRow[] = []
 
   const pre = pricing.preprodukcja
   if (!data.isDetailedPrepro) {
@@ -185,6 +190,17 @@ export function getBreakdownWithPricing(
     })
   }
 
+  const dod = pricing.dodatkowe
+  const km = data.kosztDojazduKm
+  const kmRate = dod.kosztDojazduKm[tier]
+  dodatkoweItems.push({
+    label: 'Koszty dojazdu',
+    value: `${km} km`,
+    quantity: km,
+    unitPriceNet: kmRate,
+    lineNetto: applyMargin(kmRate * km, marginPercent),
+  })
+
   const toPhase = (category: string, items: LineItemRow[]): PhaseBreakdown => ({
     category,
     items,
@@ -195,6 +211,7 @@ export function getBreakdownWithPricing(
     toPhase('Preprodukcja', preItems),
     toPhase('Produkcja', proItems),
     toPhase('Postprodukcja', postItems),
+    toPhase('Dodatkowe', dodatkoweItems),
   ]
 }
 
