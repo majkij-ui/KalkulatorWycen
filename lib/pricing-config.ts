@@ -44,6 +44,8 @@ export interface PricingConfigShape {
     swiatloRental: TierPrices
     dronDji: TierPrices
     dronFpv: TierPrices
+    stawkaOperatoraSzybkaWycena: TierPrices
+    doplataRezOpSzybkaWycena: TierPrices
   }
   postprodukcja: {
     montazZaDzien: TierPrices
@@ -101,6 +103,8 @@ export const DEFAULT_PRICING: PricingConfigShape = {
     swiatloRental: { tani: 800, standard: 2000, agresywny: 5000 },
     dronDji: { tani: 300, standard: 600, agresywny: 1200 },
     dronFpv: { tani: 800, standard: 1500, agresywny: 3000 },
+    stawkaOperatoraSzybkaWycena: { tani: 800, standard: 1500, agresywny: 2500 },
+    doplataRezOpSzybkaWycena: { tani: 500, standard: 1000, agresywny: 2000 },
   },
   postprodukcja: {
     montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },

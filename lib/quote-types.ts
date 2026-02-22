@@ -102,6 +102,8 @@ export interface QuoteData {
   isDetailedProdukcja: boolean
   dniZdjeciowe: number
   wielkoscEkipy: number
+  /** Dopłata za Reż-Opa w trybie szybkiej wyceny */
+  crudeRezOpSurcharge: boolean
   /** Pakiet sprzętowy (szybka wycena): minimalistyczny | standard | kinowy */
   klasaSprzetu: PakietSprzetu
   detailedShootingDays: ShootingDay[]
@@ -111,7 +113,7 @@ export interface QuoteData {
   crudeEditUnit: 'dni' | 'godziny'
   crudeEditCount: number
   detailedDeliverables: Deliverable[]
-  // Legacy (used by presets / fallback)
+  // Legacy (fallback)
   dniMontazu: number
   korekcjaBarwna: boolean
   animacje: AnimationType
@@ -130,7 +132,8 @@ export const defaultQuoteData: QuoteData = {
   kierownikProdukcji: false,
   isDetailedProdukcja: false,
   dniZdjeciowe: 0,
-  wielkoscEkipy: 0,
+  wielkoscEkipy: 1,
+  crudeRezOpSurcharge: false,
   klasaSprzetu: 'standard',
   detailedShootingDays: [],
   isDetailedPostpro: false,
@@ -145,73 +148,13 @@ export const defaultQuoteData: QuoteData = {
   licencjaMuzyczna: 'stock',
 }
 
-export interface Preset {
+/** User-saved quote template (persisted in localStorage) */
+export interface SavedTemplate {
+  id: string
   name: string
-  data: Partial<QuoteData>
+  state: Partial<QuoteData>
+  createdAt: string
 }
-
-export const presets: Preset[] = [
-  {
-    name: 'Jednodniowy wideo reportaż',
-    data: {
-      isDetailedPrepro: false,
-      scenariusz: 'podstawowy',
-      dniDokumentacji: 1,
-      wizjaLokalna: false,
-      kierownikProdukcji: false,
-      isDetailedProdukcja: false,
-      dniZdjeciowe: 1,
-      wielkoscEkipy: 2,
-      klasaSprzetu: 'standard',
-      dniMontazu: 2,
-      korekcjaBarwna: true,
-      animacje: 'brak',
-      kosztDojazduKm: 50,
-      lektor: false,
-      licencjaMuzyczna: 'stock',
-    },
-  },
-  {
-    name: 'Wywiady',
-    data: {
-      isDetailedPrepro: false,
-      scenariusz: 'podstawowy',
-      dniDokumentacji: 2,
-      wizjaLokalna: false,
-      kierownikProdukcji: false,
-      isDetailedProdukcja: false,
-      dniZdjeciowe: 2,
-      wielkoscEkipy: 3,
-      klasaSprzetu: 'kinowy',
-      dniMontazu: 3,
-      korekcjaBarwna: true,
-      animacje: '2d',
-      kosztDojazduKm: 100,
-      lektor: true,
-      licencjaMuzyczna: 'premium',
-    },
-  },
-  {
-    name: 'Kampania reklamowa',
-    data: {
-      isDetailedPrepro: true,
-      scenariusz: 'rozbudowany',
-      dniDokumentacji: 5,
-      wizjaLokalna: true,
-      kierownikProdukcji: true,
-      isDetailedProdukcja: false,
-      dniZdjeciowe: 5,
-      wielkoscEkipy: 8,
-      klasaSprzetu: 'kinowy',
-      dniMontazu: 7,
-      korekcjaBarwna: true,
-      animacje: '3d',
-      kosztDojazduKm: 200,
-      lektor: true,
-      licencjaMuzyczna: 'kompozytor',
-    },
-  },
-]
 
 export const PRICES = {
   scenariusz: {

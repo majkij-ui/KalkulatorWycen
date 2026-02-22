@@ -1,11 +1,12 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Calendar, UserCheck, MapPin } from 'lucide-react'
+import { FileText, Calendar, UserCheck, MapPin, Minus, Plus } from 'lucide-react'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { GlassCard } from '@/components/glass-card'
 import { useQuote } from '@/lib/quote-context'
@@ -70,14 +71,38 @@ export function PreprodukcjaTab() {
                       {dniValue % 1 === 0 ? dniValue : dniValue.toFixed(1).replace('.', ',')}
                     </span>
                   </div>
-                  <Slider
-                    value={[dniValue]}
-                    onValueChange={([v]) => setDni(v)}
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    className="py-2"
-                  />
+                  <div className="flex items-center gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => setDni(Math.max(0, dniValue - 0.5))}
+                      disabled={dniValue <= 0}
+                      aria-label="Zmniejsz dni"
+                    >
+                      <Minus className="size-4" />
+                    </Button>
+                    <Slider
+                      value={[dniValue]}
+                      onValueChange={([v]) => setDni(v)}
+                      min={0}
+                      max={10}
+                      step={0.5}
+                      className="flex-1 py-2"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => setDni(Math.min(10, dniValue + 0.5))}
+                      disabled={dniValue >= 10}
+                      aria-label="Zwiększ dni"
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
                   <div className="flex justify-between text-xs text-zinc-400">
                     <span>0</span>
                     <span>10 dni</span>

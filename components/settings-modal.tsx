@@ -58,6 +58,8 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
       { key: 'pakietSprzetowyMinimalistyczny', label: 'Pakiet sprzętowy (Minimalistyczny)', isKeyMetric: true },
       { key: 'pakietSprzetowyStandard', label: 'Pakiet sprzętowy (Standard)', isKeyMetric: true },
       { key: 'pakietSprzetowyKinowy', label: 'Pakiet sprzętowy (Kinowy)', isKeyMetric: true },
+      { key: 'stawkaOperatoraSzybkaWycena', label: 'Stawka operatora (Szybka wycena)', isKeyMetric: true },
+      { key: 'doplataRezOpSzybkaWycena', label: 'Dopłata za Reż-Opa (Szybka wycena)', isKeyMetric: true },
       { key: 'rezOp', label: 'ReżOp' },
       { key: 'asystentOperator', label: 'Asystent/Operator' },
       { key: 'gafer', label: 'Gafer' },

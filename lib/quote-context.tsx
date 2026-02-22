@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { QuoteData, defaultQuoteData, presets, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable } from './quote-types'
+import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate } from './quote-types'
 import type { PricingTier, PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
@@ -9,7 +9,10 @@ import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type P
 interface QuoteContextValue {
   data: QuoteData
   updateField: <K extends keyof QuoteData>(key: K, value: QuoteData[K]) => void
-  applyPreset: (presetIndex: number) => void
+  templates: SavedTemplate[]
+  saveTemplate: (name: string) => void
+  deleteTemplate: (id: string) => void
+  loadTemplate: (id: string) => void
   totals: Totals
   formatCurrency: (amount: number) => string
   isCalculating: boolean
@@ -38,6 +41,29 @@ interface QuoteContextValue {
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
 
+const TEMPLATES_STORAGE_KEY = 'nonoise-templates'
+
+function loadTemplatesFromStorage(): SavedTemplate[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function saveTemplatesToStorage(templates: SavedTemplate[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates))
+  } catch {
+    // ignore
+  }
+}
+
 const TIER_LABELS: Record<PricingTier, string> = {
   tani: 'Tani (Freelancer)',
   standard: 'Standard (Boutique)',
@@ -50,6 +76,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [pricingTier, setPricingTierState] = useState<PricingTier>('standard')
   const [marginPercent, setMarginPercent] = useState(0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
+  const [templates, setTemplates] = useState<SavedTemplate[]>([])
+
+  useEffect(() => {
+    setTemplates(loadTemplatesFromStorage())
+  }, [])
 
   const reloadPricingFromStorage = useCallback(() => {
     setPricingConfigState(getPricingConfig())
@@ -123,19 +154,41 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setData({ ...defaultQuoteData })
   }, [])
 
-  const applyPreset = useCallback((presetIndex: number) => {
-    const preset = presets[presetIndex]
-    if (!preset) return
+  const saveTemplate = useCallback((name: string) => {
+    const template: SavedTemplate = {
+      id: `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      name: name.trim() || 'Bez nazwy',
+      state: { ...data },
+      createdAt: new Date().toISOString(),
+    }
+    setTemplates(prev => {
+      const next = [...prev, template]
+      saveTemplatesToStorage(next)
+      return next
+    })
+  }, [data])
+
+  const deleteTemplate = useCallback((id: string) => {
+    setTemplates(prev => {
+      const next = prev.filter(t => t.id !== id)
+      saveTemplatesToStorage(next)
+      return next
+    })
+  }, [])
+
+  const loadTemplate = useCallback((id: string) => {
+    const template = templates.find(t => t.id === id)
+    if (!template) return
     setIsCalculating(true)
     setTimeout(() => {
-      const merged = { ...defaultQuoteData, ...preset.data }
-      if (merged.dniMontazu != null && !('crudeEditCount' in (preset.data ?? {}))) {
+      const merged: QuoteData = { ...defaultQuoteData, ...template.state }
+      if (merged.dniMontazu != null && merged.crudeEditCount === undefined) {
         merged.crudeEditCount = merged.dniMontazu
       }
       setData(merged)
       setIsCalculating(false)
     }, 500)
-  }, [])
+  }, [templates])
 
   const setPricingTier = useCallback((tier: PricingTier) => {
     setPricingTierState(tier)
@@ -149,7 +202,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const value: QuoteContextValue = {
     data,
     updateField,
-    applyPreset,
+    templates,
+    saveTemplate,
+    deleteTemplate,
+    loadTemplate,
     totals,
     formatCurrency,
     isCalculating,

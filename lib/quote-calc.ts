@@ -130,23 +130,19 @@ export function getBreakdownWithPricing(
   const pro = pricing.produkcja
   if (!data.isDetailedProdukcja) {
     const days = data.dniZdjeciowe
-    const dayRate = pro.dzienZdjeciowyEkipa[tier]
+    const crew = data.wielkoscEkipy
+    const stawkaOp = pro.stawkaOperatoraSzybkaWycena[tier]
     const pakietKey = data.klasaSprzetu
     const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
-    const pakietLabel = pakietKey === 'minimalistyczny' ? 'Minimalistyczny' : pakietKey === 'kinowy' ? 'Kinowy' : 'Standard'
+    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
+    const dayRate = crew * stawkaOp + pakiet + doplataRezOp
+    const lineNetto = applyMargin(dayRate * days, marginPercent)
     proItems.push({
-      label: 'Dzień zdjęciowy (Crude)',
-      value: `${days} dni`,
+      label: 'Szybka wycena produkcji',
+      value: `${days} dni × (${crew} os. × stawka + pakiet${data.crudeRezOpSurcharge ? ' + Reż-Op' : ''})`,
       quantity: days,
       unitPriceNet: dayRate,
-      lineNetto: applyMargin(dayRate * days, marginPercent),
-    })
-    proItems.push({
-      label: 'Pakiet sprzętowy',
-      value: pakietLabel,
-      quantity: days,
-      unitPriceNet: pakiet,
-      lineNetto: applyMargin(pakiet * days, marginPercent),
+      lineNetto,
     })
   } else {
     data.detailedShootingDays.forEach((day, i) => {

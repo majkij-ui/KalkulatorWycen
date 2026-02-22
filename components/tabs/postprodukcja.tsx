@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Scissors, Plus, Trash2 } from 'lucide-react'
+import { Scissors, Plus, Minus, Trash2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -281,14 +281,38 @@ export function PostprodukcjaTab() {
                           : count}
                       </span>
                     </div>
-                    <Slider
-                      value={[count]}
-                      onValueChange={([v]) => updateField('crudeEditCount', v)}
-                      min={0}
-                      max={sliderMax}
-                      step={sliderStep}
-                      className="py-2"
-                    />
+                    <div className="flex items-center gap-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                        onClick={() => updateField('crudeEditCount', Math.max(0, count - sliderStep))}
+                        disabled={count <= 0}
+                        aria-label={unit === 'dni' ? 'Zmniejsz dni' : 'Zmniejsz godziny'}
+                      >
+                        <Minus className="size-4" />
+                      </Button>
+                      <Slider
+                        value={[count]}
+                        onValueChange={([v]) => updateField('crudeEditCount', v)}
+                        min={0}
+                        max={sliderMax}
+                        step={sliderStep}
+                        className="flex-1 py-2"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                        onClick={() => updateField('crudeEditCount', Math.min(sliderMax, count + sliderStep))}
+                        disabled={count >= sliderMax}
+                        aria-label={unit === 'dni' ? 'Zwiększ dni' : 'Zwiększ godziny'}
+                      >
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
                     <div className="flex justify-between text-xs text-zinc-400">
                       <span>0</span>
                       <span>{sliderMax} {unit === 'dni' ? 'dni' : 'godz.'}</span>

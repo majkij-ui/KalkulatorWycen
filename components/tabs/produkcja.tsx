@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Clapperboard, Users, Camera, Plus, Trash2 } from 'lucide-react'
+import { Clapperboard, Users, Camera, Plus, Minus, Trash2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
@@ -220,14 +220,38 @@ export function ProdukcjaTab() {
                     <span className="text-sm text-zinc-400">Dni</span>
                     <span className="text-lg font-semibold tabular-nums text-white">{data.dniZdjeciowe}</span>
                   </div>
-                  <Slider
-                    value={[data.dniZdjeciowe]}
-                    onValueChange={([val]) => updateField('dniZdjeciowe', val)}
-                    min={0}
-                    max={14}
-                    step={1}
-                    className="py-2"
-                  />
+                  <div className="flex items-center gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => updateField('dniZdjeciowe', Math.max(0, data.dniZdjeciowe - 1))}
+                      disabled={data.dniZdjeciowe <= 0}
+                      aria-label="Zmniejsz dni"
+                    >
+                      <Minus className="size-4" />
+                    </Button>
+                    <Slider
+                      value={[data.dniZdjeciowe]}
+                      onValueChange={([val]) => updateField('dniZdjeciowe', val)}
+                      min={0}
+                      max={14}
+                      step={1}
+                      className="flex-1 py-2"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => updateField('dniZdjeciowe', Math.min(14, data.dniZdjeciowe + 1))}
+                      disabled={data.dniZdjeciowe >= 14}
+                      aria-label="Zwiększ dni"
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
                   <div className="flex justify-between text-xs text-zinc-400">
                     <span>0 dni</span>
                     <span>14 dni</span>
@@ -251,8 +275,20 @@ export function ProdukcjaTab() {
                     label="Osoby w ekipie"
                     value={data.wielkoscEkipy}
                     onChange={(val) => updateField('wielkoscEkipy', val)}
-                    min={0}
+                    min={1}
                     max={20}
+                  />
+                </div>
+
+                <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">Dopłata za Reż-Opa</p>
+                    <p className="text-xs text-zinc-400">Dodatkowa stawka za łączenie funkcji reżysera i operatora</p>
+                  </div>
+                  <Switch
+                    checked={data.crudeRezOpSurcharge}
+                    onCheckedChange={(v) => updateField('crudeRezOpSurcharge', v)}
+                    aria-label="Dopłata za Reż-Opa"
                   />
                 </div>
 
