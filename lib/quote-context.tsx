@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { QuoteData, defaultQuoteData, presets, createDefaultShootingDay, type ShootingDay } from './quote-types'
+import { QuoteData, defaultQuoteData, presets, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable } from './quote-types'
 import type { PricingTier, PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
@@ -29,6 +29,10 @@ interface QuoteContextValue {
   addShootingDay: () => void
   removeShootingDay: (id: string) => void
   updateShootingDay: <K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => void
+  // Postprodukcja detailed: deliverables
+  addDeliverable: () => void
+  removeDeliverable: (id: string) => void
+  updateDeliverable: <K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => void
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
@@ -91,12 +95,39 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const addDeliverable = useCallback(() => {
+    setData(prev => ({
+      ...prev,
+      detailedDeliverables: [...prev.detailedDeliverables, createDefaultDeliverable()],
+    }))
+  }, [])
+
+  const removeDeliverable = useCallback((id: string) => {
+    setData(prev => ({
+      ...prev,
+      detailedDeliverables: prev.detailedDeliverables.filter(d => d.id !== id),
+    }))
+  }, [])
+
+  const updateDeliverable = useCallback(<K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => {
+    setData(prev => ({
+      ...prev,
+      detailedDeliverables: prev.detailedDeliverables.map(d =>
+        d.id === id ? { ...d, [field]: value } : d
+      ),
+    }))
+  }, [])
+
   const applyPreset = useCallback((presetIndex: number) => {
     const preset = presets[presetIndex]
     if (!preset) return
     setIsCalculating(true)
     setTimeout(() => {
-      setData({ ...defaultQuoteData, ...preset.data })
+      const merged = { ...defaultQuoteData, ...preset.data }
+      if (merged.dniMontazu != null && !('crudeEditCount' in (preset.data ?? {}))) {
+        merged.crudeEditCount = merged.dniMontazu
+      }
+      setData(merged)
       setIsCalculating(false)
     }, 500)
   }, [])
@@ -129,6 +160,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     addShootingDay,
     removeShootingDay,
     updateShootingDay,
+    addDeliverable,
+    removeDeliverable,
+    updateDeliverable,
   }
 
   return (

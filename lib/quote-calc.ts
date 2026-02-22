@@ -1,6 +1,6 @@
 'use client'
 
-import type { QuoteData, ShootingDay } from './quote-types'
+import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape, PricingTier } from './pricing-config'
 
 const VAT_RATE = 0.23
@@ -34,38 +34,22 @@ function applyMargin(value: number, marginPercent: number): number {
   return value * (1 + marginPercent / 100)
 }
 
-/** Oblicza ilość/jednostkę dla pozycji z cennika na podstawie QuoteData (postprodukcja) */
-function getQuantity(key: string, data: QuoteData): number {
-  switch (key) {
-    case 'montazZaDzien':
-      return data.dniMontazu
-    case 'korekcjaBarwna':
-      return data.korekcjaBarwna ? 1 : 0
-    case 'lektor':
-      return data.lektor ? 1 : 0
-    default:
-      return 0
-  }
-}
-
-function getQuantityLabel(key: string, data: QuoteData): string {
-  const q = getQuantity(key, data)
-  switch (key) {
-    case 'montazZaDzien':
-      return `${q} dni`
-    case 'korekcjaBarwna':
-      return data.korekcjaBarwna ? 'Tak' : 'Nie'
-    case 'lektor':
-      return data.lektor ? 'Tak' : 'Nie'
-    default:
-      return String(q)
-  }
-}
-
-const LABELS: Record<string, string> = {
-  montazZaDzien: 'Montaż (za dzień)',
-  korekcjaBarwna: 'Korekcja barwna',
-  lektor: 'Lektor',
+function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja'], tier: PricingTier): number {
+  const formatPrice = d.format === 'shorts' ? post.formatShortsReel[tier] : post.formatReportaz[tier]
+  let total = formatPrice * d.ilosc
+  if (d.korekcjaBarwna === 'podstawowa') total += post.korekcjaBarwnaPodstawowa[tier]
+  if (d.korekcjaBarwna === 'zaawansowana') total += post.korekcjaBarwnaZaawansowana[tier]
+  if (d.animacje === '2d') total += post.animacje2d[tier]
+  if (d.animacje === 'ai') total += post.animacjeAi[tier]
+  if (d.muzyka === 'copyfree') total += post.muzykaCopyfree[tier]
+  if (d.muzyka === 'kompozytor') total += post.muzykaKompozytor[tier]
+  if (d.soundDesign === 'prosty') total += post.soundDesignProsty[tier]
+  if (d.soundDesign === 'zlozony') total += post.soundDesignZlozony[tier]
+  if (d.masterDzwieku === 'podstawowy') total += post.masterDzwiekuPodstawowy[tier]
+  if (d.masterDzwieku === 'zlozony') total += post.masterDzwiekuZlozony[tier]
+  if (d.lektor === 'ai') total += post.lektorAi[tier]
+  if (d.lektor === 'studio') total += post.lektorStudio[tier]
+  return total
 }
 
 function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja'], tier: PricingTier): number {
@@ -98,18 +82,6 @@ export function getBreakdownWithPricing(
   const preItems: LineItemRow[] = []
   const proItems: LineItemRow[] = []
   const postItems: LineItemRow[] = []
-
-  const addPost = (
-    list: LineItemRow[],
-    key: keyof PricingConfigShape['postprodukcja'],
-    unitPrice: number
-  ) => {
-    const q = getQuantity(key as string, data)
-    const label = LABELS[key as string] ?? key
-    const value = getQuantityLabel(key as string, data)
-    const lineNetto = applyMargin(unitPrice * q, marginPercent)
-    list.push({ label, value, quantity: q, unitPriceNet: unitPrice, lineNetto })
-  }
 
   const pre = pricing.preprodukcja
   if (!data.isDetailedPrepro) {
@@ -185,9 +157,33 @@ export function getBreakdownWithPricing(
   }
 
   const post = pricing.postprodukcja
-  addPost(postItems, 'montazZaDzien', post.montazZaDzien[tier])
-  addPost(postItems, 'korekcjaBarwna', post.korekcjaBarwna[tier])
-  addPost(postItems, 'lektor', post.lektor[tier])
+  if (!data.isDetailedPostpro) {
+    const unit = data.crudeEditUnit
+    const q = data.crudeEditCount
+    const unitPrice = unit === 'dni' ? post.montazZaDzien[tier] : post.montazZaGodzine[tier]
+    const value = unit === 'dni'
+      ? (q % 1 === 0 ? `${q} dni` : `${q} dni`.replace('.', ','))
+      : `${q} godz.`
+    postItems.push({
+      label: unit === 'dni' ? 'Montaż (dni)' : 'Montaż (godziny)',
+      value,
+      quantity: q,
+      unitPriceNet: unitPrice,
+      lineNetto: applyMargin(unitPrice * q, marginPercent),
+    })
+  } else {
+    data.detailedDeliverables.forEach((del, i) => {
+      const net = computeDeliverableNet(del, post, tier)
+      const formatLabel = del.format === 'shorts' ? 'do 30s shorts/reel' : '1–3 min reportaż'
+      postItems.push({
+        label: `Format / Dostawa ${i + 1}`,
+        value: `${del.ilosc}× ${formatLabel}`,
+        quantity: 1,
+        unitPriceNet: net,
+        lineNetto: applyMargin(net, marginPercent),
+      })
+    })
+  }
 
   const toPhase = (category: string, items: LineItemRow[]): PhaseBreakdown => ({
     category,

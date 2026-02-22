@@ -4,6 +4,45 @@ export type PakietSprzetu = 'minimalistyczny' | 'standard' | 'kinowy'
 export type AnimationType = 'brak' | '2d' | '3d'
 export type MusicLicense = 'stock' | 'premium' | 'kompozytor'
 
+/** Format dostawy w trybie szczegółowej postprodukcji */
+export type DeliverableFormat = 'shorts' | 'reportaz'
+export type KorekcjaBarwnaOpcja = 'brak' | 'podstawowa' | 'zaawansowana'
+export type AnimacjePostproOpcja = 'brak' | '2d' | 'ai'
+export type MuzykaPostproOpcja = 'brak' | 'copyfree' | 'kompozytor'
+export type SoundDesignOpcja = 'brak' | 'prosty' | 'zlozony'
+export type MasterDzwiekuOpcja = 'brak' | 'podstawowy' | 'zlozony'
+export type LektorPostproOpcja = 'brak' | 'ai' | 'studio'
+
+export interface Deliverable {
+  id: string
+  format: DeliverableFormat
+  ilosc: number
+  korekcjaBarwna: KorekcjaBarwnaOpcja
+  animacje: AnimacjePostproOpcja
+  muzyka: MuzykaPostproOpcja
+  soundDesign: SoundDesignOpcja
+  masterDzwieku: MasterDzwiekuOpcja
+  lektor: LektorPostproOpcja
+}
+
+function createDeliverableId(): string {
+  return `del-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+export function createDefaultDeliverable(): Deliverable {
+  return {
+    id: createDeliverableId(),
+    format: 'shorts',
+    ilosc: 1,
+    korekcjaBarwna: 'brak',
+    animacje: 'brak',
+    muzyka: 'brak',
+    soundDesign: 'brak',
+    masterDzwieku: 'brak',
+    lektor: 'brak',
+  }
+}
+
 export type SprzetOpcja = 'brak' | 'standard' | 'rental'
 export type DronOpcja = 'brak' | 'dji' | 'fpv'
 
@@ -68,6 +107,11 @@ export interface QuoteData {
   detailedShootingDays: ShootingDay[]
 
   // Postprodukcja
+  isDetailedPostpro: boolean
+  crudeEditUnit: 'dni' | 'godziny'
+  crudeEditCount: number
+  detailedDeliverables: Deliverable[]
+  // Legacy (used by presets / fallback)
   dniMontazu: number
   korekcjaBarwna: boolean
   animacje: AnimationType
@@ -89,6 +133,10 @@ export const defaultQuoteData: QuoteData = {
   wielkoscEkipy: 2,
   klasaSprzetu: 'standard',
   detailedShootingDays: [createDefaultShootingDay()],
+  isDetailedPostpro: false,
+  crudeEditUnit: 'dni',
+  crudeEditCount: 2,
+  detailedDeliverables: [createDefaultDeliverable()],
   dniMontazu: 2,
   korekcjaBarwna: false,
   animacje: 'brak',

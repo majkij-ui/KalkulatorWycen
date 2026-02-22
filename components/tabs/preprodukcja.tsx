@@ -20,8 +20,8 @@ const container = {
 }
 
 const item = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0 },
+  hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: 'easeOut' } },
 }
 
 export function PreprodukcjaTab() {
@@ -43,10 +43,10 @@ export function PreprodukcjaTab() {
         {!isDetailed && (
           <motion.div
             key="crude-prepro"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            initial={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            animate={{ height: 'auto', opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            transition={{ opacity: { duration: 0.3 }, height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }, filter: { duration: 0.3 } }}
             className="overflow-hidden"
           >
             <motion.div variants={container} initial="hidden" animate="show" className="pb-5">
@@ -115,10 +115,10 @@ export function PreprodukcjaTab() {
         {isDetailed && (
           <motion.div
             key="detailed-prepro"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            initial={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            animate={{ height: 'auto', opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            transition={{ opacity: { duration: 0.3 }, height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }, filter: { duration: 0.3 } }}
             className="overflow-hidden"
           >
             {/* Re-trigger the container variants so children become visible */}

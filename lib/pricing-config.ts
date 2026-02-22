@@ -43,8 +43,21 @@ export interface PricingConfigShape {
   }
   postprodukcja: {
     montazZaDzien: TierPrices
-    korekcjaBarwna: TierPrices
-    lektor: TierPrices
+    montazZaGodzine: TierPrices
+    formatShortsReel: TierPrices
+    formatReportaz: TierPrices
+    korekcjaBarwnaPodstawowa: TierPrices
+    korekcjaBarwnaZaawansowana: TierPrices
+    animacje2d: TierPrices
+    animacjeAi: TierPrices
+    muzykaCopyfree: TierPrices
+    muzykaKompozytor: TierPrices
+    soundDesignProsty: TierPrices
+    soundDesignZlozony: TierPrices
+    masterDzwiekuPodstawowy: TierPrices
+    masterDzwiekuZlozony: TierPrices
+    lektorAi: TierPrices
+    lektorStudio: TierPrices
   }
 }
 
@@ -80,8 +93,21 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   },
   postprodukcja: {
     montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },
-    korekcjaBarwna: { tani: 400, standard: 1200, agresywny: 2500 },
-    lektor: { tani: 300, standard: 700, agresywny: 1500 },
+    montazZaGodzine: { tani: 100, standard: 200, agresywny: 400 },
+    formatShortsReel: { tani: 300, standard: 800, agresywny: 1500 },
+    formatReportaz: { tani: 1000, standard: 2500, agresywny: 5000 },
+    korekcjaBarwnaPodstawowa: { tani: 200, standard: 500, agresywny: 1000 },
+    korekcjaBarwnaZaawansowana: { tani: 500, standard: 1200, agresywny: 2500 },
+    animacje2d: { tani: 400, standard: 1000, agresywny: 2500 },
+    animacjeAi: { tani: 600, standard: 1500, agresywny: 3500 },
+    muzykaCopyfree: { tani: 100, standard: 300, agresywny: 800 },
+    muzykaKompozytor: { tani: 1000, standard: 3000, agresywny: 8000 },
+    soundDesignProsty: { tani: 200, standard: 500, agresywny: 1200 },
+    soundDesignZlozony: { tani: 600, standard: 1500, agresywny: 3500 },
+    masterDzwiekuPodstawowy: { tani: 150, standard: 400, agresywny: 800 },
+    masterDzwiekuZlozony: { tani: 400, standard: 1000, agresywny: 2000 },
+    lektorAi: { tani: 100, standard: 250, agresywny: 500 },
+    lektorStudio: { tani: 400, standard: 1000, agresywny: 2500 },
   },
 }
 

@@ -22,8 +22,8 @@ const container = {
 }
 
 const item = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0 },
+  hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+  show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: 'easeOut' } },
 }
 
 const SPRZET_OPCJE: { value: SprzetOpcja; label: string }[] = [
@@ -192,10 +192,10 @@ export function ProdukcjaTab() {
         {!isDetailed && (
           <motion.div
             key="crude-produkcja"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            initial={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            animate={{ height: 'auto', opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            transition={{ opacity: { duration: 0.3 }, height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }, filter: { duration: 0.3 } }}
             className="overflow-hidden"
           >
             <motion.div variants={container} initial="hidden" animate="show" className="pb-5">
@@ -324,10 +324,10 @@ export function ProdukcjaTab() {
         {isDetailed && (
           <motion.div
             key="detailed-produkcja"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            initial={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            animate={{ height: 'auto', opacity: 1, filter: 'blur(0px)', y: 0 }}
+            exit={{ height: 0, opacity: 0, filter: 'blur(8px)', y: -10 }}
+            transition={{ opacity: { duration: 0.3 }, height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }, filter: { duration: 0.3 } }}
             className="overflow-hidden"
           >
             <motion.div
