@@ -11,10 +11,10 @@ export interface TierPrices {
   agresywny: number
 }
 
-/** Built-in format keys shown in UI; internal config still uses formatShortsReel / formatReportaz */
-export const FORMAT_KEY_SHORTS = 'Format: Shorts/Reel (do 30s)'
-export const FORMAT_KEY_REPORTAZ = 'Format: Reportaż (1-3min)'
-export const BUILTIN_FORMAT_KEYS: string[] = [FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ]
+/** Default first format key (used for new deliverables and fallback when a format is removed) */
+export const DEFAULT_FORMAT_KEY = 'Format: do 30sek shorts/reel'
+/** Second default format (for legacy shorts/reportaz mapping) */
+export const REPORTAZ_FORMAT_KEY = 'Format: Reportaż 1-3min'
 
 export interface PricingConfigShape {
   preprodukcja: {
@@ -27,6 +27,7 @@ export interface PricingConfigShape {
   produkcja: {
     stawkaOperatoraSzybkaWycena: TierPrices
     doplataRezOpSzybkaWycena: TierPrices
+    doplataDronSzybkaWycena: TierPrices
     pakietSprzetowyMinimalistyczny: TierPrices
     pakietSprzetowyStandard: TierPrices
     pakietSprzetowyKinowy: TierPrices
@@ -54,8 +55,6 @@ export interface PricingConfigShape {
   postprodukcja: {
     montazZaDzien: TierPrices
     montazZaGodzine: TierPrices
-    formatShortsReel: TierPrices
-    formatReportaz: TierPrices
     korekcjaBarwnaPodstawowa: TierPrices
     korekcjaBarwnaZaawansowana: TierPrices
     animacje2d: TierPrices
@@ -89,6 +88,7 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   produkcja: {
     stawkaOperatoraSzybkaWycena: { tani: 800, standard: 1500, agresywny: 2500 },
     doplataRezOpSzybkaWycena: { tani: 500, standard: 1000, agresywny: 2000 },
+    doplataDronSzybkaWycena: { tani: 400, standard: 800, agresywny: 1500 },
     pakietSprzetowyMinimalistyczny: { tani: 300, standard: 800, agresywny: 1500 },
     pakietSprzetowyStandard: { tani: 600, standard: 1500, agresywny: 3000 },
     pakietSprzetowyKinowy: { tani: 1500, standard: 3500, agresywny: 7000 },
@@ -116,8 +116,8 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   postprodukcja: {
     montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },
     montazZaGodzine: { tani: 100, standard: 200, agresywny: 400 },
-    formatShortsReel: { tani: 300, standard: 800, agresywny: 1500 },
-    formatReportaz: { tani: 1000, standard: 2500, agresywny: 5000 },
+    'Format: do 30sek shorts/reel': { tani: 300, standard: 800, agresywny: 1500 },
+    'Format: Reportaż 1-3min': { tani: 1000, standard: 2500, agresywny: 5000 },
     korekcjaBarwnaPodstawowa: { tani: 200, standard: 500, agresywny: 1000 },
     korekcjaBarwnaZaawansowana: { tani: 500, standard: 1200, agresywny: 2500 },
     animacje2d: { tani: 400, standard: 1000, agresywny: 2500 },

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Scissors, Plus, Minus, Trash2, Settings2 } from 'lucide-react'
+import { Scissors, Plus, Minus, Trash2, Settings2, Pencil } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
-import { BUILTIN_FORMAT_KEYS, FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from '@/lib/pricing-config'
+import { DEFAULT_FORMAT_KEY, REPORTAZ_FORMAT_KEY } from '@/lib/pricing-config'
 import type {
   Deliverable,
   DeliverableFormat,
@@ -132,8 +132,8 @@ function formatLabel(formatKey: string): string {
 }
 
 function toFormatKey(legacyOrKey: string): string {
-  if (legacyOrKey === 'shorts') return FORMAT_KEY_SHORTS
-  if (legacyOrKey === 'reportaz') return FORMAT_KEY_REPORTAZ
+  if (legacyOrKey === 'shorts') return DEFAULT_FORMAT_KEY
+  if (legacyOrKey === 'reportaz') return REPORTAZ_FORMAT_KEY
   return legacyOrKey
 }
 
@@ -161,19 +161,25 @@ function DeliverableCard({
         <Select
           value={(() => {
             const key = toFormatKey(del.format)
-            return availableFormats.includes(key) ? key : availableFormats[0] ?? key
+            if (availableFormats.includes(key)) return key
+            if (availableFormats.length > 0) return availableFormats[0]
+            return key || '__empty__'
           })()}
-          onValueChange={(v) => onUpdate('format', v as DeliverableFormat)}
+          onValueChange={(v) => onUpdate('format', (v === '__empty__' ? '' : v) as DeliverableFormat)}
         >
           <SelectTrigger className="w-[200px] border-white/10 bg-zinc-900/30 text-white backdrop-blur-xl">
-            <SelectValue />
+            <SelectValue placeholder="Brak formatu" />
           </SelectTrigger>
           <SelectContent>
-            {availableFormats.map((key) => (
-              <SelectItem key={key} value={key}>
-                {formatLabel(key)}
-              </SelectItem>
-            ))}
+            {availableFormats.length === 0 ? (
+              <SelectItem value="__empty__">Brak formatu</SelectItem>
+            ) : (
+              availableFormats.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {formatLabel(key)}
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
         <Counter
@@ -234,11 +240,15 @@ function FormatManagerDialog({
     availableFormats,
     getFormatStandardPrice,
     addCustomFormat,
+    editCustomFormat,
     removeCustomFormat,
     formatCurrency,
   } = useQuote()
   const [newName, setNewName] = useState('')
   const [newPrice, setNewPrice] = useState('')
+  const [editingFormatKey, setEditingFormatKey] = useState<string | null>(null)
+
+  const isEditing = editingFormatKey !== null
 
   const handleAdd = () => {
     const name = newName.trim()
@@ -249,10 +259,35 @@ function FormatManagerDialog({
     setNewPrice('')
   }
 
+  const handleSaveEdit = () => {
+    const name = newName.trim()
+    const price = Number(newPrice)
+    if (!editingFormatKey || !name || Number.isNaN(price) || price < 0) return
+    editCustomFormat(editingFormatKey, name, price)
+    setNewName('')
+    setNewPrice('')
+    setEditingFormatKey(null)
+  }
+
+  const handleEdit = (formatKey: string) => {
+    setEditingFormatKey(formatKey)
+    setNewName(formatLabel(formatKey))
+    setNewPrice(String(getFormatStandardPrice(formatKey)))
+  }
+
+  const handleClose = (next: boolean) => {
+    if (!next) {
+      setEditingFormatKey(null)
+      setNewName('')
+      setNewPrice('')
+    }
+    onOpenChange(next)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="border-white/10 bg-zinc-950/90 text-white backdrop-blur-xl sm:max-w-md"
+        className="border border-white/10 bg-zinc-950/90 text-white backdrop-blur-xl sm:max-w-md"
         showCloseButton
       >
         <DialogHeader>
@@ -275,14 +310,19 @@ function FormatManagerDialog({
               onChange={(e) => setNewPrice(e.target.value)}
               className="w-28 border-white/10 bg-zinc-900/50 text-white placeholder:text-zinc-500"
             />
-            <Button type="button" onClick={handleAdd} size="sm">
-              Dodaj
-            </Button>
+            {isEditing ? (
+              <Button type="button" onClick={handleSaveEdit} size="sm">
+                Zapisz
+              </Button>
+            ) : (
+              <Button type="button" onClick={handleAdd} size="sm">
+                Dodaj
+              </Button>
+            )}
           </div>
           <ScrollArea className="h-[240px] rounded-lg border border-white/10">
             <div className="space-y-1 p-2">
               {availableFormats.map((formatKey) => {
-                const isBuiltIn = BUILTIN_FORMAT_KEYS.includes(formatKey)
                 const displayName = formatLabel(formatKey)
                 const standardPrice = getFormatStandardPrice(formatKey)
                 return (
@@ -292,20 +332,28 @@ function FormatManagerDialog({
                   >
                     <span className="text-sm text-white">{displayName}</span>
                     <span className="tabular-nums text-sm text-zinc-400">{formatCurrency(standardPrice)}</span>
-                    {!isBuiltIn ? (
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-8 shrink-0 text-zinc-500 hover:bg-white/10 hover:text-red-400"
+                        className="size-8 text-zinc-500 hover:bg-white/10 hover:text-primary"
+                        onClick={() => handleEdit(formatKey)}
+                        aria-label={`Edytuj ${displayName}`}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-zinc-500 hover:bg-white/10 hover:text-red-400"
                         onClick={() => removeCustomFormat(formatKey)}
                         aria-label={`Usuń ${displayName}`}
                       >
                         <Trash2 className="size-4" />
                       </Button>
-                    ) : (
-                      <span className="size-8 shrink-0" aria-hidden />
-                    )}
+                    </div>
                   </div>
                 )
               })}

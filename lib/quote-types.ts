@@ -5,6 +5,8 @@ export type AnimationType = 'brak' | '2d' | '3d'
 export type MusicLicense = 'stock' | 'premium' | 'kompozytor'
 
 /** Format dostawy: pełny klucz z cennika, np. "Format: Shorts/Reel (do 30s)" lub custom "Format: <nazwa>" */
+import { DEFAULT_FORMAT_KEY } from './pricing-config'
+
 export type DeliverableFormat = string
 export type KorekcjaBarwnaOpcja = 'brak' | 'podstawowa' | 'zaawansowana'
 export type AnimacjePostproOpcja = 'brak' | '2d' | 'ai'
@@ -32,7 +34,7 @@ function createDeliverableId(): string {
 export function createDefaultDeliverable(): Deliverable {
   return {
     id: createDeliverableId(),
-    format: 'Format: Shorts/Reel (do 30s)',
+    format: DEFAULT_FORMAT_KEY,
     ilosc: 1,
     korekcjaBarwna: 'brak',
     animacje: 'brak',
@@ -104,6 +106,8 @@ export interface QuoteData {
   wielkoscEkipy: number
   /** Dopłata za Reż-Opa w trybie szybkiej wyceny */
   crudeRezOpSurcharge: boolean
+  /** Dopłata za drona w trybie szybkiej wyceny */
+  crudeDroneSurcharge: boolean
   /** Pakiet sprzętowy (szybka wycena): minimalistyczny | standard | kinowy */
   klasaSprzetu: PakietSprzetu
   detailedShootingDays: ShootingDay[]
@@ -156,6 +160,7 @@ export const defaultQuoteData: QuoteData = {
   dniZdjeciowe: 0,
   wielkoscEkipy: 1,
   crudeRezOpSurcharge: false,
+  crudeDroneSurcharge: false,
   klasaSprzetu: 'standard',
   detailedShootingDays: [],
   isDetailedPostpro: false,

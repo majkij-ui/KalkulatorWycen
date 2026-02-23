@@ -57,6 +57,7 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
     rows: [
       { key: 'stawkaOperatoraSzybkaWycena', label: 'Stawka operatora (Szybka wycena)', isKeyMetric: true },
       { key: 'doplataRezOpSzybkaWycena', label: 'Dopłata za Reż-Opa (Szybka wycena)', isKeyMetric: true },
+      { key: 'doplataDronSzybkaWycena', label: 'Dopłata za drona (Szybka wycena)', isKeyMetric: true },
       { key: 'pakietSprzetowyMinimalistyczny', label: 'Pakiet sprzętowy (Minimalistyczny)', isKeyMetric: true },
       { key: 'pakietSprzetowyStandard', label: 'Pakiet sprzętowy (Standard)', isKeyMetric: true },
       { key: 'pakietSprzetowyKinowy', label: 'Pakiet sprzętowy (Kinowy)', isKeyMetric: true },
@@ -88,8 +89,7 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
     rows: [
       { key: 'montazZaDzien', label: 'Montaż (Dzień)', isKeyMetric: true },
       { key: 'montazZaGodzine', label: 'Montaż (Godzina)', isKeyMetric: true },
-      { key: 'formatShortsReel', label: 'Format Shorts/Reel' },
-      { key: 'formatReportaz', label: 'Format Reportaż' },
+      // Format keys (Format: ...) are hidden from Cennik; managed only in Postprodukcja Format Manager
       { key: 'korekcjaBarwnaPodstawowa', label: 'Korekcja barwna (Podstawowa)' },
       { key: 'korekcjaBarwnaZaawansowana', label: 'Korekcja barwna (Zaawansowana)' },
       { key: 'animacje2d', label: 'Animacje (2D)' },
@@ -227,7 +227,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                           )}
                         </div>
                       </div>
-                      {rows.map((row) => {
+                      {rows.filter((row) => !row.key.startsWith('Format: ')).map((row) => {
                         const itemVal = categoryData[row.key]
                         if (!isTierPrices(itemVal)) return null
                         const isKey = row.isKeyMetric === true

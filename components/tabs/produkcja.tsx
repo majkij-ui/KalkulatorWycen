@@ -280,16 +280,29 @@ export function ProdukcjaTab() {
                   />
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                  <div>
-                    <p className="text-sm font-medium text-white">Dopłata za Reż-Opa</p>
-                    <p className="text-xs text-zinc-400">Dodatkowa stawka za łączenie funkcji reżysera i operatora</p>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                    <div>
+                      <p className="text-sm font-medium text-white">Dopłata za Reż-Opa</p>
+                      <p className="text-xs text-zinc-400">Dodatkowa stawka za łączenie funkcji reżysera i operatora</p>
+                    </div>
+                    <Switch
+                      checked={data.crudeRezOpSurcharge}
+                      onCheckedChange={(v) => updateField('crudeRezOpSurcharge', v)}
+                      aria-label="Dopłata za Reż-Opa"
+                    />
                   </div>
-                  <Switch
-                    checked={data.crudeRezOpSurcharge}
-                    onCheckedChange={(v) => updateField('crudeRezOpSurcharge', v)}
-                    aria-label="Dopłata za Reż-Opa"
-                  />
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                    <div>
+                      <p className="text-sm font-medium text-white">Dopłata za drona</p>
+                      <p className="text-xs text-zinc-400">Dodatkowa stawka dzienna za ujęcia lotnicze</p>
+                    </div>
+                    <Switch
+                      checked={data.crudeDroneSurcharge}
+                      onCheckedChange={(v) => updateField('crudeDroneSurcharge', v)}
+                      aria-label="Dopłata za drona"
+                    />
+                  </div>
                 </div>
 
                 <Separator className="my-6 bg-white/10" />

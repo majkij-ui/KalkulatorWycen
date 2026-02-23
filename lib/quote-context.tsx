@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate } from './quote-types'
 import type { PricingTier, PricingConfigShape, TierPrices } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, BUILTIN_FORMAT_KEYS, FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from './pricing-config'
+import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
 
 interface QuoteContextValue {
@@ -40,6 +40,7 @@ interface QuoteContextValue {
   availableFormats: string[]
   getFormatStandardPrice: (formatKey: string) => number
   addCustomFormat: (name: string, standardPrice: number) => void
+  editCustomFormat: (oldName: string, newName: string, standardPrice: number) => void
   removeCustomFormat: (name: string) => void
   // Osobodni (man-days) for logistics
   calculateTotalCrewDays: () => number
@@ -159,18 +160,15 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  /** All format keys for delivery dropdown (config keys starting with "Format: ") */
   const availableFormats = useMemo(() => {
-    const post = pricingConfig.postprodukcja
-    const customKeys = Object.keys(post).filter(k => k.startsWith('Format: '))
-    return [...BUILTIN_FORMAT_KEYS, ...customKeys]
+    return Object.keys(pricingConfig.postprodukcja).filter(k => k.startsWith('Format: '))
   }, [pricingConfig])
 
   const getFormatStandardPrice = useCallback((formatKey: string): number => {
     const post = pricingConfig.postprodukcja
-    if (formatKey === FORMAT_KEY_SHORTS) return post.formatShortsReel.standard
-    if (formatKey === FORMAT_KEY_REPORTAZ) return post.formatReportaz.standard
-    const custom = post[formatKey]
-    return custom && typeof custom.standard === 'number' ? custom.standard : 0
+    const prices = post[formatKey]
+    return prices && typeof prices.standard === 'number' ? prices.standard : 0
   }, [pricingConfig])
 
   const addCustomFormat = useCallback((name: string, standardPrice: number) => {
@@ -184,12 +182,33 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setPricingConfig({ ...pricingConfig, postprodukcja: { ...pricingConfig.postprodukcja, [key]: tiers } })
   }, [pricingConfig, setPricingConfig])
 
+  const editCustomFormat = useCallback((oldName: string, newName: string, standardPrice: number) => {
+    const oldKey = oldName.startsWith('Format: ') ? oldName : `Format: ${oldName}`
+    const newKey = `Format: ${newName.trim()}`
+    if (!newKey || newKey === 'Format: ') return
+    const post = { ...pricingConfig.postprodukcja }
+    delete post[oldKey]
+    post[newKey] = {
+      tani: Math.round(standardPrice * 0.5),
+      standard: Math.round(standardPrice),
+      agresywny: Math.round(standardPrice * 2),
+    }
+    setPricingConfig({ ...pricingConfig, postprodukcja: post })
+    setData(prev => ({
+      ...prev,
+      detailedDeliverables: prev.detailedDeliverables.map(d =>
+        d.format === oldKey ? { ...d, format: newKey } : d
+      ),
+    }))
+  }, [pricingConfig, setPricingConfig])
+
   const removeCustomFormat = useCallback((name: string) => {
     const key = name.startsWith('Format: ') ? name : `Format: ${name}`
-    if (BUILTIN_FORMAT_KEYS.includes(key)) return
-    const { [key]: _, ...rest } = pricingConfig.postprodukcja
-    setPricingConfig({ ...pricingConfig, postprodukcja: rest })
-    const fallback = BUILTIN_FORMAT_KEYS[0]
+    const post = { ...pricingConfig.postprodukcja }
+    delete post[key]
+    setPricingConfig({ ...pricingConfig, postprodukcja: post })
+    const remaining = Object.keys(post).filter(k => k.startsWith('Format: '))
+    const fallback = remaining[0] ?? ''
     setData(prev => ({
       ...prev,
       detailedDeliverables: prev.detailedDeliverables.map(d =>
@@ -355,6 +374,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     availableFormats,
     getFormatStandardPrice,
     addCustomFormat,
+    editCustomFormat,
     removeCustomFormat,
     calculateTotalCrewDays,
     getTermsAndConditions,

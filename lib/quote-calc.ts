@@ -2,7 +2,7 @@
 
 import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape, PricingTier } from './pricing-config'
-import { FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from './pricing-config'
+import { DEFAULT_FORMAT_KEY } from './pricing-config'
 
 const VAT_RATE = 0.23
 
@@ -36,11 +36,13 @@ function applyMargin(value: number, marginMultiplier: number): number {
 }
 
 function getFormatTierPrices(post: PricingConfigShape['postprodukcja'], formatKey: string): { tani: number; standard: number; agresywny: number } {
-  if (formatKey === FORMAT_KEY_SHORTS || formatKey === 'shorts') return post.formatShortsReel
-  if (formatKey === FORMAT_KEY_REPORTAZ || formatKey === 'reportaz') return post.formatReportaz
-  const custom = post[formatKey]
-  if (custom && typeof custom.tani === 'number' && typeof custom.standard === 'number' && typeof custom.agresywny === 'number') return custom
-  return post.formatShortsReel
+  const key = formatKey?.startsWith('Format: ') ? formatKey : null
+  const prices = key ? post[key] : null
+  if (prices && typeof prices.tani === 'number' && typeof prices.standard === 'number' && typeof prices.agresywny === 'number') return prices
+  const firstFormatKey = Object.keys(post).find(k => k.startsWith('Format: '))
+  const fallback = firstFormatKey ? post[firstFormatKey] : null
+  if (fallback && typeof fallback.tani === 'number') return fallback
+  return { tani: 0, standard: 0, agresywny: 0 }
 }
 
 function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja'], tier: PricingTier): number {
@@ -144,11 +146,15 @@ export function getBreakdownWithPricing(
     const pakietKey = data.klasaSprzetu
     const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
     const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
-    const dayRate = crew * stawkaOp + pakiet + doplataRezOp
+    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena[tier] : 0
+    const dayRate = crew * stawkaOp + pakiet + doplataRezOp + doplataDron
     const lineNetto = applyMargin(dayRate * days, marginMultiplier)
+    const rezOpText = data.crudeRezOpSurcharge ? ' + Reż-Op' : ''
+    const droneText = data.crudeDroneSurcharge ? ' + Dron' : ''
+    const surchargeStr = rezOpText + droneText
     proItems.push({
       label: 'Szybka wycena produkcji',
-      value: `${days} dni × (${crew} os. × stawka + pakiet${data.crudeRezOpSurcharge ? ' + Reż-Op' : ''})`,
+      value: `${days} dni × (${crew} os. × stawka + pakiet${surchargeStr})`,
       quantity: days,
       unitPriceNet: dayRate,
       lineNetto,
