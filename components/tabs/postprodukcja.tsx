@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Scissors, Plus, Minus, Trash2, Settings2, Pencil } from 'lucide-react'
+import { Scissors, Plus, Minus, Trash2, Settings2, Pencil, ChevronDown } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -25,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
+import { cn } from '@/lib/utils'
 import { DEFAULT_FORMAT_KEY, REPORTAZ_FORMAT_KEY } from '@/lib/pricing-config'
 import type {
   Deliverable,
@@ -141,31 +143,43 @@ function DeliverableCard({
   del,
   index,
   availableFormats,
+  getFormatPriceAtTier,
   onUpdate,
   onRemove,
+  onOpenFormatManager,
   canRemove,
 }: {
   del: Deliverable
   index: number
   availableFormats: string[]
+  getFormatPriceAtTier: (formatKey: string) => number
   onUpdate: <K extends keyof Deliverable>(field: K, value: Deliverable[K]) => void
   onRemove: () => void
+  onOpenFormatManager: () => void
   canRemove: boolean
 }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const formatKey = toFormatKey(del.format)
+  const unitPrice = getFormatPriceAtTier(formatKey)
+  const linePrice = unitPrice * del.ilosc
+  const displayPrice = linePrice.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+
   return (
     <GlassCard className="relative">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Format / Dostawa {index + 1}</h3>
-      </div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select
           value={(() => {
-            const key = toFormatKey(del.format)
-            if (availableFormats.includes(key)) return key
+            if (availableFormats.includes(formatKey)) return formatKey
             if (availableFormats.length > 0) return availableFormats[0]
-            return key || '__empty__'
+            return formatKey || '__empty__'
           })()}
-          onValueChange={(v) => onUpdate('format', (v === '__empty__' ? '' : v) as DeliverableFormat)}
+          onValueChange={(val) => {
+            if (val === '__manage_formats__') {
+              onOpenFormatManager()
+              return
+            }
+            onUpdate('format', (val === '__empty__' ? '' : val) as DeliverableFormat)
+          }}
         >
           <SelectTrigger className="w-[200px] border-white/10 bg-zinc-900/30 text-white backdrop-blur-xl">
             <SelectValue placeholder="Brak formatu" />
@@ -180,6 +194,14 @@ function DeliverableCard({
                 </SelectItem>
               ))
             )}
+            <SelectSeparator className="bg-white/10" />
+            <SelectItem
+              value="__manage_formats__"
+              className="font-medium text-primary focus:text-primary cursor-pointer"
+            >
+              <Plus className="mr-2 inline size-4" />
+              Dodaj format...
+            </SelectItem>
           </SelectContent>
         </Select>
         <Counter
@@ -190,41 +212,67 @@ function DeliverableCard({
           min={1}
           max={20}
         />
-        {canRemove && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="ml-auto size-8 text-zinc-500 hover:bg-transparent hover:text-red-400"
-            onClick={onRemove}
-            aria-label="Usuń format"
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-0">
-        <OptionRow label="Korekcja barwna">
-          <PillGroup value={del.korekcjaBarwna} options={KOREKCJA_OPCJE} onChange={(v) => onUpdate('korekcjaBarwna', v)} />
-        </OptionRow>
-        <OptionRow label="Animacje">
-          <PillGroup value={del.animacje} options={ANIMACJE_OPCJE} onChange={(v) => onUpdate('animacje', v)} />
-        </OptionRow>
-        <OptionRow label="Muzyka">
-          <PillGroup value={del.muzyka} options={MUZYKA_OPCJE} onChange={(v) => onUpdate('muzyka', v)} />
-        </OptionRow>
-        <OptionRow label="Sound Design">
-          <PillGroup value={del.soundDesign} options={SOUND_DESIGN_OPCJE} onChange={(v) => onUpdate('soundDesign', v)} />
-        </OptionRow>
-        <OptionRow label="Master dźwięku">
-          <PillGroup value={del.masterDzwieku} options={MASTER_OPCJE} onChange={(v) => onUpdate('masterDzwieku', v)} />
-        </OptionRow>
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm text-zinc-400">Lektor</span>
-          <PillGroup value={del.lektor} options={LEKTOR_OPCJE} onChange={(v) => onUpdate('lektor', v)} />
+        <div className="ml-auto flex items-center gap-1">
+          <span className="text-base font-mono tracking-tight text-white/80">{displayPrice} zł</span>
+          {canRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 text-zinc-500 hover:bg-transparent hover:text-red-400"
+              onClick={onRemove}
+              aria-label="Usuń format"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-2 text-zinc-500 hover:text-zinc-300"
+      >
+        {isExpanded ? 'Mniej szczegółów' : 'Więcej szczegółów'}
+        <ChevronDown className={cn('ml-1 size-3 transition-transform', isExpanded && 'rotate-180')} />
+      </Button>
+
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="mt-4 overflow-hidden space-y-4"
+          >
+            <div className="space-y-0">
+              <OptionRow label="Korekcja barwna">
+                <PillGroup value={del.korekcjaBarwna} options={KOREKCJA_OPCJE} onChange={(v) => onUpdate('korekcjaBarwna', v)} />
+              </OptionRow>
+              <OptionRow label="Animacje">
+                <PillGroup value={del.animacje} options={ANIMACJE_OPCJE} onChange={(v) => onUpdate('animacje', v)} />
+              </OptionRow>
+              <OptionRow label="Muzyka">
+                <PillGroup value={del.muzyka} options={MUZYKA_OPCJE} onChange={(v) => onUpdate('muzyka', v)} />
+              </OptionRow>
+              <OptionRow label="Sound Design">
+                <PillGroup value={del.soundDesign} options={SOUND_DESIGN_OPCJE} onChange={(v) => onUpdate('soundDesign', v)} />
+              </OptionRow>
+              <OptionRow label="Master dźwięku">
+                <PillGroup value={del.masterDzwieku} options={MASTER_OPCJE} onChange={(v) => onUpdate('masterDzwieku', v)} />
+              </OptionRow>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-zinc-400">Lektor</span>
+                <PillGroup value={del.lektor} options={LEKTOR_OPCJE} onChange={(v) => onUpdate('lektor', v)} />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </GlassCard>
   )
 }
@@ -374,6 +422,7 @@ export function PostprodukcjaTab() {
     removeDeliverable,
     updateDeliverable,
     availableFormats,
+    getFormatPriceAtTier,
   } = useQuote()
   const isDetailed = data.isDetailedPostpro
   const deliverables = data.detailedDeliverables
@@ -559,8 +608,10 @@ export function PostprodukcjaTab() {
                     del={del}
                     index={index}
                     availableFormats={availableFormats}
+                    getFormatPriceAtTier={getFormatPriceAtTier}
                     onUpdate={(field, value) => updateDeliverable(del.id, field, value)}
                     onRemove={() => removeDeliverable(del.id)}
+                    onOpenFormatManager={() => setFormatManagerOpen(true)}
                     canRemove={deliverables.length > 1}
                   />
                 </motion.div>

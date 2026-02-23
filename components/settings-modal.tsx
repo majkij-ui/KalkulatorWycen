@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import { Download, Upload } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -128,13 +129,18 @@ function isTierPrices(
 
 const INPUT_COL_WIDTH = 'w-20'
 
+function deepCloneConfig(config: PricingConfigShape): PricingConfigShape {
+  return JSON.parse(JSON.stringify(config)) as PricingConfigShape
+}
+
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { pricingConfig, setPricingConfig, resetPricingToDefault } = useQuote()
-  const [local, setLocal] = useState<PricingConfigShape>(pricingConfig)
+  const [localConfig, setLocalConfig] = useState<PricingConfigShape>(() => deepCloneConfig(pricingConfig))
   const [showAdvancedTiers, setShowAdvancedTiers] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const syncFromContext = useCallback(() => {
-    setLocal(pricingConfig)
+    setLocalConfig(deepCloneConfig(pricingConfig))
   }, [pricingConfig])
 
   const handleOpenChange = useCallback(
@@ -147,7 +153,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
 
   const update = useCallback(
     (category: CategoryKey, itemKey: string, tier: PricingTier, value: number) => {
-      setLocal((prev) => {
+      setLocalConfig((prev) => {
         const cat = { ...(prev[category] as Record<string, { tani: number; standard: number; agresywny: number }>) }
         const item = { ...(cat[itemKey] ?? { tani: 0, standard: 0, agresywny: 0 }), [tier]: value }
         cat[itemKey] = item
@@ -158,14 +164,42 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   )
 
   const save = useCallback(() => {
-    setPricingConfig(local)
+    setPricingConfig(localConfig)
     onOpenChange(false)
-  }, [local, setPricingConfig, onOpenChange])
+  }, [localConfig, setPricingConfig, onOpenChange])
 
   const reset = useCallback(() => {
-    setLocal(DEFAULT_PRICING)
+    setLocalConfig(deepCloneConfig(DEFAULT_PRICING))
     resetPricingToDefault()
   }, [resetPricingToDefault])
+
+  const handleExport = useCallback(() => {
+    const dataStr = JSON.stringify(localConfig, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'cennik-wycen.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [localConfig])
+
+  const handleImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = reader.result as string
+        const parsedJson = JSON.parse(text) as PricingConfigShape
+        setLocalConfig(parsedJson)
+      } catch {
+        alert('Błąd: Nieprawidłowy plik wyceny.')
+      }
+      event.target.value = ''
+    }
+    reader.readAsText(file)
+  }, [])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -197,8 +231,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
           <Accordion type="multiple" className="w-full">
             {PRICING_STRUCTURE.map(({ category, title, rows }) => {
-              const categoryData = local[category] as Record<string, { tani: number; standard: number; agresywny: number }> | undefined
+              const categoryData = localConfig[category] as Record<string, { tani: number; standard: number; agresywny: number }> | undefined
               if (!categoryData) return null
+              const visibleRows = rows.filter((row) => !row.key.startsWith('Format: '))
               return (
                 <AccordionItem key={category} value={category} className="border-white/10">
                   <AccordionTrigger className="text-sm font-semibold text-white hover:text-white/90 py-3">
@@ -227,7 +262,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                           )}
                         </div>
                       </div>
-                      {rows.filter((row) => !row.key.startsWith('Format: ')).map((row) => {
+                      {visibleRows.map((row) => {
                         const itemVal = categoryData[row.key]
                         if (!isTierPrices(itemVal)) return null
                         const isKey = row.isKeyMetric === true
@@ -286,18 +321,49 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
           </Accordion>
         </div>
 
-        <DialogFooter className="flex-shrink-0 flex-row gap-2 border-t border-white/10 pt-4 mt-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
-            onClick={reset}
-          >
-            Przywróć domyślne
-          </Button>
-          <Button type="button" onClick={save} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            Zapisz
-          </Button>
+        <DialogFooter className="flex-shrink-0 flex-row justify-between gap-2 border-t border-white/10 pt-4 mt-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImport}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              title="Importuj z pliku"
+              aria-label="Importuj z pliku"
+            >
+              <Upload className="size-4 text-zinc-400 hover:text-white" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleExport}
+              title="Eksportuj do pliku"
+              aria-label="Eksportuj do pliku"
+            >
+              <Download className="size-4 text-zinc-400 hover:text-white" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+              onClick={reset}
+            >
+              Przywróć domyślne
+            </Button>
+            <Button type="button" onClick={save} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              Zapisz
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

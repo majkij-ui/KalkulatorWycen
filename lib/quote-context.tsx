@@ -39,6 +39,7 @@ interface QuoteContextValue {
   // Format Manager: dynamic delivery formats
   availableFormats: string[]
   getFormatStandardPrice: (formatKey: string) => number
+  getFormatPriceAtTier: (formatKey: string) => number
   addCustomFormat: (name: string, standardPrice: number) => void
   editCustomFormat: (oldName: string, newName: string, standardPrice: number) => void
   removeCustomFormat: (name: string) => void
@@ -170,6 +171,13 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     const prices = post[formatKey]
     return prices && typeof prices.standard === 'number' ? prices.standard : 0
   }, [pricingConfig])
+
+  const getFormatPriceAtTier = useCallback((formatKey: string): number => {
+    const post = pricingConfig.postprodukcja
+    const prices = post[formatKey]
+    if (!prices || typeof prices[pricingTier] !== 'number') return 0
+    return prices[pricingTier]
+  }, [pricingConfig, pricingTier])
 
   const addCustomFormat = useCallback((name: string, standardPrice: number) => {
     const key = `Format: ${name.trim()}`
@@ -373,6 +381,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     updateDeliverable,
     availableFormats,
     getFormatStandardPrice,
+    getFormatPriceAtTier,
     addCustomFormat,
     editCustomFormat,
     removeCustomFormat,
