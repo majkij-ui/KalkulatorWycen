@@ -178,7 +178,7 @@ function DayCard({
 export function ProdukcjaTab() {
   const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay } = useQuote()
   const isDetailed = data.isDetailedProdukcja
-  const days = data.detailedShootingDays
+  const days = data.detailedShootingDays ?? []
 
   return (
     <motion.div
@@ -218,7 +218,9 @@ export function ProdukcjaTab() {
                 <div className="mt-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-400">Dni</span>
-                    <span className="text-lg font-semibold tabular-nums text-white">{data.dniZdjeciowe}</span>
+                    <span className="text-lg font-semibold tabular-nums text-white">
+                      {Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))}
+                    </span>
                   </div>
                   <div className="flex items-center gap-4">
                     <Button
@@ -226,15 +228,15 @@ export function ProdukcjaTab() {
                       variant="outline"
                       size="icon"
                       className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
-                      onClick={() => updateField('dniZdjeciowe', Math.max(0, data.dniZdjeciowe - 1))}
-                      disabled={data.dniZdjeciowe <= 0}
+                      onClick={() => updateField('dniZdjeciowe', Math.max(0, (Number(data.dniZdjeciowe) || 0) - 1))}
+                      disabled={(Number(data.dniZdjeciowe) || 0) <= 0}
                       aria-label="Zmniejsz dni"
                     >
                       <Minus className="size-4" />
                     </Button>
                     <Slider
-                      value={[data.dniZdjeciowe]}
-                      onValueChange={([val]) => updateField('dniZdjeciowe', val)}
+                      value={[Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))]}
+                      onValueChange={([val]) => updateField('dniZdjeciowe', Math.max(0, Math.min(14, Number(val) ?? 0)))}
                       min={0}
                       max={14}
                       step={1}
@@ -245,8 +247,8 @@ export function ProdukcjaTab() {
                       variant="outline"
                       size="icon"
                       className="size-8 shrink-0 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
-                      onClick={() => updateField('dniZdjeciowe', Math.min(14, data.dniZdjeciowe + 1))}
-                      disabled={data.dniZdjeciowe >= 14}
+                      onClick={() => updateField('dniZdjeciowe', Math.min(14, (Number(data.dniZdjeciowe) || 0) + 1))}
+                      disabled={(Number(data.dniZdjeciowe) || 0) >= 14}
                       aria-label="Zwiększ dni"
                     >
                       <Plus className="size-4" />
@@ -273,8 +275,8 @@ export function ProdukcjaTab() {
                 <div className="mt-3">
                   <Counter
                     label="Osoby w ekipie"
-                    value={data.wielkoscEkipy}
-                    onChange={(val) => updateField('wielkoscEkipy', val)}
+                    value={Math.max(1, Math.min(20, Number(data.wielkoscEkipy) || 1))}
+                    onChange={(val) => updateField('wielkoscEkipy', Math.max(1, Math.min(20, Number(val) ?? 1)))}
                     min={1}
                     max={20}
                   />
@@ -360,7 +362,7 @@ export function ProdukcjaTab() {
               checked={isDetailed}
               onCheckedChange={(v) => {
                 updateField('isDetailedProdukcja', v)
-                if (v && data.detailedShootingDays.length === 0) addShootingDay()
+                if (v && (data.detailedShootingDays ?? []).length === 0) addShootingDay()
               }}
               aria-label="Szczegółowa wycena produkcji"
             />

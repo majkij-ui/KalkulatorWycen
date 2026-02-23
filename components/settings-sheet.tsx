@@ -93,12 +93,12 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
             <div className="space-y-2">
               <Label className="text-zinc-400">Szablony wyceny</Label>
               <div className="rounded-xl border border-white/10 bg-zinc-900/40 divide-y divide-white/5 overflow-hidden">
-                {templates.length === 0 ? (
+                {(templates ?? []).length === 0 ? (
                   <div className="px-3 py-4 text-center text-sm text-zinc-500">
                     Brak zapisanych szablonów
                   </div>
                 ) : (
-                  templates.map((t) => (
+                  (templates ?? []).map((t) => (
                     <div
                       key={t.id}
                       className="flex items-center gap-2 p-3 hover:bg-white/5 transition-colors"

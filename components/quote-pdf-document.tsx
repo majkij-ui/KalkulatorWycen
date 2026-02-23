@@ -141,10 +141,10 @@ export function QuotePdfDocument({
           </Text>
         </View>
 
-        {breakdown.map((phase) => (
+        {(breakdown ?? []).map((phase) => (
           <View key={phase.category} style={styles.section}>
             <Text style={styles.sectionTitle}>{phase.category}</Text>
-            {phase.items.map((item, i) => (
+            {(phase.items ?? []).map((item, i) => (
               <View key={i} style={styles.row}>
                 <Text style={styles.rowLabel}>{item.label}</Text>
                 <Text style={styles.rowValue}>{item.value}</Text>

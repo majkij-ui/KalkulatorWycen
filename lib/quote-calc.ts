@@ -2,7 +2,7 @@
 
 import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape, PricingTier } from './pricing-config'
-import { DEFAULT_FORMAT_KEY } from './pricing-config'
+import { safeNum, safeArray } from './safe-numbers'
 
 const VAT_RATE = 0.23
 
@@ -101,7 +101,7 @@ export function getBreakdownWithPricing(
 
   const pre = pricing.preprodukcja
   if (!data.isDetailedPrepro) {
-    const q = data.dniDokumentacji
+    const q = safeNum(data.dniDokumentacji, 0, 0)
     const unitPrice = pre.dzienDokumentacji[tier]
     const value = q % 1 === 0 ? `${q} dni` : `${q} dni`.replace('.', ',')
     preItems.push({
@@ -140,8 +140,8 @@ export function getBreakdownWithPricing(
 
   const pro = pricing.produkcja
   if (!data.isDetailedProdukcja) {
-    const days = data.dniZdjeciowe
-    const crew = data.wielkoscEkipy
+    const days = safeNum(data.dniZdjeciowe, 0, 0)
+    const crew = safeNum(data.wielkoscEkipy, 1, 1)
     const stawkaOp = pro.stawkaOperatoraSzybkaWycena[tier]
     const pakietKey = data.klasaSprzetu
     const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
@@ -160,7 +160,7 @@ export function getBreakdownWithPricing(
       lineNetto,
     })
   } else {
-    data.detailedShootingDays.forEach((day, i) => {
+    safeArray<ShootingDay>(data.detailedShootingDays).forEach((day, i) => {
       const dayNet = computeShootingDayNet(day, pro, tier)
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
@@ -175,7 +175,7 @@ export function getBreakdownWithPricing(
   const post = pricing.postprodukcja
   if (!data.isDetailedPostpro) {
     const unit = data.crudeEditUnit
-    const q = data.crudeEditCount
+    const q = safeNum(data.crudeEditCount, 0, 0)
     const unitPrice = unit === 'dni' ? post.montazZaDzien[tier] : post.montazZaGodzine[tier]
     const value = unit === 'dni'
       ? (q % 1 === 0 ? `${q} dni` : `${q} dni`.replace('.', ','))
@@ -188,7 +188,7 @@ export function getBreakdownWithPricing(
       lineNetto: applyMargin(unitPrice * q, marginMultiplier),
     })
   } else {
-    data.detailedDeliverables.forEach((del, i) => {
+    safeArray<Deliverable>(data.detailedDeliverables).forEach((del, i) => {
       const net = computeDeliverableNet(del, post, tier)
       const formatLabel = del.format.startsWith('Format: ') ? del.format.slice(8) : del.format
       postItems.push({
@@ -202,7 +202,7 @@ export function getBreakdownWithPricing(
   }
 
   const dod = pricing.dodatkowe
-  const km = data.kosztDojazduKm
+  const km = safeNum(data.kosztDojazduKm, 0, 0)
   const kmRate = dod.kosztDojazduKm[tier]
   const travelNetto = applyMargin(kmRate * km, marginMultiplier)
   dodatkoweItems.push({

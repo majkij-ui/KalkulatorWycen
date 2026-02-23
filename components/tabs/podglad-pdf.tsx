@@ -109,7 +109,7 @@ export function PodgladPdfTab() {
           ) : (
             <>
               <div className="divide-y divide-white/5">
-                {breakdown.map((section, sectionIdx) => (
+                {(breakdown ?? []).map((section, sectionIdx) => (
                   <motion.div
                     key={section.category}
                     variants={item}
@@ -120,7 +120,7 @@ export function PodgladPdfTab() {
                       {section.category}
                     </h4>
                     <div className="space-y-2">
-                      {section.items.map((lineItem, i) => (
+                      {(section.items ?? []).map((lineItem, i) => (
                         <div
                           key={`${sectionIdx}-${i}`}
                           className="flex items-center justify-between text-sm"

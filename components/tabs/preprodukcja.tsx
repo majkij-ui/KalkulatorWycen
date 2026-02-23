@@ -29,8 +29,8 @@ export function PreprodukcjaTab() {
   const { data, updateField } = useQuote()
   const isDetailed = data.isDetailedPrepro
 
-  const dniValue = data.dniDokumentacji
-  const setDni = (v: number) => updateField('dniDokumentacji', v)
+  const dniValue = Math.max(0, Math.min(10, Number(data.dniDokumentacji) || 0))
+  const setDni = (v: number) => updateField('dniDokumentacji', Math.max(0, Math.min(10, Number(v) ?? 0)))
 
   return (
     <motion.div
@@ -85,7 +85,7 @@ export function PreprodukcjaTab() {
                     </Button>
                     <Slider
                       value={[dniValue]}
-                      onValueChange={([v]) => setDni(v)}
+                      onValueChange={([v]) => setDni(Number(v) ?? 0)}
                       min={0}
                       max={10}
                       step={0.5}

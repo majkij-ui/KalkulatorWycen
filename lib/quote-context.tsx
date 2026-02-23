@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate } from './quote-types'
 import type { PricingTier, PricingConfigShape, TierPrices } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
-import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
+import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
+import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
+import { safeNum, safeArray } from './safe-numbers'
 
 interface QuoteContextValue {
   data: QuoteData
@@ -59,8 +60,8 @@ function loadTemplatesFromStorage(): SavedTemplate[] {
   try {
     const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY)
     if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as SavedTemplate[]) : []
   } catch {
     return []
   }
@@ -118,21 +119,21 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const addShootingDay = useCallback(() => {
     setData(prev => ({
       ...prev,
-      detailedShootingDays: [...prev.detailedShootingDays, createDefaultShootingDay()],
+      detailedShootingDays: [...(prev.detailedShootingDays ?? []), createDefaultShootingDay()],
     }))
   }, [])
 
   const removeShootingDay = useCallback((id: string) => {
     setData(prev => ({
       ...prev,
-      detailedShootingDays: prev.detailedShootingDays.filter(d => d.id !== id),
+      detailedShootingDays: (prev.detailedShootingDays ?? []).filter(d => d.id !== id),
     }))
   }, [])
 
   const updateShootingDay = useCallback(<K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => {
     setData(prev => ({
       ...prev,
-      detailedShootingDays: prev.detailedShootingDays.map(d =>
+      detailedShootingDays: (prev.detailedShootingDays ?? []).map(d =>
         d.id === id ? { ...d, [field]: value } : d
       ),
     }))
@@ -141,21 +142,21 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const addDeliverable = useCallback(() => {
     setData(prev => ({
       ...prev,
-      detailedDeliverables: [...prev.detailedDeliverables, createDefaultDeliverable()],
+      detailedDeliverables: [...(prev.detailedDeliverables ?? []), createDefaultDeliverable()],
     }))
   }, [])
 
   const removeDeliverable = useCallback((id: string) => {
     setData(prev => ({
       ...prev,
-      detailedDeliverables: prev.detailedDeliverables.filter(d => d.id !== id),
+      detailedDeliverables: (prev.detailedDeliverables ?? []).filter(d => d.id !== id),
     }))
   }, [])
 
   const updateDeliverable = useCallback(<K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => {
     setData(prev => ({
       ...prev,
-      detailedDeliverables: prev.detailedDeliverables.map(d =>
+      detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
         d.id === id ? { ...d, [field]: value } : d
       ),
     }))
@@ -204,7 +205,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setPricingConfig({ ...pricingConfig, postprodukcja: post })
     setData(prev => ({
       ...prev,
-      detailedDeliverables: prev.detailedDeliverables.map(d =>
+      detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
         d.format === oldKey ? { ...d, format: newKey } : d
       ),
     }))
@@ -219,7 +220,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     const fallback = remaining[0] ?? ''
     setData(prev => ({
       ...prev,
-      detailedDeliverables: prev.detailedDeliverables.map(d =>
+      detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
         d.format === key ? { ...d, format: fallback } : d
       ),
     }))
@@ -228,9 +229,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const calculateTotalCrewDays = useMemo(() => {
     return function totalCrewDays(): number {
       if (!data.isDetailedProdukcja) {
-        return data.dniZdjeciowe * data.wielkoscEkipy
+        return safeNum(data.dniZdjeciowe, 0, 0) * safeNum(data.wielkoscEkipy, 1, 1)
       }
-      return data.detailedShootingDays.reduce((acc, day) => {
+      return safeArray<ShootingDay>(data.detailedShootingDays).reduce((acc, day) => {
         const crew =
           day.rezOp +
           day.asystent +
@@ -318,11 +319,14 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const loadTemplate = useCallback((id: string) => {
-    const template = templates.find(t => t.id === id)
+    const list = templates ?? []
+    const template = list.find(t => t.id === id)
     if (!template) return
     setIsCalculating(true)
     setTimeout(() => {
       const merged: QuoteData = { ...defaultQuoteData, ...template.state }
+      merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
+      merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
       if (merged.dniMontazu != null && merged.crudeEditCount === undefined) {
         merged.crudeEditCount = merged.dniMontazu
       }
@@ -340,10 +344,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const baseTotals = getTotals(data, pricingTier, marginMultiplier, pricingConfig)
   const autoCrewDays = calculateTotalCrewDays()
   const cateringCost = data.includeCatering
-    ? (data.cateringOverride ? data.cateringCustomDays : autoCrewDays) * data.cateringRate
+    ? (data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays) * safeNum(data.cateringRate, 100, 0)
     : 0
   const lodgingCost = data.includeLodging
-    ? (data.lodgingOverride ? data.lodgingCustomDays : autoCrewDays) * data.lodgingRate
+    ? (data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays) * safeNum(data.lodgingRate, 300, 0)
     : 0
   const VAT_RATE = 0.23
   const sumaNettoWithLogistics = baseTotals.sumaNetto + cateringCost + lodgingCost
@@ -352,7 +356,45 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     vat: sumaNettoWithLogistics * VAT_RATE,
     sumaBrutto: sumaNettoWithLogistics * (1 + VAT_RATE),
   }
-  const breakdown = getBreakdownWithPricing(data, pricingTier, marginMultiplier, pricingConfig)
+
+  const baseBreakdown = getBreakdownWithPricing(data, pricingTier, marginMultiplier, pricingConfig)
+  const breakdown =
+    cateringCost > 0 || lodgingCost > 0
+      ? (() => {
+          const phases = baseBreakdown.map((p) => ({ ...p, items: [...(p.items ?? [])] }))
+          const dodIndex = phases.findIndex((p) => p.category === 'Dodatkowe')
+          if (dodIndex === -1) return baseBreakdown
+          const dod = phases[dodIndex]
+          const extraItems: LineItemRow[] = []
+          if (cateringCost > 0) {
+            const qty = data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays
+            extraItems.push({
+              label: 'Catering',
+              value: `${qty} osobodni`,
+              quantity: qty,
+              unitPriceNet: data.cateringRate,
+              lineNetto: cateringCost,
+            })
+          }
+          if (lodgingCost > 0) {
+            const qty = data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays
+            extraItems.push({
+              label: 'Noclegi',
+              value: `${qty} osobodni`,
+              quantity: qty,
+              unitPriceNet: data.lodgingRate,
+              lineNetto: lodgingCost,
+            })
+          }
+          const newItems = [...dod.items, ...extraItems]
+          phases[dodIndex] = {
+            ...dod,
+            items: newItems,
+            phaseNetto: newItems.reduce((s, i) => s + i.lineNetto, 0),
+          }
+          return phases
+        })()
+      : baseBreakdown
 
   const value: QuoteContextValue = {
     data,

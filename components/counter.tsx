@@ -18,6 +18,8 @@ interface CounterProps {
 }
 
 export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, className, compact }: CounterProps) {
+  const safeValue = Math.max(min, Math.min(max, Number(value) ?? min))
+  const displayValue = Number.isFinite(safeValue) ? safeValue : min
   return (
     <div className={cn('flex items-center justify-between', className, !label && 'justify-end')}>
       {label ? <span className="text-sm font-medium text-zinc-400">{label}</span> : null}
@@ -29,8 +31,8 @@ export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, c
             'rounded-lg border-white/10 bg-white/5 text-foreground hover:bg-white/10',
             compact ? 'size-7' : 'size-8'
           )}
-          onClick={() => onChange(Math.max(min, value - step))}
-          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, displayValue - step))}
+          disabled={displayValue <= min}
           aria-label={`Zmniejsz ${label}`}
         >
           <Minus className={compact ? 'size-3' : 'size-4'} />
@@ -41,7 +43,7 @@ export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, c
             compact ? 'w-6 text-center text-sm font-medium' : 'w-8 text-center text-lg font-semibold'
           )}
         >
-          {value}
+          {displayValue}
         </span>
         <Button
           variant="outline"
@@ -50,8 +52,8 @@ export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, c
             'rounded-lg border-white/10 bg-white/5 text-foreground hover:bg-white/10',
             compact ? 'size-7' : 'size-8'
           )}
-          onClick={() => onChange(Math.min(max, value + step))}
-          disabled={value >= max}
+          onClick={() => onChange(Math.min(max, displayValue + step))}
+          disabled={displayValue >= max}
           aria-label={`Zwiększ ${label}`}
         >
           <Plus className={compact ? 'size-3' : 'size-4'} />

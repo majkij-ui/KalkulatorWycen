@@ -207,8 +207,8 @@ function DeliverableCard({
         <Counter
           compact
           label=""
-          value={del.ilosc}
-          onChange={(v) => onUpdate('ilosc', v)}
+          value={Math.max(1, Math.min(20, Number(del.ilosc) || 1))}
+          onChange={(v) => onUpdate('ilosc', Math.max(1, Math.min(20, Number(v) ?? 1)))}
           min={1}
           max={20}
         />
@@ -425,9 +425,9 @@ export function PostprodukcjaTab() {
     getFormatPriceAtTier,
   } = useQuote()
   const isDetailed = data.isDetailedPostpro
-  const deliverables = data.detailedDeliverables
+  const deliverables = data.detailedDeliverables ?? []
   const unit = data.crudeEditUnit
-  const count = data.crudeEditCount
+  const count = Math.max(0, Number(data.crudeEditCount) || 0)
 
   const sliderMax = unit === 'dni' ? 30 : 100
   const sliderStep = unit === 'dni' ? 0.5 : 1
@@ -516,7 +516,7 @@ export function PostprodukcjaTab() {
                       </Button>
                       <Slider
                         value={[count]}
-                        onValueChange={([v]) => updateField('crudeEditCount', v)}
+                        onValueChange={([v]) => updateField('crudeEditCount', Math.max(0, Math.min(sliderMax, Number(v) ?? 0)))}
                         min={0}
                         max={sliderMax}
                         step={sliderStep}
@@ -561,7 +561,7 @@ export function PostprodukcjaTab() {
               checked={isDetailed}
               onCheckedChange={(v) => {
                 updateField('isDetailedPostpro', v)
-                if (v && data.detailedDeliverables.length === 0) addDeliverable()
+                if (v && (data.detailedDeliverables ?? []).length === 0) addDeliverable()
               }}
               aria-label="Szczegółowa wycena postprodukcji"
             />

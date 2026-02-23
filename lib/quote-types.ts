@@ -1,3 +1,5 @@
+import { DEFAULT_FORMAT_KEY } from './pricing-config'
+
 export type ScenarioType = 'brak' | 'podstawowy' | 'rozbudowany'
 /** Pakiet sprzętowy w trybie szybkiej wyceny (Produkcja) */
 export type PakietSprzetu = 'minimalistyczny' | 'standard' | 'kinowy'
@@ -5,8 +7,6 @@ export type AnimationType = 'brak' | '2d' | '3d'
 export type MusicLicense = 'stock' | 'premium' | 'kompozytor'
 
 /** Format dostawy: pełny klucz z cennika, np. "Format: Shorts/Reel (do 30s)" lub custom "Format: <nazwa>" */
-import { DEFAULT_FORMAT_KEY } from './pricing-config'
-
 export type DeliverableFormat = string
 export type KorekcjaBarwnaOpcja = 'brak' | 'podstawowa' | 'zaawansowana'
 export type AnimacjePostproOpcja = 'brak' | '2d' | 'ai'
@@ -247,7 +247,18 @@ export function calculateTotal(data: QuoteData): number {
   return total
 }
 
-export function getBreakdown(data: QuoteData) {
+export interface LegacyBreakdownItem {
+  label: string
+  value: string
+  cost: number
+}
+
+export interface LegacyBreakdownPhase {
+  category: string
+  items: LegacyBreakdownItem[]
+}
+
+export function getBreakdown(data: QuoteData): LegacyBreakdownPhase[] {
   return [
     {
       category: 'Preprodukcja',

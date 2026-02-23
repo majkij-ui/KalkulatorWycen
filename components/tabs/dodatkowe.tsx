@@ -88,23 +88,23 @@ export function DodatkoweTab() {
                   type="number"
                   min={0}
                   max={500}
-                  value={data.kosztDojazduKm}
+                  value={Math.max(0, Math.min(500, Number(data.kosztDojazduKm) || 0))}
                   onChange={(e) => {
                     const raw = e.target.value
                     if (raw === '') {
                       updateField('kosztDojazduKm', 0)
                       return
                     }
-                    const n = parseInt(raw, 10)
-                    if (!isNaN(n)) updateField('kosztDojazduKm', Math.max(0, Math.min(500, n)))
+                    const n = Number(raw)
+                    updateField('kosztDojazduKm', Number.isFinite(n) ? Math.max(0, Math.min(500, n)) : 0)
                   }}
                   className="w-20 h-8 text-right bg-black/40 border-white/10 text-sm rounded-md tabular-nums text-white"
                 />
                 <span className="text-sm text-zinc-400">km</span>
               </div>
               <Slider
-                value={[data.kosztDojazduKm]}
-                onValueChange={([val]) => updateField('kosztDojazduKm', val)}
+                value={[Math.max(0, Math.min(500, Number(data.kosztDojazduKm) || 0))]}
+                onValueChange={([val]) => updateField('kosztDojazduKm', Math.max(0, Math.min(500, Number(val) ?? 0)))}
                 min={0}
                 max={500}
                 step={10}
@@ -386,7 +386,7 @@ export function DodatkoweTab() {
                           type="number"
                           min={0}
                           max={20}
-                          value={data.includedRevisions}
+                          value={Math.max(0, Math.min(20, Number(data.includedRevisions) || 0))}
                           onChange={(e) => updateField('includedRevisions', Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
                           className={inputClass}
                         />
@@ -400,7 +400,7 @@ export function DodatkoweTab() {
                           type="number"
                           min={0}
                           step={50}
-                          value={data.extraRevisionPrice}
+                          value={Math.max(0, Number(data.extraRevisionPrice) || 0)}
                           onChange={(e) => updateField('extraRevisionPrice', Math.max(0, Number(e.target.value) || 0))}
                           className={inputClass}
                         />
@@ -445,7 +445,7 @@ export function DodatkoweTab() {
                           type="number"
                           min={1}
                           max={24}
-                          value={data.standardDayHours}
+                          value={Math.max(1, Math.min(24, Number(data.standardDayHours) || 10))}
                           onChange={(e) => updateField('standardDayHours', Math.max(1, Math.min(24, Number(e.target.value) || 10)))}
                           className={inputClass}
                         />
@@ -459,7 +459,7 @@ export function DodatkoweTab() {
                           type="number"
                           min={0}
                           step={50}
-                          value={data.overtimeHourlyRate}
+                          value={Math.max(0, Number(data.overtimeHourlyRate) || 0)}
                           onChange={(e) => updateField('overtimeHourlyRate', Math.max(0, Number(e.target.value) || 0))}
                           className={inputClass}
                         />

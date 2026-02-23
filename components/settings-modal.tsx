@@ -290,9 +290,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                     type="number"
                                     min={0}
                                     step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
-                                    value={itemVal[t] ?? 0}
+                                    value={Math.max(0, Number(itemVal[t]) || 0)}
                                     onChange={(e) =>
-                                      update(category, row.key, t, Number(e.target.value) || 0)
+                                      update(category, row.key, t, Math.max(0, Number(e.target.value) || 0))
                                     }
                                     className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
                                   />
@@ -302,9 +302,9 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                   type="number"
                                   min={0}
                                   step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
-                                  value={itemVal.standard ?? 0}
+                                  value={Math.max(0, Number(itemVal.standard) || 0)}
                                   onChange={(e) =>
-                                    update(category, row.key, 'standard', Number(e.target.value) || 0)
+                                    update(category, row.key, 'standard', Math.max(0, Number(e.target.value) || 0))
                                   }
                                   className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
                                 />
