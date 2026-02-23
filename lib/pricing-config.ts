@@ -11,6 +11,11 @@ export interface TierPrices {
   agresywny: number
 }
 
+/** Built-in format keys shown in UI; internal config still uses formatShortsReel / formatReportaz */
+export const FORMAT_KEY_SHORTS = 'Format: Shorts/Reel (do 30s)'
+export const FORMAT_KEY_REPORTAZ = 'Format: Reportaż (1-3min)'
+export const BUILTIN_FORMAT_KEYS: string[] = [FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ]
+
 export interface PricingConfigShape {
   preprodukcja: {
     dzienDokumentacji: TierPrices
@@ -63,9 +68,13 @@ export interface PricingConfigShape {
     masterDzwiekuZlozony: TierPrices
     lektorAi: TierPrices
     lektorStudio: TierPrices
+    /** Custom formats: key = "Format: <name>" */
+    [key: string]: TierPrices
   }
   dodatkowe: {
     kosztDojazduKm: TierPrices
+    /** Pełne przekazanie praw – % dopłaty od sumy (Tani/Standard/Agresywny) */
+    pelnePrzekazaniePrawProcent: TierPrices
   }
 }
 
@@ -124,6 +133,7 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   },
   dodatkowe: {
     kosztDojazduKm: { tani: 1.5, standard: 2.5, agresywny: 4 },
+    pelnePrzekazaniePrawProcent: { tani: 20, standard: 30, agresywny: 50 },
   },
 }
 

@@ -39,7 +39,7 @@ const DRON_OPCJE: { value: DronOpcja; label: string }[] = [
 ]
 
 const PAKIET_OPCJE: { value: PakietSprzetu; label: string; desc: string }[] = [
-  { value: 'minimalistyczny', label: 'Minimalistyczny', desc: 'Run & gun, podstawowe światło' },
+  { value: 'minimalistyczny', label: 'Minimalistyczny', desc: 'Run & gun, reportaże' },
   { value: 'standard', label: 'Standard', desc: 'Wywiady, mniejsze plany' },
   { value: 'kinowy', label: 'Kinowy', desc: 'Reklama, zaawansowany sprzęt (RED/ARRI)' },
 ]

@@ -1,9 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate } from './quote-types'
-import type { PricingTier, PricingConfigShape } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
+import type { PricingTier, PricingConfigShape, TierPrices } from './pricing-config'
+import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, BUILTIN_FORMAT_KEYS, FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
 
 interface QuoteContextValue {
@@ -36,6 +36,15 @@ interface QuoteContextValue {
   addDeliverable: () => void
   removeDeliverable: (id: string) => void
   updateDeliverable: <K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => void
+  // Format Manager: dynamic delivery formats
+  availableFormats: string[]
+  getFormatStandardPrice: (formatKey: string) => number
+  addCustomFormat: (name: string, standardPrice: number) => void
+  removeCustomFormat: (name: string) => void
+  // Osobodni (man-days) for logistics
+  calculateTotalCrewDays: () => number
+  /** T&Cs for PDF "Uwagi" section – array of strings from active toggles */
+  getTermsAndConditions: () => string[]
   resetToZero: () => void
 }
 
@@ -150,6 +159,110 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const availableFormats = useMemo(() => {
+    const post = pricingConfig.postprodukcja
+    const customKeys = Object.keys(post).filter(k => k.startsWith('Format: '))
+    return [...BUILTIN_FORMAT_KEYS, ...customKeys]
+  }, [pricingConfig])
+
+  const getFormatStandardPrice = useCallback((formatKey: string): number => {
+    const post = pricingConfig.postprodukcja
+    if (formatKey === FORMAT_KEY_SHORTS) return post.formatShortsReel.standard
+    if (formatKey === FORMAT_KEY_REPORTAZ) return post.formatReportaz.standard
+    const custom = post[formatKey]
+    return custom && typeof custom.standard === 'number' ? custom.standard : 0
+  }, [pricingConfig])
+
+  const addCustomFormat = useCallback((name: string, standardPrice: number) => {
+    const key = `Format: ${name.trim()}`
+    if (!key || key === 'Format: ') return
+    const tiers: TierPrices = {
+      tani: Math.round(standardPrice * 0.5),
+      standard: Math.round(standardPrice),
+      agresywny: Math.round(standardPrice * 2),
+    }
+    setPricingConfig({ ...pricingConfig, postprodukcja: { ...pricingConfig.postprodukcja, [key]: tiers } })
+  }, [pricingConfig, setPricingConfig])
+
+  const removeCustomFormat = useCallback((name: string) => {
+    const key = name.startsWith('Format: ') ? name : `Format: ${name}`
+    if (BUILTIN_FORMAT_KEYS.includes(key)) return
+    const { [key]: _, ...rest } = pricingConfig.postprodukcja
+    setPricingConfig({ ...pricingConfig, postprodukcja: rest })
+    const fallback = BUILTIN_FORMAT_KEYS[0]
+    setData(prev => ({
+      ...prev,
+      detailedDeliverables: prev.detailedDeliverables.map(d =>
+        d.format === key ? { ...d, format: fallback } : d
+      ),
+    }))
+  }, [pricingConfig, setPricingConfig])
+
+  const calculateTotalCrewDays = useMemo(() => {
+    return function totalCrewDays(): number {
+      if (!data.isDetailedProdukcja) {
+        return data.dniZdjeciowe * data.wielkoscEkipy
+      }
+      return data.detailedShootingDays.reduce((acc, day) => {
+        const crew =
+          day.rezOp +
+          day.asystent +
+          day.gafer +
+          day.dzwiekowiec +
+          day.mua +
+          day.aktor +
+          day.model +
+          day.statysta +
+          day.kameraSony +
+          day.kameraRed
+        return acc + crew
+      }, 0)
+    }
+  }, [
+    data.isDetailedProdukcja,
+    data.dniZdjeciowe,
+    data.wielkoscEkipy,
+    data.detailedShootingDays,
+  ])
+
+  const getTermsAndConditions = useMemo(() => {
+    return function terms(): string[] {
+      const terms: string[] = []
+      if (data.copyrightType === 'licencja') {
+        terms.push(
+          'Cena obejmuje realizację filmu oraz udzielenie niewyłącznej licencji na jego wykorzystanie w Internecie na kanałach własnych Zamawiającego oraz do użytku wewnętrznego, bez ograniczeń terytorialnych, na czas nieoznaczony, z zastrzeżeniem że w przypadku wykorzystania wizerunku aktorów lub materiałów licencjonowanych, okres licencji może zostać ograniczony zgodnie z warunkami udzielonych zgód i licencji.'
+        )
+      }
+      if (data.copyrightType === 'przekazanie') {
+        terms.push(
+          'Cena obejmuje realizację filmu oraz pełne przeniesienie autorskich praw majątkowych do dzieła na Zamawiającego na wszystkich znanych polach eksploatacji, bez ograniczeń czasowych i terytorialnych.'
+        )
+      }
+      if (data.includeOvertimeInfo) {
+        terms.push(
+          `1 dzień zdjęciowy obejmuje maksymalnie ${data.standardDayHours} godzin pracy na planie. Praca powyżej tego czasu rozliczana jest jako nadgodziny w kwocie ${data.overtimeHourlyRate} zł netto za członka ekipy, liczone za każdą rozpoczętą godzinę.`
+        )
+      }
+      if (data.includeRevisionsInfo) {
+        terms.push(
+          `Cena obejmuje do ${data.includedRevisions} rund poprawek montażowych. Kolejne zmiany podlegają dodatkowej wycenie w kwocie ${data.extraRevisionPrice} zł netto za rundę.`
+        )
+      }
+      terms.push(
+        'Podane kwoty są kwotami netto. Do kwot należy doliczyć VAT zgodnie z obowiązującymi przepisami.'
+      )
+      return terms
+    }
+  }, [
+    data.copyrightType,
+    data.includeOvertimeInfo,
+    data.standardDayHours,
+    data.overtimeHourlyRate,
+    data.includeRevisionsInfo,
+    data.includedRevisions,
+    data.extraRevisionPrice,
+  ])
+
   const resetToZero = useCallback(() => {
     setData({ ...defaultQuoteData })
     setMarginMultiplier(1.0)
@@ -197,7 +310,21 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setIsCalculating(false), 500)
   }, [])
 
-  const totals = getTotals(data, pricingTier, marginMultiplier, pricingConfig)
+  const baseTotals = getTotals(data, pricingTier, marginMultiplier, pricingConfig)
+  const autoCrewDays = calculateTotalCrewDays()
+  const cateringCost = data.includeCatering
+    ? (data.cateringOverride ? data.cateringCustomDays : autoCrewDays) * data.cateringRate
+    : 0
+  const lodgingCost = data.includeLodging
+    ? (data.lodgingOverride ? data.lodgingCustomDays : autoCrewDays) * data.lodgingRate
+    : 0
+  const VAT_RATE = 0.23
+  const sumaNettoWithLogistics = baseTotals.sumaNetto + cateringCost + lodgingCost
+  const totals = {
+    sumaNetto: sumaNettoWithLogistics,
+    vat: sumaNettoWithLogistics * VAT_RATE,
+    sumaBrutto: sumaNettoWithLogistics * (1 + VAT_RATE),
+  }
   const breakdown = getBreakdownWithPricing(data, pricingTier, marginMultiplier, pricingConfig)
 
   const value: QuoteContextValue = {
@@ -225,6 +352,12 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     addDeliverable,
     removeDeliverable,
     updateDeliverable,
+    availableFormats,
+    getFormatStandardPrice,
+    addCustomFormat,
+    removeCustomFormat,
+    calculateTotalCrewDays,
+    getTermsAndConditions,
     resetToZero,
   }
 

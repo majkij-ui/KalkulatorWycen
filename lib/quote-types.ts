@@ -4,8 +4,8 @@ export type PakietSprzetu = 'minimalistyczny' | 'standard' | 'kinowy'
 export type AnimationType = 'brak' | '2d' | '3d'
 export type MusicLicense = 'stock' | 'premium' | 'kompozytor'
 
-/** Format dostawy w trybie szczegółowej postprodukcji */
-export type DeliverableFormat = 'shorts' | 'reportaz'
+/** Format dostawy: pełny klucz z cennika, np. "Format: Shorts/Reel (do 30s)" lub custom "Format: <nazwa>" */
+export type DeliverableFormat = string
 export type KorekcjaBarwnaOpcja = 'brak' | 'podstawowa' | 'zaawansowana'
 export type AnimacjePostproOpcja = 'brak' | '2d' | 'ai'
 export type MuzykaPostproOpcja = 'brak' | 'copyfree' | 'kompozytor'
@@ -32,7 +32,7 @@ function createDeliverableId(): string {
 export function createDefaultDeliverable(): Deliverable {
   return {
     id: createDeliverableId(),
-    format: 'shorts',
+    format: 'Format: Shorts/Reel (do 30s)',
     ilosc: 1,
     korekcjaBarwna: 'brak',
     animacje: 'brak',
@@ -122,6 +122,28 @@ export interface QuoteData {
   kosztDojazduKm: number
   lektor: boolean
   licencjaMuzyczna: MusicLicense
+  /** Licencja podstawowa (w cenie) vs pełne przekazanie praw (dopłata %) */
+  copyrightType: 'licencja' | 'przekazanie'
+  /** Czy uwzględnić w PDF informację o limitach poprawek */
+  includeRevisionsInfo: boolean
+  includedRevisions: number
+  extraRevisionPrice: number
+  /** Czy uwzględnić w PDF zasady nadgodzin */
+  includeOvertimeInfo: boolean
+  standardDayHours: number
+  overtimeHourlyRate: number
+  /** Opcje dodatkowe (upsell) – wolny tekst do PDF */
+  opcjeDodatkowe: string
+
+  // Logistyka (catering & noclegi) – osobodni
+  includeCatering: boolean
+  cateringRate: number
+  cateringOverride: boolean
+  cateringCustomDays: number
+  includeLodging: boolean
+  lodgingRate: number
+  lodgingOverride: boolean
+  lodgingCustomDays: number
 }
 
 export const defaultQuoteData: QuoteData = {
@@ -146,6 +168,22 @@ export const defaultQuoteData: QuoteData = {
   kosztDojazduKm: 0,
   lektor: false,
   licencjaMuzyczna: 'stock',
+  copyrightType: 'licencja',
+  includeRevisionsInfo: true,
+  includedRevisions: 2,
+  extraRevisionPrice: 500,
+  includeOvertimeInfo: true,
+  standardDayHours: 10,
+  overtimeHourlyRate: 200,
+  opcjeDodatkowe: '',
+  includeCatering: false,
+  cateringRate: 100,
+  cateringOverride: false,
+  cateringCustomDays: 1,
+  includeLodging: false,
+  lodgingRate: 300,
+  lodgingOverride: false,
+  lodgingCustomDays: 1,
 }
 
 /** User-saved quote template (persisted in localStorage) */

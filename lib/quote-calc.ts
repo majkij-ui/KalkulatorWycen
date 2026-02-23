@@ -2,6 +2,7 @@
 
 import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape, PricingTier } from './pricing-config'
+import { FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from './pricing-config'
 
 const VAT_RATE = 0.23
 
@@ -34,8 +35,16 @@ function applyMargin(value: number, marginMultiplier: number): number {
   return value * marginMultiplier
 }
 
+function getFormatTierPrices(post: PricingConfigShape['postprodukcja'], formatKey: string): { tani: number; standard: number; agresywny: number } {
+  if (formatKey === FORMAT_KEY_SHORTS || formatKey === 'shorts') return post.formatShortsReel
+  if (formatKey === FORMAT_KEY_REPORTAZ || formatKey === 'reportaz') return post.formatReportaz
+  const custom = post[formatKey]
+  if (custom && typeof custom.tani === 'number' && typeof custom.standard === 'number' && typeof custom.agresywny === 'number') return custom
+  return post.formatShortsReel
+}
+
 function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja'], tier: PricingTier): number {
-  const formatPrice = d.format === 'shorts' ? post.formatShortsReel[tier] : post.formatReportaz[tier]
+  const formatPrice = getFormatTierPrices(post, d.format)[tier]
   let total = formatPrice * d.ilosc
   if (d.korekcjaBarwna === 'podstawowa') total += post.korekcjaBarwnaPodstawowa[tier]
   if (d.korekcjaBarwna === 'zaawansowana') total += post.korekcjaBarwnaZaawansowana[tier]
@@ -175,7 +184,7 @@ export function getBreakdownWithPricing(
   } else {
     data.detailedDeliverables.forEach((del, i) => {
       const net = computeDeliverableNet(del, post, tier)
-      const formatLabel = del.format === 'shorts' ? 'do 30s shorts/reel' : '1–3 min reportaż'
+      const formatLabel = del.format.startsWith('Format: ') ? del.format.slice(8) : del.format
       postItems.push({
         label: `Format / Dostawa ${i + 1}`,
         value: `${del.ilosc}× ${formatLabel}`,
@@ -189,12 +198,13 @@ export function getBreakdownWithPricing(
   const dod = pricing.dodatkowe
   const km = data.kosztDojazduKm
   const kmRate = dod.kosztDojazduKm[tier]
+  const travelNetto = applyMargin(kmRate * km, marginMultiplier)
   dodatkoweItems.push({
     label: 'Koszty dojazdu',
     value: `${km} km`,
     quantity: km,
     unitPriceNet: kmRate,
-    lineNetto: applyMargin(kmRate * km, marginMultiplier),
+    lineNetto: travelNetto,
   })
 
   const toPhase = (category: string, items: LineItemRow[]): PhaseBreakdown => ({
@@ -202,6 +212,26 @@ export function getBreakdownWithPricing(
     items,
     phaseNetto: items.reduce((s, i) => s + i.lineNetto, 0),
   })
+
+  const phasesWithoutCopyright: PhaseBreakdown[] = [
+    toPhase('Preprodukcja', preItems),
+    toPhase('Produkcja', proItems),
+    toPhase('Postprodukcja', postItems),
+    toPhase('Dodatkowe', [...dodatkoweItems]),
+  ]
+  const baseSubtotal = phasesWithoutCopyright.reduce((s, p) => s + p.phaseNetto, 0)
+
+  if (data.copyrightType === 'przekazanie') {
+    const pct = dod.pelnePrzekazaniePrawProcent[tier]
+    const surcharge = baseSubtotal * (pct / 100)
+    dodatkoweItems.push({
+      label: 'Pełne przekazanie praw',
+      value: `${pct}% od sumy`,
+      quantity: 1,
+      unitPriceNet: surcharge,
+      lineNetto: surcharge,
+    })
+  }
 
   return [
     toPhase('Preprodukcja', preItems),

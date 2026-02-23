@@ -9,13 +9,15 @@ interface CounterProps {
   onChange: (value: number) => void
   min?: number
   max?: number
+  /** Step for +/- buttons (default 1) */
+  step?: number
   label: string
   className?: string
   /** Compact style: smaller buttons (size-7) and text-sm number */
   compact?: boolean
 }
 
-export function Counter({ value, onChange, min = 0, max = 99, label, className, compact }: CounterProps) {
+export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, className, compact }: CounterProps) {
   return (
     <div className={cn('flex items-center justify-between', className, !label && 'justify-end')}>
       {label ? <span className="text-sm font-medium text-zinc-400">{label}</span> : null}
@@ -27,7 +29,7 @@ export function Counter({ value, onChange, min = 0, max = 99, label, className, 
             'rounded-lg border-white/10 bg-white/5 text-foreground hover:bg-white/10',
             compact ? 'size-7' : 'size-8'
           )}
-          onClick={() => onChange(Math.max(min, value - 1))}
+          onClick={() => onChange(Math.max(min, value - step))}
           disabled={value <= min}
           aria-label={`Zmniejsz ${label}`}
         >
@@ -48,7 +50,7 @@ export function Counter({ value, onChange, min = 0, max = 99, label, className, 
             'rounded-lg border-white/10 bg-white/5 text-foreground hover:bg-white/10',
             compact ? 'size-7' : 'size-8'
           )}
-          onClick={() => onChange(Math.min(max, value + 1))}
+          onClick={() => onChange(Math.min(max, value + step))}
           disabled={value >= max}
           aria-label={`Zwiększ ${label}`}
         >

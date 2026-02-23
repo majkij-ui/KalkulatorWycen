@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Settings, RotateCcw } from 'lucide-react'
 import { useQuote } from '@/lib/quote-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
-import { Slider } from '@/components/ui/slider'
+import { BipolarSlider } from '@/components/ui/bipolar-slider'
 import { SettingsSheet } from '@/components/settings-sheet'
 
 export function StickyHeader() {
@@ -76,7 +76,7 @@ export function StickyHeader() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 shrink-0">
                 Marża / Rabat
               </span>
-              <Slider
+              <BipolarSlider
                 min={0.5}
                 max={1.5}
                 step={0.05}

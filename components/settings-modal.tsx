@@ -36,6 +36,7 @@ interface PricingRowDef {
   key: string
   label: string
   isKeyMetric?: boolean
+  step?: number
 }
 
 const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRowDef[] }[] = [
@@ -108,6 +109,7 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
     title: 'DODATKOWE',
     rows: [
       { key: 'kosztDojazduKm', label: 'Koszty dojazdu (za km)', isKeyMetric: true },
+      { key: 'pelnePrzekazaniePrawProcent', label: 'Pełne przekazanie praw (% dopłaty)', step: 1 },
     ],
   },
 ]
@@ -252,7 +254,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                     key={t}
                                     type="number"
                                     min={0}
-                                    step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
+                                    step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
                                     value={itemVal[t] ?? 0}
                                     onChange={(e) =>
                                       update(category, row.key, t, Number(e.target.value) || 0)
@@ -264,7 +266,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                 <Input
                                   type="number"
                                   min={0}
-                                  step={row.key === 'kosztDojazduKm' ? 0.1 : 50}
+                                  step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
                                   value={itemVal.standard ?? 0}
                                   onChange={(e) =>
                                     update(category, row.key, 'standard', Number(e.target.value) || 0)

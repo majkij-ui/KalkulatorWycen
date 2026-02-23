@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Scissors, Plus, Minus, Trash2 } from 'lucide-react'
+import { Scissors, Plus, Minus, Trash2, Settings2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
+import { BUILTIN_FORMAT_KEYS, FORMAT_KEY_SHORTS, FORMAT_KEY_REPORTAZ } from '@/lib/pricing-config'
 import type {
   Deliverable,
   DeliverableFormat,
@@ -39,11 +49,6 @@ const item = {
   hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: 'easeOut' } },
 }
-
-const FORMAT_OPCJE: { value: DeliverableFormat; label: string }[] = [
-  { value: 'shorts', label: 'do 30sek shorts/reel' },
-  { value: 'reportaz', label: '1–3 min reportaż' },
-]
 
 const KOREKCJA_OPCJE: { value: KorekcjaBarwnaOpcja; label: string }[] = [
   { value: 'brak', label: 'Brak' },
@@ -122,15 +127,27 @@ function OptionRow({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
+function formatLabel(formatKey: string): string {
+  return formatKey.startsWith('Format: ') ? formatKey.slice(8) : formatKey
+}
+
+function toFormatKey(legacyOrKey: string): string {
+  if (legacyOrKey === 'shorts') return FORMAT_KEY_SHORTS
+  if (legacyOrKey === 'reportaz') return FORMAT_KEY_REPORTAZ
+  return legacyOrKey
+}
+
 function DeliverableCard({
   del,
   index,
+  availableFormats,
   onUpdate,
   onRemove,
   canRemove,
 }: {
   del: Deliverable
   index: number
+  availableFormats: string[]
   onUpdate: <K extends keyof Deliverable>(field: K, value: Deliverable[K]) => void
   onRemove: () => void
   canRemove: boolean
@@ -141,14 +158,20 @@ function DeliverableCard({
         <h3 className="text-lg font-semibold text-white">Format / Dostawa {index + 1}</h3>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Select value={del.format} onValueChange={(v) => onUpdate('format', v as DeliverableFormat)}>
+        <Select
+          value={(() => {
+            const key = toFormatKey(del.format)
+            return availableFormats.includes(key) ? key : availableFormats[0] ?? key
+          })()}
+          onValueChange={(v) => onUpdate('format', v as DeliverableFormat)}
+        >
           <SelectTrigger className="w-[200px] border-white/10 bg-zinc-900/30 text-white backdrop-blur-xl">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {FORMAT_OPCJE.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
+            {availableFormats.map((key) => (
+              <SelectItem key={key} value={key}>
+                {formatLabel(key)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -200,8 +223,110 @@ function DeliverableCard({
   )
 }
 
+function FormatManagerDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const {
+    availableFormats,
+    getFormatStandardPrice,
+    addCustomFormat,
+    removeCustomFormat,
+    formatCurrency,
+  } = useQuote()
+  const [newName, setNewName] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+
+  const handleAdd = () => {
+    const name = newName.trim()
+    const price = Number(newPrice)
+    if (!name || Number.isNaN(price) || price < 0) return
+    addCustomFormat(name, price)
+    setNewName('')
+    setNewPrice('')
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="border-white/10 bg-zinc-950/90 text-white backdrop-blur-xl sm:max-w-md"
+        showCloseButton
+      >
+        <DialogHeader>
+          <DialogTitle className="text-white">Zarządzaj formatami wideo</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="Nazwa nowego formatu"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="min-w-[160px] border-white/10 bg-zinc-900/50 text-white placeholder:text-zinc-500"
+            />
+            <Input
+              type="number"
+              min={0}
+              step={100}
+              placeholder="Cena (Standard)"
+              value={newPrice}
+              onChange={(e) => setNewPrice(e.target.value)}
+              className="w-28 border-white/10 bg-zinc-900/50 text-white placeholder:text-zinc-500"
+            />
+            <Button type="button" onClick={handleAdd} size="sm">
+              Dodaj
+            </Button>
+          </div>
+          <ScrollArea className="h-[240px] rounded-lg border border-white/10">
+            <div className="space-y-1 p-2">
+              {availableFormats.map((formatKey) => {
+                const isBuiltIn = BUILTIN_FORMAT_KEYS.includes(formatKey)
+                const displayName = formatLabel(formatKey)
+                const standardPrice = getFormatStandardPrice(formatKey)
+                return (
+                  <div
+                    key={formatKey}
+                    className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-zinc-900/30 px-3 py-2"
+                  >
+                    <span className="text-sm text-white">{displayName}</span>
+                    <span className="tabular-nums text-sm text-zinc-400">{formatCurrency(standardPrice)}</span>
+                    {!isBuiltIn ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0 text-zinc-500 hover:bg-white/10 hover:text-red-400"
+                        onClick={() => removeCustomFormat(formatKey)}
+                        aria-label={`Usuń ${displayName}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : (
+                      <span className="size-8 shrink-0" aria-hidden />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function PostprodukcjaTab() {
-  const { data, updateField, addDeliverable, removeDeliverable, updateDeliverable } = useQuote()
+  const [formatManagerOpen, setFormatManagerOpen] = useState(false)
+  const {
+    data,
+    updateField,
+    addDeliverable,
+    removeDeliverable,
+    updateDeliverable,
+    availableFormats,
+  } = useQuote()
   const isDetailed = data.isDetailedPostpro
   const deliverables = data.detailedDeliverables
   const unit = data.crudeEditUnit
@@ -273,8 +398,7 @@ export function PostprodukcjaTab() {
                   </div>
 
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-zinc-400">{unit === 'dni' ? 'Dni' : 'Godziny'}</span>
+                    <div className="flex justify-end">
                       <span className="text-lg font-semibold tabular-nums text-white">
                         {unit === 'dni'
                           ? count % 1 === 0 ? count : count.toFixed(1).replace('.', ',')
@@ -369,11 +493,24 @@ export function PostprodukcjaTab() {
               animate="show"
               className="space-y-5 pt-1 pb-1"
             >
+              <motion.div variants={item} className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-zinc-400 hover:bg-white/5 hover:text-zinc-300"
+                  onClick={() => setFormatManagerOpen(true)}
+                >
+                  <Settings2 className="mr-2 size-4" />
+                  Zarządzaj formatami
+                </Button>
+              </motion.div>
               {deliverables.map((del, index) => (
                 <motion.div key={del.id} variants={item}>
                   <DeliverableCard
                     del={del}
                     index={index}
+                    availableFormats={availableFormats}
                     onUpdate={(field, value) => updateDeliverable(del.id, field, value)}
                     onRemove={() => removeDeliverable(del.id)}
                     canRemove={deliverables.length > 1}
@@ -393,6 +530,7 @@ export function PostprodukcjaTab() {
                 </Button>
               </motion.div>
             </motion.div>
+            <FormatManagerDialog open={formatManagerOpen} onOpenChange={setFormatManagerOpen} />
           </motion.div>
         )}
       </AnimatePresence>
