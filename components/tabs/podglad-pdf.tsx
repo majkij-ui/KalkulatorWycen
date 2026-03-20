@@ -58,11 +58,13 @@ function AutoGrowTextarea({
   onChange,
   placeholder,
   disabled,
+  className,
 }: {
   value: string
   onChange: (next: string) => void
   placeholder?: string
   disabled?: boolean
+  className?: string
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null)
 
@@ -80,7 +82,7 @@ function AutoGrowTextarea({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="min-h-10 w-full resize-none overflow-hidden rounded-md border border-zinc-200 bg-white/70 px-3 py-2 text-[12px] leading-snug text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
+      className={`min-h-10 w-full resize-none overflow-hidden rounded-md border border-zinc-200 bg-white/70 px-3 py-2 text-[12px] leading-snug text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60 ${className ?? ''}`}
       style={{ height: 0 }}
     />
   )
@@ -165,6 +167,15 @@ export function PodgladPdfTab() {
   const validUntilPl = useMemo(() => format(addDays(new Date(), 30), 'dd.MM.yyyy'), [])
 
   const terms = useMemo(() => getTermsAndConditions(), [getTermsAndConditions])
+  const [uwagiManualText, setUwagiManualText] = useState('')
+
+  const mergedTerms = useMemo(() => {
+    const manual = (uwagiManualText ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    return [...terms, ...manual]
+  }, [terms, uwagiManualText])
 
   const touchedRowsRef = useRef<Record<PdfRowKey, boolean>>({
     preprodukcja: false,
@@ -281,9 +292,30 @@ export function PodgladPdfTab() {
   }, [localPdfState.rows])
 
   const printRef = useRef<HTMLDivElement | null>(null)
+  const originalDocumentTitleRef = useRef<string | null>(null)
+
+  const getDynamicDocumentTitle = (): string => {
+    const client = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : 'Klienta'
+    const project = localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : 'Projektu'
+    return `Wycena Wideo | NonoiseMedia dla ${client} | ${project}`
+  }
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
+    onBeforePrint: async () => {
+      if (typeof document === 'undefined') return
+      if (originalDocumentTitleRef.current === null) {
+        originalDocumentTitleRef.current = document.title
+      }
+      document.title = getDynamicDocumentTitle()
+    },
+    onAfterPrint: () => {
+      if (typeof document === 'undefined') return
+      if (originalDocumentTitleRef.current !== null) {
+        document.title = originalDocumentTitleRef.current
+        originalDocumentTitleRef.current = null
+      }
+    },
     pageStyle: `
       @page { size: A4; margin: 14mm 12mm; }
       @media print {
@@ -291,6 +323,7 @@ export function PodgladPdfTab() {
         body * { visibility: hidden !important; }
         #printable-quote { visibility: visible !important; display: block !important; }
         #printable-quote * { visibility: visible !important; }
+        #printable-quote, #printable-quote * { user-select: text !important; -webkit-user-select: text !important; }
       }
     `,
   })
@@ -478,8 +511,8 @@ export function PodgladPdfTab() {
                 </div>
 
                 <div className="mt-5 grid gap-4">
-                  <div className="rounded-lg border border-zinc-200 p-3">
-                    <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary mb-1">
+                  <div className="rounded-md border border-zinc-200 p-3">
+                    <div className="text-[8pt] font-bold uppercase tracking-widest text-zinc-700 mb-1">
                       Materiały końcowe
                     </div>
                     <AutoGrowTextarea
@@ -487,11 +520,12 @@ export function PodgladPdfTab() {
                       value={localPdfState.materialyKoncowe}
                       onChange={(next) => setLocalPdfState((prev) => ({ ...prev, materialyKoncowe: next }))}
                       placeholder="Np. materiały przekazane klientowi (logo, brandbook, pliki)…"
+                      className="text-[10px] leading-relaxed"
                     />
                   </div>
 
-                  <div className="rounded-lg border border-zinc-200 p-3">
-                    <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary mb-1">
+                  <div className="rounded-md border border-zinc-200 p-3">
+                    <div className="text-[8pt] font-bold uppercase tracking-widest text-zinc-700 mb-1">
                       Opcje dodatkowe
                     </div>
                     <AutoGrowTextarea
@@ -502,12 +536,13 @@ export function PodgladPdfTab() {
                         setLocalPdfState((prev) => ({ ...prev, opcjeDodatkowe: next }))
                       }}
                       placeholder="Wpisz dodatkowe opcje i uwagi marketingowe…"
+                      className="text-[10px] leading-relaxed"
                     />
                   </div>
 
                   <div className="rounded-lg border border-zinc-200 p-3">
                     <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary mb-1">
-                      Linki do portfolio
+                      Przykładowe realizacje
                     </div>
                     <AutoGrowTextarea
                       disabled={isCalculating}
@@ -519,17 +554,26 @@ export function PodgladPdfTab() {
 
                   <div className="rounded-lg border border-zinc-200 p-3">
                     <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-700 mb-2">
-                      Uwagi
+                      UWAGI
                     </div>
-                    {terms.length > 0 ? (
+                    {mergedTerms.length > 0 ? (
                       <ol className="list-decimal list-inside space-y-1 text-[10px] text-zinc-700">
-                        {terms.map((t, idx) => (
+                        {mergedTerms.map((t, idx) => (
                           <li key={`${idx}-${t.slice(0, 18)}`}>{t}</li>
                         ))}
                       </ol>
                     ) : (
                       <div className="text-[10px] text-zinc-600">—</div>
                     )}
+                    <div className="mt-2">
+                      <AutoGrowTextarea
+                        disabled={isCalculating}
+                        value={uwagiManualText}
+                        onChange={(next) => setUwagiManualText(next)}
+                        placeholder="Dodaj własne uwagi (1 punkt na linię)…"
+                        className="text-[10px] leading-relaxed"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -538,7 +582,7 @@ export function PodgladPdfTab() {
 
           {/* Hidden printable page for react-to-print */}
           <div ref={printRef} id="printable-quote" style={{ display: 'none' }}>
-            <PrintableQuote localPdfState={localPdfState} />
+            <PrintableQuote localPdfState={{ ...localPdfState, termsAndConditions: mergedTerms }} />
           </div>
         </GlassCard>
       </motion.div>

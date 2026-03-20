@@ -39,8 +39,8 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
 
   return (
     <div
-      className="printable-quote w-[210mm] bg-white px-8 pb-8 pt-4 text-[9.5pt] text-zinc-900 font-sans break-inside-avoid print:m-0 print:px-8 print:pb-8 print:pt-4"
-      style={{ fontFamily: 'var(--font-inter, Inter)' }}
+      className="printable-quote w-[210mm] bg-white px-8 pb-8 pt-4 text-[9.5pt] text-zinc-900 font-sans break-inside-avoid select-text print:m-0 print:px-8 print:pb-8 print:pt-4"
+      style={{ fontFamily: 'var(--font-inter, Inter)', userSelect: 'text' }}
     >
       {/* Black header bar */}
       <div className="w-full bg-zinc-950 text-white flex items-center justify-between px-8 py-4">
@@ -73,7 +73,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
             <span className="font-bold">Klient:</span> {clientName} <span className="text-zinc-400">|</span>{' '}
             <span className="font-bold">Projekt:</span> {projectName}
           </div>
-          <div className="mt-1.5">
+          <div className="mt-1.5 whitespace-nowrap">
             <span className="font-bold">Data sporządzenia:</span> {currentDate}{' '}
             <span className="text-zinc-600">(Termin ważności: 30 dni)</span>
           </div>
