@@ -25,7 +25,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
 
   const clientName = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : '—'
   const projectName = localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : '—'
-  const terminZdjec = localPdfState.validUntilIso || '—'
+  const terminZdjec = localPdfState.terminZdjec?.trim() ? localPdfState.terminZdjec.trim() : '—'
   const currentDate = localPdfState.issueDateIso || '—'
 
   const terms = localPdfState.termsAndConditions ?? []
@@ -39,7 +39,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
 
   return (
     <div
-      className="printable-quote w-[210mm] bg-white p-8 text-[9.5pt] text-zinc-900 font-sans break-inside-avoid print:m-0 print:p-8"
+      className="printable-quote w-[210mm] bg-white px-8 pb-8 pt-4 text-[9.5pt] text-zinc-900 font-sans break-inside-avoid print:m-0 print:px-8 print:pb-8 print:pt-4"
       style={{ fontFamily: 'var(--font-inter, Inter)' }}
     >
       {/* Black header bar */}
@@ -53,21 +53,31 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
       </div>
 
       {/* Metadata */}
-      <div className="mt-6 mb-6 grid grid-cols-2 gap-20 text-[9pt]">
-        <div className="text-zinc-900">
-          <span className="font-bold">Wykonawca:</span> Michał Jagniątkowski | Nonoise Media | contact@nonoise.media
-        </div>
-        <div className="text-right space-y-1.5 text-zinc-900">
+      <div className="mt-4 mb-4 grid grid-cols-2 gap-20 text-[9pt]">
+        {/* Wykonawca: 3 linie */}
+        <div className="text-zinc-900 leading-tight">
           <div>
-            <span className="font-bold">Klient:</span> {clientName}
+            <span className="font-bold">Wykonawca:</span> Nonoise Media
           </div>
           <div>
+            <span className="font-bold">Producent:</span> Michał Jagniątkowski
+          </div>
+          <div>
+            <span className="font-bold">email:</span> contact@nonoise.media
+          </div>
+        </div>
+
+        {/* Metadata right: 3 linie */}
+        <div className="text-right leading-tight text-zinc-900">
+          <div className="whitespace-nowrap">
+            <span className="font-bold">Klient:</span> {clientName} <span className="text-zinc-400">|</span>{' '}
             <span className="font-bold">Projekt:</span> {projectName}
           </div>
-          <div>
-            <span className="font-bold">Data:</span> {currentDate}
+          <div className="mt-1.5">
+            <span className="font-bold">Data sporządzenia:</span> {currentDate}{' '}
+            <span className="text-zinc-600">(Termin ważności: 30 dni)</span>
           </div>
-          <div>
+          <div className="mt-1.5">
             <span className="font-bold">Termin zdjęć:</span> {terminZdjec}
           </div>
         </div>
@@ -80,7 +90,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
               <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-left w-1/4">
                 KATEGORIA
               </th>
-              <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-right w-1/6">
+              <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-right w-1/6 whitespace-nowrap">
                 SZACUNKOWO (NETTO)
               </th>
               <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-left w-7/12">
@@ -119,7 +129,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
           </tbody>
         </table>
 
-        <div className="mt-6 grid gap-4">
+        <div className="mt-4 grid gap-4">
           <div className="border border-zinc-200 rounded-md p-3">
             <div className="text-[8pt] font-bold text-zinc-700">Materiały Końcowe</div>
             <div className="mt-1.5 text-[9pt] text-zinc-600 whitespace-pre-wrap leading-relaxed">
@@ -134,25 +144,11 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
             </div>
           </div>
 
-          <div className="mt-0">
-            <div className="text-[8pt] font-bold text-zinc-700 mb-1.5">Uwagi</div>
-            {adjustedTerms?.length ? (
-              <div className="columns-2 gap-6 text-[8pt] text-zinc-700 leading-relaxed">
-                {adjustedTerms.map((t, i) => (
-                  <div key={`${i}-${t.slice(0, 20)}`} className="break-inside-avoid mb-1.5">
-                    {i + 1}. {t}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[8pt] text-zinc-700">—</div>
-            )}
-          </div>
-
-          <div className="mt-0">
-            <div className="text-[8pt] font-bold text-zinc-700 mb-2">Portfolio</div>
+          {/* Portfolio relocation: right after Opcje Dodatkowe */}
+          <div className="border border-zinc-200 rounded-md p-3">
+            <div className="text-[8pt] font-bold text-zinc-700">Przykładowe realizacje</div>
             {portfolioLinks.length > 0 ? (
-              <ul className="space-y-1 text-[8pt] text-zinc-700">
+              <ul className="mt-1.5 space-y-1 text-[8pt] text-zinc-700">
                 {portfolioLinks.map((l) => {
                   const href = l.startsWith('http') ? l : `https://${l}`
                   return (
@@ -164,6 +160,22 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
                   )
                 })}
               </ul>
+            ) : (
+              <div className="mt-1.5 text-[8pt] text-zinc-700">—</div>
+            )}
+          </div>
+
+          {/* Uwagi at the bottom */}
+          <div className="mt-0">
+            <div className="text-[8pt] font-bold text-zinc-700 mb-1.5">Uwagi</div>
+            {adjustedTerms?.length ? (
+              <div className="columns-2 gap-6 text-[8pt] text-zinc-700 leading-relaxed">
+                {adjustedTerms.map((t, i) => (
+                  <div key={`${i}-${t.slice(0, 20)}`} className="break-inside-avoid mb-1.5">
+                    {i + 1}. {t}
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="text-[8pt] text-zinc-700">—</div>
             )}

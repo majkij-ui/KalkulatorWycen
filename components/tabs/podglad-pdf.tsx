@@ -204,6 +204,7 @@ export function PodgladPdfTab() {
       projectName: data.projectName ?? '',
       issueDateIso: issueDatePl,
       validUntilIso: validUntilPl,
+      terminZdjec: 'Do ustalenia',
       showVat: false,
       rows: {
         preprodukcja: {
@@ -267,6 +268,7 @@ export function PodgladPdfTab() {
         showVat: prev.showVat,
         materialyKoncowe: prev.materialyKoncowe,
         portfolioLinksText: prev.portfolioLinksText,
+        terminZdjec: prev.terminZdjec,
         opcjeDodatkowe: touchedOpcjeRef.current ? prev.opcjeDodatkowe : init.opcjeDodatkowe,
         rows: nextRows,
       }
@@ -301,7 +303,7 @@ export function PodgladPdfTab() {
       className="space-y-5"
     >
       <motion.div variants={item} className="space-y-4">
-        <div className="grid gap-4 rounded-xl border-t border-l border-white/10 bg-zinc-900/30 p-4 backdrop-blur-xl sm:grid-cols-2">
+        <div className="grid gap-4 rounded-xl border-t border-l border-white/10 bg-zinc-900/30 p-4 backdrop-blur-xl sm:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="client-name" className="text-zinc-400">Nazwa klienta</Label>
             <Input
@@ -319,6 +321,16 @@ export function PodgladPdfTab() {
               value={data.projectName}
               onChange={(e) => updateField('projectName', e.target.value)}
               placeholder="np. Kampania wiosenna 2025"
+              className="border-white/10 bg-white/5 text-foreground"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="termin-zdjec" className="text-zinc-400">Termin zdjęć</Label>
+            <Input
+              id="termin-zdjec"
+              value={localPdfState.terminZdjec}
+              onChange={(e) => setLocalPdfState((prev) => ({ ...prev, terminZdjec: e.target.value }))}
+              placeholder="np. Do ustalenia lub 20.04.2026"
               className="border-white/10 bg-white/5 text-foreground"
             />
           </div>
@@ -366,7 +378,7 @@ export function PodgladPdfTab() {
                       Data sporządzenia: {localPdfState.issueDateIso}
                     </div>
                     <div className="text-[9.5px] text-zinc-600">
-                      Termin ważności: 30 dni (do {localPdfState.validUntilIso})
+                      Termin zdjęć: {localPdfState.terminZdjec?.trim() ? localPdfState.terminZdjec.trim() : 'Do ustalenia'}
                     </div>
                   </div>
                   <div className="text-right">

@@ -368,6 +368,7 @@ export interface LocalPdfState {
   projectName: string
   issueDateIso: string
   validUntilIso: string
+  terminZdjec: string
 
   showVat: boolean // if true, UI/print shows gross values (VAT 23%)
 

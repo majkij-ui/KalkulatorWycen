@@ -8,10 +8,10 @@
 - [x] Detailed Postproduction with dynamic Format Manager.
 - [x] Code Hardening (NaN protection, array safety).
 - [x] PDF Generation: wstępny generator PDF (rework v0.8) i pobieranie z „Podgląd”.
+- [x] Logic for "Uwagi" (T&Cs) text generation based on toggles.
 
 ## In Progress 🏗️
-- [ ] Logic for "Uwagi" (T&Cs) text generation based on toggles.
 - [ ] "Opcje Dodatkowe" (Upsell) text area in Dodatkowe tab.
 
 ## Next Up (The Final Boss) 🎯
-- [ ] **PDF Layout:** 6-category summary, detailed breakdown, legal clauses, and branding.
+- [x] **PDF Layout:** 6-category summary, detailed breakdown, legal clauses, and branding.
