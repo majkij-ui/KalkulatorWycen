@@ -93,6 +93,11 @@ export function createDefaultShootingDay(): ShootingDay {
 }
 
 export interface QuoteData {
+  /** Nazwa klienta (edytowalna w zakładce "Podgląd i PDF") */
+  clientName: string
+  /** Nazwa projektu (edytowalna w zakładce "Podgląd i PDF") */
+  projectName: string
+
   // Preprodukcja
   isDetailedPrepro: boolean
   scenariusz: ScenarioType
@@ -151,6 +156,8 @@ export interface QuoteData {
 }
 
 export const defaultQuoteData: QuoteData = {
+  clientName: '',
+  projectName: '',
   isDetailedPrepro: false,
   scenariusz: 'brak',
   dniDokumentacji: 0,
@@ -357,6 +364,7 @@ export interface PdfRowState {
 }
 
 export interface LocalPdfState {
+  clientName: string
   projectName: string
   issueDateIso: string
   validUntilIso: string

@@ -148,8 +148,18 @@ function getOpisInitial({
 }
 
 export function PodgladPdfTab() {
-  const { breakdown, totals, formatCurrency, isCalculating, getTermsAndConditions, data, pricingTier, pricingConfig, marginMultiplier } =
-    useQuote()
+  const {
+    breakdown,
+    totals,
+    formatCurrency,
+    isCalculating,
+    getTermsAndConditions,
+    data,
+    updateField,
+    pricingTier,
+    pricingConfig,
+    marginMultiplier,
+  } = useQuote()
 
   const issueDatePl = useMemo(() => format(new Date(), 'dd.MM.yyyy'), [])
   const validUntilPl = useMemo(() => format(addDays(new Date(), 30), 'dd.MM.yyyy'), [])
@@ -190,7 +200,8 @@ export function PodgladPdfTab() {
     const delta = safeNum(totals?.sumaNetto, 0, 0) - computedSum
 
     return {
-      projectName: '',
+      clientName: data.clientName ?? '',
+      projectName: data.projectName ?? '',
       issueDateIso: issueDatePl,
       validUntilIso: validUntilPl,
       showVat: false,
@@ -253,7 +264,6 @@ export function PodgladPdfTab() {
       return {
         ...init,
         // Keep user-edited fields:
-        projectName: prev.projectName,
         showVat: prev.showVat,
         materialyKoncowe: prev.materialyKoncowe,
         portfolioLinksText: prev.portfolioLinksText,
@@ -293,11 +303,21 @@ export function PodgladPdfTab() {
       <motion.div variants={item} className="space-y-4">
         <div className="grid gap-4 rounded-xl border-t border-l border-white/10 bg-zinc-900/30 p-4 backdrop-blur-xl sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="project-name" className="text-zinc-400">Klient / Projekt</Label>
+            <Label htmlFor="client-name" className="text-zinc-400">Nazwa klienta</Label>
+            <Input
+              id="client-name"
+              value={data.clientName}
+              onChange={(e) => updateField('clientName', e.target.value)}
+              placeholder="np. NonoiseMedia Sp. z o.o."
+              className="border-white/10 bg-white/5 text-foreground"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="project-name" className="text-zinc-400">Nazwa projektu</Label>
             <Input
               id="project-name"
-              value={localPdfState.projectName}
-              onChange={(e) => setLocalPdfState((prev) => ({ ...prev, projectName: e.target.value }))}
+              value={data.projectName}
+              onChange={(e) => updateField('projectName', e.target.value)}
               placeholder="np. Kampania wiosenna 2025"
               className="border-white/10 bg-white/5 text-foreground"
             />
@@ -338,7 +358,7 @@ export function PodgladPdfTab() {
 
           <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/20 p-4">
             <div className="w-full overflow-x-auto">
-              <div className="min-w-[740px] rounded-lg bg-white/95 p-5 text-zinc-900">
+              <div className="mx-auto w-[210mm] max-w-full rounded-lg bg-white shadow-2xl p-6 text-zinc-900 aspect-[1/1.414] overflow-y-auto print:shadow-none print:m-0">
                 <div className="mb-3 flex items-end justify-between gap-4 border-b border-zinc-200 pb-3">
                   <div>
                     <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary">Oferta współpracy</div>
@@ -350,7 +370,10 @@ export function PodgladPdfTab() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[9.5px] text-zinc-700 font-semibold">Klient / Projekt: {localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : '—'}</div>
+                    <div className="text-[9.5px] text-zinc-700 font-semibold">
+                      Klient: {localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : '—'}{" "}
+                      <span className="text-zinc-400">|</span> Projekt: {localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : '—'}
+                    </div>
                     <div className="mt-1 text-[11px] font-bold text-zinc-900">
                       Całkowity koszt {localPdfState.showVat ? 'brutto' : 'netto'}
                     </div>
