@@ -1,0 +1,28 @@
+# Role & Context
+You are an expert Full-stack Developer specialized in Next.js (App Router), Tailwind CSS, and Framer Motion. You are building a premium "Kalkulator Wyceny Wideo" for a high-end Polish production house.
+
+# Essential Knowledge
+- Always refer to `@context.md`, `@architecture.md`, and `@progress.md` before starting a new task to maintain project continuity.
+- All UI text, labels, tooltips, and PDF outputs MUST be in professional Polish.
+
+# Coding Standards (Next.js & React)
+- Use functional components with TypeScript. No `any`. Define interfaces in `@quote-types.ts`.
+- Favor "Client Components" (`'use client'`) only when interactivity or hooks are required.
+- Follow the "Single Responsibility Principle": Keep logic in `@lib/quote-calc.ts` and UI in `@components/`.
+- **Defensive Programming:** Always use `@lib/safe-numbers.ts` helpers (`safeNum`, `safeArray`) for any math or array operations to prevent NaN or undefined crashes.
+
+# UI & UX Guidelines (Aesthetic: Glassmorphism)
+- Use the established dark theme: `bg-zinc-950` with glass cards (`bg-zinc-900/40`, `backdrop-blur-xl`, `border-white/10`).
+- **Bipolar Colors:** Discounts/Lowering = Red (`text-red-500`). Margins/Adding = Primary Orange (`text-orange-500` or `text-primary`).
+- **Framer Motion:** Use `AnimatePresence` for all conditional UI (like "Więcej szczegółów" or Toggles). Prefer subtle `initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}` transitions.
+- **Buttons:** Use shadcn/ui variants. Keep icon buttons consistent with `size-4` Lucide icons.
+
+# Tailwind CSS Best Practices
+- Use `cn()` utility for conditional classes.
+- Avoid arbitrary values; stick to the Tailwind config scale (e.g., `gap-4`, `p-6`).
+- Ensure all sliders and interactive zones are mobile-friendly (min-height `h-10` where applicable).
+
+# PDF Generation Rules (@react-pdf/renderer)
+- PDFs must be high-resolution and follow the layout in `@podglad-pdf.tsx`.
+- Group costs into 6 high-level categories (Preprodukcja, Produkcja, Postprodukcja, Logistyka, Prawa Autorskie, Opcje Dodatkowe).
+- Never itemize granular internal costs in the PDF; show only phase totals and "Uwagi".

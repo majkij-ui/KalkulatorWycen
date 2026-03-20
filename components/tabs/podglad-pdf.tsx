@@ -1,16 +1,18 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Download, Receipt } from 'lucide-react'
+import { FileDown, Receipt } from 'lucide-react'
+import { addDays, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { GlassCard } from '@/components/glass-card'
 import { useQuote } from '@/lib/quote-context'
-import { QuotePdfDocument } from '@/components/quote-pdf-document'
+import { QuotePdfDocument } from '@/components/pdf/quote-pdf-document'
 import { AnimatedCurrency } from '@/components/animated-currency'
-import { format } from 'date-fns'
+import { safeArray, safeNum } from '@/lib/safe-numbers'
 
 const container = {
   hidden: { opacity: 0 },
@@ -26,32 +28,79 @@ const item = {
 }
 
 export function PodgladPdfTab() {
-  const { breakdown, totals, formatCurrency, isCalculating } = useQuote()
+  const { breakdown, totals, formatCurrency, isCalculating, getTermsAndConditions, data } = useQuote()
   const [projectName, setProjectName] = useState('')
-  const [validUntil, setValidUntil] = useState('')
 
-  const defaultValidUntil = validUntil || format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
+  const { issueDateIso, validUntilIso } = useMemo(() => {
+    const issue = new Date()
+    return {
+      issueDateIso: format(issue, 'yyyy-MM-dd'),
+      validUntilIso: format(addDays(issue, 30), 'yyyy-MM-dd'),
+    }
+  }, [])
+
+  const phaseTotals = useMemo(() => {
+    const pre = breakdown?.find((p) => p.category === 'Preprodukcja')?.phaseNetto ?? 0
+    const pro = breakdown?.find((p) => p.category === 'Produkcja')?.phaseNetto ?? 0
+    const post = breakdown?.find((p) => p.category === 'Postprodukcja')?.phaseNetto ?? 0
+
+    const dodPhase = breakdown?.find((p) => p.category === 'Dodatkowe')
+    const dodItems = safeArray(dodPhase?.items)
+
+    const dojazd = safeNum(
+      dodItems.find((i) => i.label === 'Koszty dojazdu')?.lineNetto,
+      0,
+      0
+    )
+    const catering = safeNum(
+      dodItems.find((i) => i.label === 'Catering')?.lineNetto,
+      0,
+      0
+    )
+    const noclegi = safeNum(
+      dodItems.find((i) => i.label === 'Noclegi')?.lineNetto,
+      0,
+      0
+    )
+    const prawaAutorskie = safeNum(
+      dodItems.find((i) => i.label === 'Pełne przekazanie praw')?.lineNetto,
+      0,
+      0
+    )
+
+    return [
+      { category: 'Preprodukcja', phaseNetto: safeNum(pre, 0, 0) },
+      { category: 'Produkcja', phaseNetto: safeNum(pro, 0, 0) },
+      { category: 'Postprodukcja', phaseNetto: safeNum(post, 0, 0) },
+      { category: 'Logistyka (Catering + Nocleg + Dojazd)', phaseNetto: dojazd + catering + noclegi },
+      { category: 'Prawa Autorskie (Licencja / Przekazanie praw)', phaseNetto: prawaAutorskie },
+      { category: 'Opcje Dodatkowe', phaseNetto: 0 },
+    ]
+  }, [breakdown])
+
+  const terms = useMemo(() => getTermsAndConditions(), [getTermsAndConditions])
 
   const handleDownload = useCallback(async () => {
     const { pdf } = await import('@react-pdf/renderer')
     const doc = (
       <QuotePdfDocument
-        projectName={projectName}
-        validUntil={validUntil || defaultValidUntil}
-        breakdown={breakdown}
-        sumaNetto={totals.sumaNetto}
-        vat={totals.vat}
-        sumaBrutto={totals.sumaBrutto}
+        clientProjectName={projectName}
+        issueDateIso={issueDateIso}
+        validUntilIso={validUntilIso}
+        phaseTotals={phaseTotals}
+        totals={totals}
+        termsAndConditions={terms}
+        opcjeDodatkowe={data.opcjeDodatkowe}
       />
     )
     const blob = await pdf(doc).toBlob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `wycena-${projectName ? projectName.replace(/\s+/g, '-') : 'projekt'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+    a.download = `wycena-${projectName ? projectName.replace(/\s+/g, '-') : 'projekt'}-${issueDateIso}.pdf`
     a.click()
     URL.revokeObjectURL(url)
-  }, [breakdown, totals, projectName, validUntil, defaultValidUntil])
+  }, [data.opcjeDodatkowe, issueDateIso, phaseTotals, projectName, terms, totals, validUntilIso])
 
   return (
     <motion.div
@@ -63,7 +112,7 @@ export function PodgladPdfTab() {
       <motion.div variants={item} className="space-y-4">
         <div className="grid gap-4 rounded-xl border-t border-l border-white/10 bg-zinc-900/30 p-4 backdrop-blur-xl sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="project-name" className="text-zinc-400">Nazwa projektu</Label>
+            <Label htmlFor="project-name" className="text-zinc-400">Klient / Projekt</Label>
             <Input
               id="project-name"
               value={projectName}
@@ -72,117 +121,92 @@ export function PodgladPdfTab() {
               className="border-white/10 bg-white/5 text-foreground"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="valid-until" className="text-zinc-400">Data ważności oferty</Label>
-            <Input
-              id="valid-until"
-              type="date"
-              value={validUntil || defaultValidUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
-              className="border-white/10 bg-white/5 text-foreground"
-            />
-          </div>
         </div>
       </motion.div>
 
       <motion.div variants={item}>
-        <div className="overflow-hidden rounded-xl border-t border-l border-white/10 bg-zinc-900/30 backdrop-blur-xl">
-          <div className="border-b border-white/10 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Receipt className="size-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Podsumowanie wyceny</h3>
-                <p className="text-xs text-zinc-400">Szczegółowy rozkład kosztów projektu</p>
-              </div>
+        <GlassCard className="relative">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Receipt className="size-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Podgląd na żywo</h3>
+              <p className="text-xs text-zinc-400">Premium podsumowanie wyceny (netto)</p>
             </div>
           </div>
 
           {isCalculating ? (
-            <div className="flex flex-col gap-3 px-6 py-8">
+            <div className="flex flex-col gap-3 py-2">
               <div className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
               <div className="h-4 w-full animate-pulse rounded bg-white/10" />
               <div className="h-4 w-5/6 animate-pulse rounded bg-white/10" />
-              <div className="mt-4 h-8 w-1/2 animate-pulse rounded bg-white/10" />
             </div>
           ) : (
             <>
-              <div className="divide-y divide-white/5">
-                {(breakdown ?? []).map((section, sectionIdx) => (
-                  <motion.div
-                    key={section.category}
-                    variants={item}
-                    layout
-                    className="px-6 py-4"
-                  >
-                    <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary/80">
-                      {section.category}
-                    </h4>
-                    <div className="space-y-2">
-                      {(section.items ?? []).map((lineItem, i) => (
-                        <div
-                          key={`${sectionIdx}-${i}`}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-zinc-400">{lineItem.label}</span>
-                            <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs text-zinc-500">
-                              {lineItem.value}
-                            </span>
-                          </div>
-                          <span className={`font-medium tabular-nums ${lineItem.lineNetto > 0 ? 'text-white' : 'text-zinc-500'}`}>
-                            {formatCurrency(lineItem.lineNetto)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
+              <div className="space-y-3">
+                {phaseTotals.map((p, idx) => (
+                  <div key={`${p.category}-${idx}`} className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-400">{p.category}</span>
+                    <span className="font-medium tabular-nums text-white">{formatCurrency(p.phaseNetto)}</span>
+                  </div>
                 ))}
               </div>
 
-              <div className="border-t border-white/10 bg-primary/5 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-white">Suma netto</span>
-                  <AnimatedCurrency
-                    value={totals.sumaNetto}
-                    format={formatCurrency}
-                    className="text-2xl font-bold tabular-nums text-primary"
-                    duration={0.5}
-                  />
+              {data.opcjeDodatkowe?.trim() ? (
+                <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-primary/80">Opcje Dodatkowe</span>
+                    <span className="text-xs text-zinc-500">opis</span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-400">
+                    {data.opcjeDodatkowe}
+                  </p>
                 </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">VAT (23%)</span>
-                  <AnimatedCurrency
-                    value={totals.vat}
-                    format={formatCurrency}
-                    className="text-sm tabular-nums text-zinc-400"
-                    duration={0.5}
-                  />
-                </div>
-                <Separator className="my-3 bg-white/10" />
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-white">Suma brutto</span>
-                  <AnimatedCurrency
-                    value={totals.sumaBrutto}
-                    format={formatCurrency}
-                    className="text-2xl font-bold tabular-nums text-white"
-                    duration={0.5}
-                  />
-                </div>
+              ) : null}
+
+              <Separator className="my-5 bg-white/10" />
+
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Suma netto</span>
+                <AnimatedCurrency
+                  value={totals.sumaNetto}
+                  format={formatCurrency}
+                  className="text-2xl font-bold tabular-nums text-primary"
+                  duration={0.5}
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-sm text-zinc-400">VAT (23%)</span>
+                <AnimatedCurrency
+                  value={totals.vat}
+                  format={formatCurrency}
+                  className="text-sm tabular-nums text-zinc-400"
+                  duration={0.5}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-lg font-bold text-white">Suma brutto</span>
+                <AnimatedCurrency
+                  value={totals.sumaBrutto}
+                  format={formatCurrency}
+                  className="text-2xl font-bold tabular-nums text-white"
+                  duration={0.5}
+                />
               </div>
             </>
           )}
-        </div>
+        </GlassCard>
       </motion.div>
 
       <motion.div variants={item}>
         <Button
           onClick={handleDownload}
           size="lg"
+          disabled={isCalculating}
           className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
         >
-          <Download className="size-5" />
+          <FileDown className="size-5" />
           Pobierz wycenę (PDF)
         </Button>
       </motion.div>
