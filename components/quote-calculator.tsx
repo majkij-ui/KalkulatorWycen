@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ClipboardList, Clapperboard, Scissors, PlusCircle, FileDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -102,6 +102,17 @@ function QuoteCalculatorInner() {
 }
 
 export function QuoteCalculator() {
+  const [mounted, setMounted] = useState(false)
+
+  // Ensures we only render after hydration to prevent ID mismatches.
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return <div className="min-h-screen bg-zinc-950" />
+  }
+
   return (
     <QuoteProvider>
       <QuoteCalculatorInner />

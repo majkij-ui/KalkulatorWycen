@@ -342,3 +342,32 @@ export function getBreakdown(data: QuoteData): LegacyBreakdownPhase[] {
     },
   ]
 }
+
+// =========================
+// PDF (react-to-print) state
+// =========================
+
+export type PdfRowKey = 'preprodukcja' | 'ekipa' | 'sprzet' | 'logistyka' | 'postprodukcja' | 'inne'
+
+export interface PdfRowState {
+  key: PdfRowKey
+  title: string
+  opis: string
+  cenaNetto: number
+}
+
+export interface LocalPdfState {
+  projectName: string
+  issueDateIso: string
+  validUntilIso: string
+
+  showVat: boolean // if true, UI/print shows gross values (VAT 23%)
+
+  rows: Record<PdfRowKey, PdfRowState>
+
+  materialyKoncowe: string
+  opcjeDodatkowe: string
+  portfolioLinksText: string
+
+  termsAndConditions: string[]
+}

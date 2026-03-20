@@ -247,6 +247,82 @@ export function getBreakdownWithPricing(
   ]
 }
 
+export function getProductionEkipaSprzetNetto(
+  data: QuoteData,
+  tier: PricingTier,
+  marginMultiplier: number,
+  pricing: PricingConfigShape
+): { ekipaNetto: number; sprzetNetto: number } {
+  const pro = pricing.produkcja
+
+  // Roles vs equipment are split deterministically:
+  // - Ekipa filmowa: rezOp, asystent, gafer, dzwiekowiec, mua, aktor, model, statysta (+ ewentualne dopłaty Reż-Op)
+  // - Sprzęt filmowy: kamery (Sony/Red), obiektywy, stabilizacja, podgląd, światło, dron (+ ewentualne dopłaty Dron)
+  if (!data.isDetailedProdukcja) {
+    const days = safeNum(data.dniZdjeciowe, 0, 0)
+    const crew = safeNum(data.wielkoscEkipy, 1, 1)
+    const stawkaOp = pro.stawkaOperatoraSzybkaWycena[tier]
+
+    const pakietKey = data.klasaSprzetu
+    const pakiet =
+      pakietKey === 'minimalistyczny'
+        ? pro.pakietSprzetowyMinimalistyczny[tier]
+        : pakietKey === 'kinowy'
+          ? pro.pakietSprzetowyKinowy[tier]
+          : pro.pakietSprzetowyStandard[tier]
+
+    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
+    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena[tier] : 0
+
+    const ekipaBaseDayNetto = crew * stawkaOp + doplataRezOp
+    const sprzetBaseDayNetto = pakiet + doplataDron
+
+    return {
+      ekipaNetto: applyMargin(ekipaBaseDayNetto * days, marginMultiplier),
+      sprzetNetto: applyMargin(sprzetBaseDayNetto * days, marginMultiplier),
+    }
+  }
+
+  let ekipaNetto = 0
+  let sprzetNetto = 0
+
+  safeArray<ShootingDay>(data.detailedShootingDays).forEach((day) => {
+    const rolesNetto =
+      day.rezOp * pro.rezOp[tier] +
+      day.asystent * pro.asystentOperator[tier] +
+      day.gafer * pro.gafer[tier] +
+      day.dzwiekowiec * pro.dzwiekowiec[tier] +
+      day.mua * pro.mua[tier] +
+      day.aktor * pro.aktor[tier] +
+      day.model * pro.model[tier] +
+      day.statysta * pro.statystaEpizodysta[tier]
+
+    let equipmentNetto = 0
+    equipmentNetto += day.kameraSony * pro.kameraSonyMirrorless[tier]
+    equipmentNetto += day.kameraRed * pro.kameraRedKomodoX[tier]
+
+    if (day.obiektywy === 'standard') equipmentNetto += pro.obiektywyStandard[tier]
+    if (day.obiektywy === 'rental') equipmentNetto += pro.obiektywyRental[tier]
+
+    if (day.stabilizacja === 'standard') equipmentNetto += pro.stabilizacjaStandard[tier]
+    if (day.stabilizacja === 'rental') equipmentNetto += pro.stabilizacjaRental[tier]
+
+    if (day.podglad === 'standard') equipmentNetto += pro.podgladStandard[tier]
+    if (day.podglad === 'rental') equipmentNetto += pro.podgladRental[tier]
+
+    if (day.swiatlo === 'standard') equipmentNetto += pro.swiatloStandard[tier]
+    if (day.swiatlo === 'rental') equipmentNetto += pro.swiatloRental[tier]
+
+    if (day.dron === 'dji') equipmentNetto += pro.dronDji[tier]
+    if (day.dron === 'fpv') equipmentNetto += pro.dronFpv[tier]
+
+    ekipaNetto += applyMargin(rolesNetto, marginMultiplier)
+    sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
+  })
+
+  return { ekipaNetto, sprzetNetto }
+}
+
 export function getTotals(
   data: QuoteData,
   tier: PricingTier,
