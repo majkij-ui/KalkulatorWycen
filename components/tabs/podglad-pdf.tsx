@@ -8,6 +8,7 @@ import { addDays, format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
 import { GlassCard } from '@/components/glass-card'
 import { useQuote } from '@/lib/quote-context'
@@ -30,6 +31,52 @@ const item = {
 }
 
 const VAT_RATE = 0.23
+
+const PDF_DRAFT_STORAGE_KEY = 'nonoise-pdf-draft'
+
+const PDF_ROW_KEYS: PdfRowKey[] = ['preprodukcja', 'ekipa', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
+
+function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfState {
+  if (!raw || typeof raw !== 'object') return fallback
+  const r = raw as Partial<LocalPdfState> & { [k: string]: unknown }
+
+  const draftRows = (r.rows && typeof r.rows === 'object' ? (r.rows as Record<string, unknown>) : {}) as Record<
+    PdfRowKey,
+    unknown
+  >
+
+  const coerceStr = (v: unknown, fb: string): string => (typeof v === 'string' ? v : fb)
+  const coerceBool = (v: unknown, fb: boolean): boolean => (typeof v === 'boolean' ? v : fb)
+
+  const nextRows: LocalPdfState['rows'] = { ...fallback.rows }
+  PDF_ROW_KEYS.forEach((key) => {
+    const base = fallback.rows[key]
+    const candidate = (draftRows as Record<PdfRowKey, any>)[key]
+    const candidateObj = candidate && typeof candidate === 'object' ? candidate : {}
+
+    nextRows[key] = {
+      key,
+      title: coerceStr(candidateObj?.title, base.title),
+      opis: coerceStr(candidateObj?.opis, base.opis),
+      cenaNetto: safeNum(candidateObj?.cenaNetto, base.cenaNetto, 0),
+    }
+  })
+
+  return {
+    ...fallback,
+    clientName: coerceStr(r.clientName, fallback.clientName),
+    projectName: coerceStr(r.projectName, fallback.projectName),
+    issueDateIso: coerceStr(r.issueDateIso, fallback.issueDateIso),
+    validUntilIso: coerceStr(r.validUntilIso, fallback.validUntilIso),
+    terminZdjec: coerceStr(r.terminZdjec, fallback.terminZdjec),
+    showVat: coerceBool(r.showVat, fallback.showVat),
+    rows: nextRows,
+    materialyKoncowe: coerceStr(r.materialyKoncowe, fallback.materialyKoncowe),
+    opcjeDodatkowe: coerceStr(r.opcjeDodatkowe, fallback.opcjeDodatkowe),
+    portfolioLinksText: coerceStr(r.portfolioLinksText, fallback.portfolioLinksText),
+    termsAndConditions: safeArray<string>(r.termsAndConditions).slice(0, 200),
+  }
+}
 
 const ROWS: { key: PdfRowKey; title: string }[] = [
   { key: 'preprodukcja', title: 'Preprodukcja' },
@@ -166,16 +213,13 @@ export function PodgladPdfTab() {
   const issueDatePl = useMemo(() => format(new Date(), 'dd.MM.yyyy'), [])
   const validUntilPl = useMemo(() => format(addDays(new Date(), 30), 'dd.MM.yyyy'), [])
 
+  const [draftHydrationStatus, setDraftHydrationStatus] = useState<'loading' | 'ready'>('loading')
+  const [isUsingDraft, setIsUsingDraft] = useState(false)
+  const [showDraftPrompt, setShowDraftPrompt] = useState(false)
+
   const terms = useMemo(() => getTermsAndConditions(), [getTermsAndConditions])
   const [uwagiManualText, setUwagiManualText] = useState('')
-
-  const mergedTerms = useMemo(() => {
-    const manual = (uwagiManualText ?? '')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-    return [...terms, ...manual]
-  }, [terms, uwagiManualText])
+  // mergedTerms is computed later (after localPdfState + draft mode are known)
 
   const touchedRowsRef = useRef<Record<PdfRowKey, boolean>>({
     preprodukcja: false,
@@ -266,6 +310,49 @@ export function PodgladPdfTab() {
   const [localPdfState, setLocalPdfState] = useState<LocalPdfState>(() => buildInitialState())
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      setDraftHydrationStatus('ready')
+      return
+    }
+
+    try {
+      const raw = localStorage.getItem(PDF_DRAFT_STORAGE_KEY)
+      if (!raw) {
+        setDraftHydrationStatus('ready')
+        return
+      }
+
+      const parsed: unknown = JSON.parse(raw)
+      const coerced = coerceLocalPdfDraft(parsed, localPdfState)
+      setLocalPdfState(coerced)
+      setIsUsingDraft(true)
+      setShowDraftPrompt(true)
+
+      // Ensure editor inputs (bound to global QuoteState) reflect the draft.
+      updateField('clientName', coerced.clientName)
+      updateField('projectName', coerced.projectName)
+    } catch {
+      // ignore corrupted draft
+    } finally {
+      setDraftHydrationStatus('ready')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (draftHydrationStatus !== 'ready') return
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(PDF_DRAFT_STORAGE_KEY, JSON.stringify(localPdfState))
+    } catch {
+      // ignore write failures
+    }
+  }, [draftHydrationStatus, localPdfState])
+
+  useEffect(() => {
+    if (draftHydrationStatus !== 'ready') return
+    if (isUsingDraft) return
+
     const init = buildInitialState()
     setLocalPdfState((prev) => {
       const nextRows = { ...init.rows }
@@ -285,11 +372,79 @@ export function PodgladPdfTab() {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [breakdown, totals?.sumaNetto, data, pricingTier, pricingConfig, marginMultiplier, terms])
+  }, [breakdown, totals?.sumaNetto, data, pricingTier, pricingConfig, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
 
   const totalNetto = useMemo(() => {
     return ROWS.reduce((sum, r) => sum + safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0), 0)
   }, [localPdfState.rows])
+
+  const effectiveTerms = useMemo(() => {
+    return isUsingDraft ? localPdfState.termsAndConditions : terms
+  }, [isUsingDraft, localPdfState.termsAndConditions, terms])
+
+  const mergedTerms = useMemo(() => {
+    const manual = (uwagiManualText ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    return [...effectiveTerms, ...manual]
+  }, [effectiveTerms, uwagiManualText])
+
+  const NETTO_DISCLAIMER = 'Podane kwoty są kwotami netto.'
+  const displayTerms = useMemo(() => {
+    if (localPdfState.showVat) {
+      return mergedTerms.filter((t) => !t.includes(NETTO_DISCLAIMER))
+    }
+    return mergedTerms.map((t) =>
+      t.includes(NETTO_DISCLAIMER)
+        ? 'Sprzedaż na fakturze bez VAT, kwoty netto są równe kwotom brutto.'
+        : t
+    )
+  }, [localPdfState.showVat, mergedTerms])
+
+  const resetEditorSyncFlags = () => {
+    PDF_ROW_KEYS.forEach((key) => {
+      touchedRowsRef.current[key] = false
+    })
+    touchedOpcjeRef.current = false
+  }
+
+  const handleRestoreFromCalculator = () => {
+    const init = buildInitialState()
+    resetEditorSyncFlags()
+    setUwagiManualText('')
+
+    try {
+      localStorage.removeItem(PDF_DRAFT_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+
+    setIsUsingDraft(false)
+    setShowDraftPrompt(false)
+    setLocalPdfState(init)
+  }
+
+  const handleContinueEditing = () => {
+    setShowDraftPrompt(false)
+    setIsUsingDraft(true)
+  }
+
+  const handleClearEditor = () => {
+    const init = buildInitialState()
+    resetEditorSyncFlags()
+    setUwagiManualText('')
+
+    try {
+      localStorage.removeItem(PDF_DRAFT_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+
+    setIsUsingDraft(false)
+    setShowDraftPrompt(false)
+    setLocalPdfState(init)
+  }
 
   const printRef = useRef<HTMLDivElement | null>(null)
   const originalDocumentTitleRef = useRef<string | null>(null)
@@ -370,6 +525,26 @@ export function PodgladPdfTab() {
         </div>
       </motion.div>
 
+      {showDraftPrompt && (
+        <Alert
+          variant="default"
+          className="border-white/10 bg-zinc-900/30 text-zinc-200 px-4 py-3 backdrop-blur-xl"
+        >
+          <AlertTitle className="text-zinc-100">Wykryto zapisaną wersję edytorską.</AlertTitle>
+          <AlertDescription className="text-zinc-300">
+            Możesz zachować ręczne zmiany albo przywrócić aktualne przeliczenia z kalkulatora.
+          </AlertDescription>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button variant="outline" onClick={handleRestoreFromCalculator} className="w-full sm:w-auto">
+              Pobierz nowe dane z kalkulatora
+            </Button>
+            <Button onClick={handleContinueEditing} className="w-full sm:w-auto">
+              Kontynuuj bieżący PDF
+            </Button>
+          </div>
+        </Alert>
+      )}
+
       <motion.div variants={item}>
         <GlassCard className="relative">
           <div className="mb-5 flex items-center gap-3">
@@ -390,15 +565,20 @@ export function PodgladPdfTab() {
               />
               <div className="text-sm text-zinc-300">Pokaż VAT (23%)</div>
             </div>
-            <Button
-              onClick={handlePrint}
-              size="lg"
-              disabled={isCalculating}
-              className="w-full sm:w-auto gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <FileDown className="size-5" />
-              Pobierz PDF
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Button
+                onClick={handlePrint}
+                size="lg"
+                disabled={isCalculating}
+                className="w-full sm:w-auto gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <FileDown className="size-5" />
+                Pobierz PDF
+              </Button>
+              <Button variant="outline" onClick={handleClearEditor} size="lg" className="w-full sm:w-auto">
+                Wyczyść edytor
+              </Button>
+            </div>
           </div>
 
           <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/20 p-4">
@@ -437,7 +617,7 @@ export function PodgladPdfTab() {
                 <div className="rounded-md border border-zinc-200">
                   {ROWS.map((r) => {
                     const row = localPdfState.rows[r.key]
-                    const inputValue = netToInputValue(row.cenaNetto, localPdfState.showVat)
+                    const nettoValue = row.cenaNetto
 
                     return (
                       <div
@@ -454,11 +634,11 @@ export function PodgladPdfTab() {
                               min={0}
                               step={0.01}
                               disabled={isCalculating}
-                              value={Number.isFinite(inputValue) ? round2(inputValue) : 0}
+                            value={Number.isFinite(nettoValue) ? round2(nettoValue) : 0}
                               onChange={(e) => {
                                 const raw = e.target.value
                                 const parsed = safeNum(raw === '' ? 0 : Number.parseFloat(raw), 0, 0)
-                                const nextNet = round2(inputToNet(parsed, localPdfState.showVat))
+                              const nextNet = round2(parsed)
                                 touchedRowsRef.current[r.key] = true
                                 setLocalPdfState((prev) => ({
                                   ...prev,
@@ -474,6 +654,8 @@ export function PodgladPdfTab() {
                               className="w-28 rounded-md border border-zinc-200 bg-white/80 px-2 py-2 text-right text-[12px] font-bold tabular-nums text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
                             />
                           </div>
+
+                          {/* Przy VAT ON pokazujemy w listingu wyłącznie netto (reszta logiki VAT pozostaje w Total bar). */}
                         </div>
 
                         <div className="col-span-6">
@@ -501,13 +683,32 @@ export function PodgladPdfTab() {
                   })}
                 </div>
 
-                <div className="mt-4 flex items-baseline justify-between border-t border-zinc-200 pt-3">
-                  <div className="text-[11px] font-bold text-zinc-900">
-                    Total: {localPdfState.showVat ? 'brutto' : 'netto'}
-                  </div>
-                  <div className="text-[22px] font-black text-primary tabular-nums">
-                    {formatCurrency(localPdfState.showVat ? totalNetto * (1 + VAT_RATE) : totalNetto)}
-                  </div>
+                <div className="mt-4 rounded-lg bg-zinc-950 p-4 text-white">
+                  {localPdfState.showVat ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
+                        <span className="text-zinc-300">Suma Netto</span>
+                        <span className="tabular-nums text-white">{formatCurrency(totalNetto)}</span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
+                        <span className="text-zinc-300">VAT (23%)</span>
+                        <span className="tabular-nums text-white">{formatCurrency(totalNetto * VAT_RATE)}</span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-[18px] font-black tracking-tight">
+                        <span>SUMA BRUTTO</span>
+                        <span className="text-primary tabular-nums">
+                          {formatCurrency(totalNetto * (1 + VAT_RATE))}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-baseline justify-between text-[10pt] font-bold uppercase tracking-tight">
+                      <span>CAŁKOWITY KOSZT PROJEKTU</span>
+                      <span className="text-primary tabular-nums text-[22px] font-black">
+                        {formatCurrency(totalNetto)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5 grid gap-4">
@@ -556,9 +757,9 @@ export function PodgladPdfTab() {
                     <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-700 mb-2">
                       UWAGI
                     </div>
-                    {mergedTerms.length > 0 ? (
+                    {displayTerms.length > 0 ? (
                       <ol className="list-decimal list-inside space-y-1 text-[10px] text-zinc-700">
-                        {mergedTerms.map((t, idx) => (
+                        {displayTerms.map((t, idx) => (
                           <li key={`${idx}-${t.slice(0, 18)}`}>{t}</li>
                         ))}
                       </ol>

@@ -16,7 +16,8 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
   const { showVat } = localPdfState
 
   const totalNetto = ROW_ORDER.reduce((sum, key) => sum + (localPdfState.rows[key]?.cenaNetto ?? 0), 0)
-  const totalDisplay = valueForDisplay(totalNetto, showVat)
+  const totalVat = totalNetto * VAT_RATE
+  const totalBrutto = totalNetto + totalVat
 
   const portfolioLinks = localPdfState.portfolioLinksText
     .split('\n')
@@ -29,13 +30,10 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
   const currentDate = localPdfState.issueDateIso || '—'
 
   const terms = localPdfState.termsAndConditions ?? []
-  const adjustedTerms = !showVat
-    ? terms.map((t) =>
-        t.includes('Podane kwoty są kwotami netto.')
-          ? 'Sprzedaż na fakturze bez VAT, kwoty netto są równe kwotom brutto.'
-          : t
-      )
-    : terms
+  const NETTO_DISCLAIMER = 'Podane kwoty są kwotami netto.'
+  const adjustedTerms = showVat
+    ? terms.filter((t) => !t.includes(NETTO_DISCLAIMER))
+    : terms.map((t) => (t.includes(NETTO_DISCLAIMER) ? 'Sprzedaż na fakturze bez VAT, kwoty netto są równe kwotom brutto.' : t))
 
   return (
     <div
@@ -102,14 +100,15 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
           <tbody>
             {ROW_ORDER.map((key) => {
               const row = localPdfState.rows[key]
-              const displayValue = valueForDisplay(row?.cenaNetto ?? 0, showVat)
+              const nettoValue = row?.cenaNetto ?? 0
+              const bruttoValue = nettoValue + nettoValue * VAT_RATE
               return (
                 <tr key={key}>
                   <td className="border-b border-zinc-200 py-2 px-3 font-bold w-1/4 align-top">
                     {row?.title ?? '—'}
                   </td>
                   <td className="border-b border-zinc-200 py-2 px-3 w-1/6 text-right align-top tabular-nums whitespace-nowrap">
-                    {formatCurrency(displayValue)}
+                    <div className="text-[9.5pt] font-bold">{formatCurrency(nettoValue)}</div>
                   </td>
                   <td className="border-b border-zinc-200 py-2 px-3 w-7/12 text-zinc-600 leading-relaxed align-top whitespace-pre-wrap">
                     {row?.opis?.trim() ? row.opis.trim() : '—'}
@@ -119,11 +118,28 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
             })}
 
             <tr className="bg-zinc-900 text-white">
-              <td colSpan={2} className="p-3 font-bold text-left text-[8pt] uppercase tracking-tight">
-                CAŁKOWITY KOSZT PROJEKTU (NETTO)
-              </td>
-              <td className="p-3 text-right font-extrabold text-[11pt] text-primary tabular-nums">
-                {formatCurrency(totalDisplay)}
+              <td colSpan={3} className="p-3">
+                {showVat ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
+                      <span className="text-zinc-200">Suma Netto</span>
+                      <span className="tabular-nums text-zinc-100">{formatCurrency(totalNetto)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
+                      <span className="text-zinc-200">VAT (23%)</span>
+                      <span className="tabular-nums text-zinc-100">{formatCurrency(totalVat)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between text-[12pt] font-black tracking-tight">
+                      <span>SUMA BRUTTO</span>
+                      <span className="text-primary tabular-nums">{formatCurrency(totalBrutto)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline justify-between text-[9pt] font-bold uppercase tracking-tight">
+                    <span>CAŁKOWITY KOSZT PROJEKTU</span>
+                    <span className="text-primary tabular-nums text-[11pt] font-extrabold">{formatCurrency(totalNetto)}</span>
+                  </div>
+                )}
               </td>
             </tr>
           </tbody>
