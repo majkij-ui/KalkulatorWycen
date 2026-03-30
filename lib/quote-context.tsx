@@ -1,11 +1,13 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
-import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate } from './quote-types'
+import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
 import type { PricingTier, PricingConfigShape, TierPrices } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
 import { safeNum, safeArray } from './safe-numbers'
+import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
+import { buildPersistedSnapshot } from './storage'
 
 interface QuoteContextValue {
   data: QuoteData
@@ -82,6 +84,16 @@ const TIER_LABELS: Record<PricingTier, string> = {
   agresywny: 'Agresywny (Agency)',
 }
 
+function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
+  const merged: QuoteData = { ...defaultQuoteData, ...partial }
+  merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
+  merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
+  if (merged.dniMontazu != null && merged.crudeEditCount === undefined) {
+    merged.crudeEditCount = merged.dniMontazu
+  }
+  return merged
+}
+
 export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<QuoteData>(defaultQuoteData)
   const [isCalculating, setIsCalculating] = useState(false)
@@ -89,9 +101,27 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [marginMultiplier, setMarginMultiplier] = useState(1.0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
+  /** Po `loadPersistedSnapshot` — bez zapisu przed przywróceniem (SSR-safe: brak odczytu localStorage w initializerze). */
+  const [restorationComplete, setRestorationComplete] = useState(false)
 
-  useEffect(() => {
-    setTemplates(loadTemplatesFromStorage())
+  const applyPersistedSettings = useCallback((saved: PersistedAppSettings) => {
+    if (saved.data) {
+      setData(mergeQuoteDataPartial(saved.data))
+    }
+    if (saved.pricingTier && saved.pricingTier in TIER_LABELS) {
+      setPricingTierState(saved.pricingTier)
+    }
+    if (typeof saved.marginMultiplier === 'number' && Number.isFinite(saved.marginMultiplier)) {
+      setMarginMultiplier(saved.marginMultiplier)
+    }
+    if (saved.pricingConfig && typeof saved.pricingConfig === 'object') {
+      setPricingConfigState(saved.pricingConfig)
+      savePricingConfig(saved.pricingConfig)
+    }
+    if (Array.isArray(saved.templates)) {
+      setTemplates(saved.templates)
+      saveTemplatesToStorage(saved.templates)
+    }
   }, [])
 
   const reloadPricingFromStorage = useCallback(() => {
@@ -109,8 +139,38 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    setPricingConfigState(getPricingConfig())
-  }, [])
+    let cancelled = false
+    void loadPersistedSnapshot()
+      .then((saved) => {
+        if (cancelled || !saved) return
+        applyPersistedSettings(saved)
+      })
+      .finally(() => {
+        if (!cancelled) setRestorationComplete(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [applyPersistedSettings])
+
+  const PERSIST_DEBOUNCE_MS = 500
+
+  useEffect(() => {
+    if (!restorationComplete) return
+    const snapshot = buildPersistedSnapshot({
+      data,
+      pricingTier,
+      marginMultiplier,
+      pricingConfig,
+      templates,
+    })
+    const t = window.setTimeout(() => {
+      void savePersistedSnapshot(snapshot).catch(() => {
+        /* Tauri / quota */
+      })
+    }, PERSIST_DEBOUNCE_MS)
+    return () => window.clearTimeout(t)
+  }, [restorationComplete, data, pricingTier, marginMultiplier, pricingConfig, templates])
 
   const updateField = useCallback(<K extends keyof QuoteData>(key: K, value: QuoteData[K]) => {
     setData(prev => ({ ...prev, [key]: value }))
@@ -324,13 +384,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     if (!template) return
     setIsCalculating(true)
     setTimeout(() => {
-      const merged: QuoteData = { ...defaultQuoteData, ...template.state }
-      merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
-      merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
-      if (merged.dniMontazu != null && merged.crudeEditCount === undefined) {
-        merged.crudeEditCount = merged.dniMontazu
-      }
-      setData(merged)
+      setData(mergeQuoteDataPartial(template.state))
       setIsCalculating(false)
     }, 500)
   }, [templates])
