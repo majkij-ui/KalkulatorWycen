@@ -51,9 +51,9 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
       </div>
 
       {/* Metadata */}
-      <div className="mt-4 mb-4 grid grid-cols-2 gap-20 text-[9pt]">
+      <div className="mt-4 mb-4 grid grid-cols-2 gap-8 text-[9pt]">
         {/* Wykonawca: 3 linie */}
-        <div className="text-zinc-900 leading-tight">
+        <div className="text-zinc-900 leading-tight min-w-0">
           <div>
             <span className="font-bold">Wykonawca:</span> Nonoise Media
           </div>
@@ -66,16 +66,20 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
         </div>
 
         {/* Metadata right: 3 linie */}
-        <div className="text-right leading-tight text-zinc-900">
-          <div className="whitespace-nowrap">
-            <span className="font-bold">Klient:</span> {clientName} <span className="text-zinc-400">|</span>{' '}
-            <span className="font-bold">Projekt:</span> {projectName}
+        <div className="text-right leading-tight text-zinc-900 min-w-0">
+          <div>
+            <span className="font-bold">Klient:</span>{' '}
+            <span className="break-words">{clientName}</span>
           </div>
-          <div className="mt-1.5 whitespace-nowrap">
+          <div className="mt-1">
+            <span className="font-bold">Projekt:</span>{' '}
+            <span className="break-words">{projectName}</span>
+          </div>
+          <div className="mt-1">
             <span className="font-bold">Data sporządzenia:</span> {currentDate}{' '}
             <span className="text-zinc-600">(Termin ważności: 30 dni)</span>
           </div>
-          <div className="mt-1.5">
+          <div className="mt-1">
             <span className="font-bold">Termin zdjęć:</span> {terminZdjec}
           </div>
         </div>

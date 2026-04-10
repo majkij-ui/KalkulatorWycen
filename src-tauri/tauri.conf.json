@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NonoiseMedia QG",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.michal.quotegen",
   "build": {
     "frontendDist": "../out",
@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Quote Gen",
-        "width": 800,
-        "height": 600,
+        "width": 1400,
+        "height": 900,
         "resizable": true,
         "fullscreen": false
       }
