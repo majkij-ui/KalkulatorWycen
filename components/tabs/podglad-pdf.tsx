@@ -16,6 +16,7 @@ import { PrintableQuote } from '@/components/pdf/printable-quote'
 import { safeArray, safeNum } from '@/lib/safe-numbers'
 import { getProductionEkipaSprzetNetto, type LineItemRow } from '@/lib/quote-calc'
 import type { LocalPdfState, PdfRowKey, QuoteData } from '@/lib/quote-types'
+import { isTauriRuntime } from '@/lib/storage'
 
 const container = {
   hidden: { opacity: 0 },
@@ -448,11 +449,69 @@ export function PodgladPdfTab() {
 
   const printRef = useRef<HTMLDivElement | null>(null)
   const originalDocumentTitleRef = useRef<string | null>(null)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
 
   const getDynamicDocumentTitle = (): string => {
     const client = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : 'Klienta'
     const project = localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : 'Projektu'
     return `Wycena Wideo | NonoiseMedia dla ${client} | ${project}`
+  }
+
+  const handleTauriExport = async () => {
+    const el = printRef.current
+    if (!el) return
+    setIsExportingPdf(true)
+
+    const prevElStyle = el.getAttribute('style') ?? ''
+    el.setAttribute('style', 'position:absolute;left:-9999px;top:0;display:block;')
+
+    // Wait one frame so the browser lays out the element before html2canvas reads it
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    try {
+      // html2canvas-pro is a maintained fork of html2canvas that adds native support
+      // for CSS Color 4 functions (lab/lch/oklab/oklch/color). Required on WKWebView
+      // (macOS Tauri), because getComputedStyle() there returns colors in their original
+      // color space, and Tailwind v4 emits oklch() throughout.
+      const html2canvas = (await import('html2canvas-pro')).default
+      const { jsPDF } = await import('jspdf')
+      const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
+
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      })
+
+      // Build PDF, handling content taller than one A4 page
+      const pdfDoc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait' })
+      const pdfW = pdfDoc.internal.pageSize.getWidth()   // 210 mm
+      const pdfH = pdfDoc.internal.pageSize.getHeight()  // 297 mm
+      const totalContentH = (canvas.height * pdfW) / canvas.width
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+
+      let yOffset = 0
+      while (yOffset < totalContentH) {
+        pdfDoc.addImage(imgData, 'JPEG', 0, -yOffset, pdfW, totalContentH)
+        yOffset += pdfH
+        if (yOffset < totalContentH) pdfDoc.addPage()
+      }
+
+      // WKWebView blocks jsPDF's default <a download> approach (NSURLErrorCancelled
+      // -999), so we write the PDF bytes directly to the user's Downloads folder
+      // via the Tauri fs plugin. The capability for $DOWNLOAD/** is declared in
+      // src-tauri/capabilities/default.json.
+      const bytes = new Uint8Array(pdfDoc.output('arraybuffer'))
+      // Sanitize filename for filesystems (strip path separators and illegal chars)
+      const safeName = `${getDynamicDocumentTitle()}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+      await writeFile(safeName, bytes, { baseDir: BaseDirectory.Download })
+    } catch (err) {
+      console.error('Tauri PDF export failed:', err)
+    } finally {
+      el.setAttribute('style', prevElStyle)
+      setIsExportingPdf(false)
+    }
   }
 
   const handlePrint = useReactToPrint({
@@ -567,13 +626,13 @@ export function PodgladPdfTab() {
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Button
-                onClick={handlePrint}
+                onClick={isTauriRuntime() ? handleTauriExport : handlePrint}
                 size="lg"
-                disabled={isCalculating}
+                disabled={isCalculating || isExportingPdf}
                 className="w-full sm:w-auto gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <FileDown className="size-5" />
-                Pobierz PDF
+                {isExportingPdf ? 'Generowanie…' : 'Pobierz PDF'}
               </Button>
               <Button variant="outline" onClick={handleClearEditor} size="lg" className="w-full sm:w-auto">
                 Wyczyść edytor
