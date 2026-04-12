@@ -1,4 +1,4 @@
-import { DEFAULT_FORMAT_KEY, type PricingTier, type PricingConfigShape } from './pricing-config'
+import { DEFAULT_FORMAT_KEY, type PricingConfigShape } from './pricing-config'
 
 export type ScenarioType = 'brak' | 'podstawowy' | 'rozbudowany'
 /** Pakiet sprzętowy w trybie szybkiej wyceny (Produkcja) */
@@ -209,7 +209,8 @@ export interface SavedTemplate {
 /** Snapshot zapisany w `settings.json` (Tauri); opcjonalne pola scalane z domyślnymi */
 export interface PersistedAppSettings {
   data?: Partial<QuoteData>
-  pricingTier?: PricingTier
+  /** @deprecated Usunięto tiery; ignorowane przy wczytaniu */
+  pricingTier?: string
   marginMultiplier?: number
   pricingConfig?: PricingConfigShape
   templates?: SavedTemplate[]

@@ -206,7 +206,6 @@ export function PodgladPdfTab() {
     getTermsAndConditions,
     data,
     updateField,
-    pricingTier,
     pricingConfig,
     marginMultiplier,
   } = useQuote()
@@ -236,7 +235,7 @@ export function PodgladPdfTab() {
     const preNetto = safeNum(breakdown?.find((p) => p.category === 'Preprodukcja')?.phaseNetto, 0, 0)
     const postNetto = safeNum(breakdown?.find((p) => p.category === 'Postprodukcja')?.phaseNetto, 0, 0)
 
-    const { ekipaNetto, sprzetNetto } = getProductionEkipaSprzetNetto(data, pricingTier, marginMultiplier, pricingConfig)
+    const { ekipaNetto, sprzetNetto } = getProductionEkipaSprzetNetto(data, marginMultiplier, pricingConfig)
 
     const dodPhase = breakdown?.find((p) => p.category === 'Dodatkowe')
     const dodItems = safeArray<LineItemRow>(dodPhase?.items)
@@ -373,7 +372,7 @@ export function PodgladPdfTab() {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [breakdown, totals?.sumaNetto, data, pricingTier, pricingConfig, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
+  }, [breakdown, totals?.sumaNetto, data, pricingConfig, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
 
   const totalNetto = useMemo(() => {
     return ROWS.reduce((sum, r) => sum + safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0), 0)

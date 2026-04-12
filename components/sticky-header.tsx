@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { Settings, RotateCcw } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useQuote } from '@/lib/quote-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
 import { BipolarSlider } from '@/components/ui/bipolar-slider'
@@ -11,6 +12,26 @@ import { SettingsSheet } from '@/components/settings-sheet'
 export function StickyHeader() {
   const { totals, formatCurrency, resetToZero, marginMultiplier, setMarginMultiplier } = useQuote()
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [delta, setDelta] = useState<number | null>(null)
+  const prevTotalRef = useRef<number | null>(null)
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const current = totals.sumaNetto
+    const prev = prevTotalRef.current
+    // Skip first render (no previous value yet)
+    if (prev === null) {
+      prevTotalRef.current = current
+      return
+    }
+    if (current !== prev) {
+      const diff = current - prev
+      prevTotalRef.current = current
+      if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current)
+      setDelta(diff)
+      deltaTimerRef.current = setTimeout(() => setDelta(null), 2000)
+    }
+  }, [totals.sumaNetto])
 
   const displayPercent = Math.round((marginMultiplier - 1) * 100)
   const sign = displayPercent > 0 ? '+' : ''
@@ -45,12 +66,30 @@ export function StickyHeader() {
                 <p className="text-xs text-zinc-400">
                   Szacunkowy koszt (netto)
                 </p>
-                <AnimatedCurrency
-                  value={totals.sumaNetto}
-                  format={formatCurrency}
-                  className="text-lg font-semibold tabular-nums text-amber-400 sm:text-xl"
-                  duration={0.5}
-                />
+                <div className="relative inline-block">
+                  <AnimatedCurrency
+                    value={totals.sumaNetto}
+                    format={formatCurrency}
+                    className="text-lg font-semibold tabular-nums text-amber-400 sm:text-xl"
+                    duration={0.5}
+                  />
+                  <AnimatePresence>
+                    {delta !== null && (
+                      <motion.span
+                        key={delta}
+                        initial={{ opacity: 0, y: 6, scale: 0.85 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.9 }}
+                        transition={{ duration: 0.25, ease: 'easeOut' }}
+                        className={`absolute -right-1 -top-5 text-[11px] font-semibold tabular-nums whitespace-nowrap ${
+                          delta > 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {delta > 0 ? '+' : ''}{formatCurrency(delta)}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button

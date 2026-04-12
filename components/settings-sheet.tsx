@@ -14,19 +14,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useQuote, TIER_LABELS } from '@/lib/quote-context'
-import type { PricingTier } from '@/lib/pricing-config'
+import { useQuote } from '@/lib/quote-context'
 import { SettingsModal } from '@/components/settings-modal'
 import { BookmarkPlus, Trash2 } from 'lucide-react'
 
@@ -41,8 +33,6 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
     saveTemplate,
     deleteTemplate,
     loadTemplate,
-    pricingTier,
-    setPricingTier,
   } = useQuote()
   const [priceEditorOpen, setPriceEditorOpen] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
@@ -129,25 +119,6 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-zinc-400">Poziom stawek</Label>
-              <Select value={pricingTier} onValueChange={(v) => setPricingTier(v as PricingTier)}>
-                <SelectTrigger className="border-white/10 bg-white/5 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-white/10 bg-slate-900/95 text-white backdrop-blur-xl">
-                  {(['tani', 'standard', 'agresywny'] as const).map((t) => (
-                    <SelectItem
-                      key={t}
-                      value={t}
-                      className="text-white focus:bg-white/10 focus:text-white"
-                    >
-                      {TIER_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </SheetContent>
       </Sheet>

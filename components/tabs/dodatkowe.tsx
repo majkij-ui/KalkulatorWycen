@@ -87,8 +87,8 @@ export function DodatkoweTab() {
                 <Input
                   type="number"
                   min={0}
-                  max={500}
-                  value={Math.max(0, Math.min(500, Number(data.kosztDojazduKm) || 0))}
+                  max={1000}
+                  value={Math.max(0, Math.min(1000, Number(data.kosztDojazduKm) || 0))}
                   onChange={(e) => {
                     const raw = e.target.value
                     if (raw === '') {
@@ -96,25 +96,25 @@ export function DodatkoweTab() {
                       return
                     }
                     const n = Number(raw)
-                    updateField('kosztDojazduKm', Number.isFinite(n) ? Math.max(0, Math.min(500, n)) : 0)
+                    updateField('kosztDojazduKm', Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : 0)
                   }}
                   className="w-20 h-8 text-right bg-black/40 border-white/10 text-sm rounded-md tabular-nums text-white"
                 />
                 <span className="text-sm text-zinc-400">km</span>
               </div>
               <Slider
-                value={[Math.max(0, Math.min(500, Number(data.kosztDojazduKm) || 0))]}
-                onValueChange={([val]) => updateField('kosztDojazduKm', Math.max(0, Math.min(500, Number(val) ?? 0)))}
+                value={[Math.max(0, Math.min(1000, Number(data.kosztDojazduKm) || 0))]}
+                onValueChange={([val]) => updateField('kosztDojazduKm', Math.max(0, Math.min(1000, Number(val) ?? 0)))}
                 min={0}
-                max={500}
+                max={1000}
                 step={10}
                 className="flex-1 py-1"
               />
             </div>
           </LogistykaRow>
-          <div className="flex justify-between px-0 text-[10px] text-zinc-500">
+          <div className="flex justify-between px-0 text-[10px] text-zinc-1000">
             <span>0 km</span>
-            <span>500 km</span>
+            <span>1000 km</span>
           </div>
 
           <Separator className="my-6 bg-white/5" />
@@ -158,7 +158,7 @@ export function DodatkoweTab() {
                     />
                   </div>
                   {!data.cateringOverride ? (
-                    <span className="text-sm text-zinc-500">
+                    <span className="text-sm text-zinc-1000">
                       Wyliczono automatycznie: {totalCrewDays} osobodni
                     </span>
                   ) : (
@@ -252,7 +252,7 @@ export function DodatkoweTab() {
                     />
                   </div>
                   {!data.lodgingOverride ? (
-                    <span className="text-sm text-zinc-500">
+                    <span className="text-sm text-zinc-1000">
                       Wyliczono automatycznie: {totalCrewDays} osobodni
                     </span>
                   ) : (
@@ -490,8 +490,8 @@ export function DodatkoweTab() {
           <Textarea
             value={data.opcjeDodatkowe}
             onChange={(e) => updateField('opcjeDodatkowe', e.target.value)}
-            placeholder={'np. - ujęcia z drona FPV: 500 zł\n- dodatkowa wersja 9:16 (Reels): 800 zł'}
-            className="bg-black/40 border-white/10 resize-none min-h-[100px] text-sm text-white placeholder:text-zinc-500"
+            placeholder={'np. - ujęcia z drona FPV: 1000 zł\n- dodatkowa wersja 9:16 (Reels): 800 zł'}
+            className="bg-black/40 border-white/10 resize-none min-h-[100px] text-sm text-white placeholder:text-zinc-1000"
           />
         </GlassCard>
       </motion.div>

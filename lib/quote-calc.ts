@@ -1,7 +1,7 @@
 'use client'
 
 import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
-import type { PricingConfigShape, PricingTier } from './pricing-config'
+import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
 
 const VAT_RATE = 0.23
@@ -35,62 +35,61 @@ function applyMargin(value: number, marginMultiplier: number): number {
   return value * marginMultiplier
 }
 
-function getFormatTierPrices(post: PricingConfigShape['postprodukcja'], formatKey: string): { tani: number; standard: number; agresywny: number } {
+function getFormatPrice(post: PricingConfigShape['postprodukcja'], formatKey: string): number {
   const key = formatKey?.startsWith('Format: ') ? formatKey : null
-  const prices = key ? post[key] : null
-  if (prices && typeof prices.tani === 'number' && typeof prices.standard === 'number' && typeof prices.agresywny === 'number') return prices
-  const firstFormatKey = Object.keys(post).find(k => k.startsWith('Format: '))
-  const fallback = firstFormatKey ? post[firstFormatKey] : null
-  if (fallback && typeof fallback.tani === 'number') return fallback
-  return { tani: 0, standard: 0, agresywny: 0 }
+  const price = key != null ? post[key] : undefined
+  if (typeof price === 'number') return price
+  // Fall back to first available format
+  const firstKey = Object.keys(post).find(k => k.startsWith('Format: '))
+  const fallback = firstKey != null ? post[firstKey] : undefined
+  return typeof fallback === 'number' ? fallback : 0
 }
 
-function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja'], tier: PricingTier): number {
-  const formatPrice = getFormatTierPrices(post, d.format)[tier]
+function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postprodukcja']): number {
+  const formatPrice = getFormatPrice(post, d.format)
   let total = formatPrice * d.ilosc
-  if (d.korekcjaBarwna === 'podstawowa') total += post.korekcjaBarwnaPodstawowa[tier]
-  if (d.korekcjaBarwna === 'zaawansowana') total += post.korekcjaBarwnaZaawansowana[tier]
-  if (d.animacje === '2d') total += post.animacje2d[tier]
-  if (d.animacje === 'ai') total += post.animacjeAi[tier]
-  if (d.muzyka === 'copyfree') total += post.muzykaCopyfree[tier]
-  if (d.muzyka === 'kompozytor') total += post.muzykaKompozytor[tier]
-  if (d.soundDesign === 'prosty') total += post.soundDesignProsty[tier]
-  if (d.soundDesign === 'zlozony') total += post.soundDesignZlozony[tier]
-  if (d.masterDzwieku === 'podstawowy') total += post.masterDzwiekuPodstawowy[tier]
-  if (d.masterDzwieku === 'zlozony') total += post.masterDzwiekuZlozony[tier]
-  if (d.lektor === 'ai') total += post.lektorAi[tier]
-  if (d.lektor === 'studio') total += post.lektorStudio[tier]
+  if (d.korekcjaBarwna === 'podstawowa') total += post.korekcjaBarwnaPodstawowa
+  if (d.korekcjaBarwna === 'zaawansowana') total += post.korekcjaBarwnaZaawansowana
+  if (d.animacje === '2d') total += post.animacje2d
+  if (d.animacje === 'ai') total += post.animacjeAi
+  if (d.muzyka === 'copyfree') total += post.muzykaCopyfree
+  if (d.muzyka === 'kompozytor') total += post.muzykaKompozytor
+  if (d.soundDesign === 'prosty') total += post.soundDesignProsty
+  if (d.soundDesign === 'zlozony') total += post.soundDesignZlozony
+  if (d.masterDzwieku === 'podstawowy') total += post.masterDzwiekuPodstawowy
+  if (d.masterDzwieku === 'zlozony') total += post.masterDzwiekuZlozony
+  if (d.lektor === 'ai') total += post.lektorAi
+  if (d.lektor === 'studio') total += post.lektorStudio
   return total
 }
 
-function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja'], tier: PricingTier): number {
+function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja']): number {
   let total = 0
-  total += day.rezOp * pro.rezOp[tier]
-  total += day.asystent * pro.asystentOperator[tier]
-  total += day.gafer * pro.gafer[tier]
-  total += day.dzwiekowiec * pro.dzwiekowiec[tier]
-  total += day.mua * pro.mua[tier]
-  total += day.aktor * pro.aktor[tier]
-  total += day.model * pro.model[tier]
-  total += day.statysta * pro.statystaEpizodysta[tier]
-  total += day.kameraSony * pro.kameraSonyMirrorless[tier]
-  total += day.kameraRed * pro.kameraRedKomodoX[tier]
-  if (day.obiektywy === 'standard') total += pro.obiektywyStandard[tier]
-  if (day.obiektywy === 'rental') total += pro.obiektywyRental[tier]
-  if (day.stabilizacja === 'standard') total += pro.stabilizacjaStandard[tier]
-  if (day.stabilizacja === 'rental') total += pro.stabilizacjaRental[tier]
-  if (day.podglad === 'standard') total += pro.podgladStandard[tier]
-  if (day.podglad === 'rental') total += pro.podgladRental[tier]
-  if (day.swiatlo === 'standard') total += pro.swiatloStandard[tier]
-  if (day.swiatlo === 'rental') total += pro.swiatloRental[tier]
-  if (day.dron === 'dji') total += pro.dronDji[tier]
-  if (day.dron === 'fpv') total += pro.dronFpv[tier]
+  total += day.rezOp * pro.rezOp
+  total += day.asystent * pro.asystentOperator
+  total += day.gafer * pro.gafer
+  total += day.dzwiekowiec * pro.dzwiekowiec
+  total += day.mua * pro.mua
+  total += day.aktor * pro.aktor
+  total += day.model * pro.model
+  total += day.statysta * pro.statystaEpizodysta
+  total += day.kameraSony * pro.kameraSonyMirrorless
+  total += day.kameraRed * pro.kameraRedKomodoX
+  if (day.obiektywy === 'standard') total += pro.obiektywyStandard
+  if (day.obiektywy === 'rental') total += pro.obiektywyRental
+  if (day.stabilizacja === 'standard') total += pro.stabilizacjaStandard
+  if (day.stabilizacja === 'rental') total += pro.stabilizacjaRental
+  if (day.podglad === 'standard') total += pro.podgladStandard
+  if (day.podglad === 'rental') total += pro.podgladRental
+  if (day.swiatlo === 'standard') total += pro.swiatloStandard
+  if (day.swiatlo === 'rental') total += pro.swiatloRental
+  if (day.dron === 'dji') total += pro.dronDji
+  if (day.dron === 'fpv') total += pro.dronFpv
   return total
 }
 
 export function getBreakdownWithPricing(
   data: QuoteData,
-  tier: PricingTier,
   marginMultiplier: number,
   pricing: PricingConfigShape
 ): PhaseBreakdown[] {
@@ -102,7 +101,7 @@ export function getBreakdownWithPricing(
   const pre = pricing.preprodukcja
   if (!data.isDetailedPrepro) {
     const q = safeNum(data.dniDokumentacji, 0, 0)
-    const unitPrice = pre.dzienDokumentacji[tier]
+    const unitPrice = pre.dzienDokumentacji
     const value = q % 1 === 0 ? `${q} dni` : `${q} dni`.replace('.', ',')
     preItems.push({
       label: 'Dzień dokumentacji',
@@ -112,7 +111,7 @@ export function getBreakdownWithPricing(
       lineNetto: applyMargin(unitPrice * q, marginMultiplier),
     })
   } else {
-    const scenariuszNet = data.scenariusz === 'brak' ? 0 : data.scenariusz === 'podstawowy' ? pre.scenariuszPodstawowy[tier] : pre.scenariuszRozbudowany[tier]
+    const scenariuszNet = data.scenariusz === 'brak' ? 0 : data.scenariusz === 'podstawowy' ? pre.scenariuszPodstawowy : pre.scenariuszRozbudowany
     preItems.push({
       label: 'Scenariusz',
       value: data.scenariusz === 'brak' ? 'Brak' : data.scenariusz === 'podstawowy' ? 'Podstawowy' : 'Rozbudowany',
@@ -120,20 +119,20 @@ export function getBreakdownWithPricing(
       unitPriceNet: scenariuszNet,
       lineNetto: applyMargin(scenariuszNet, marginMultiplier),
     })
-    const wizjaNet = data.wizjaLokalna ? pre.wizjaLokalna[tier] : 0
+    const wizjaNet = data.wizjaLokalna ? pre.wizjaLokalna : 0
     preItems.push({
       label: 'Wizja lokalna',
       value: data.wizjaLokalna ? 'Tak' : 'Nie',
       quantity: data.wizjaLokalna ? 1 : 0,
-      unitPriceNet: pre.wizjaLokalna[tier],
+      unitPriceNet: pre.wizjaLokalna,
       lineNetto: applyMargin(wizjaNet, marginMultiplier),
     })
-    const kierNet = data.kierownikProdukcji ? pre.kierownikProdukcji[tier] : 0
+    const kierNet = data.kierownikProdukcji ? pre.kierownikProdukcji : 0
     preItems.push({
       label: 'Kierownik produkcji',
       value: data.kierownikProdukcji ? 'Tak' : 'Nie',
       quantity: data.kierownikProdukcji ? 1 : 0,
-      unitPriceNet: pre.kierownikProdukcji[tier],
+      unitPriceNet: pre.kierownikProdukcji,
       lineNetto: applyMargin(kierNet, marginMultiplier),
     })
   }
@@ -142,11 +141,11 @@ export function getBreakdownWithPricing(
   if (!data.isDetailedProdukcja) {
     const days = safeNum(data.dniZdjeciowe, 0, 0)
     const crew = safeNum(data.wielkoscEkipy, 1, 1)
-    const stawkaOp = pro.stawkaOperatoraSzybkaWycena[tier]
+    const stawkaOp = pro.stawkaOperatoraSzybkaWycena
     const pakietKey = data.klasaSprzetu
-    const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny[tier] : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy[tier] : pro.pakietSprzetowyStandard[tier]
-    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
-    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena[tier] : 0
+    const pakiet = pakietKey === 'minimalistyczny' ? pro.pakietSprzetowyMinimalistyczny : pakietKey === 'kinowy' ? pro.pakietSprzetowyKinowy : pro.pakietSprzetowyStandard
+    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena : 0
+    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena : 0
     const dayRate = crew * stawkaOp + pakiet + doplataRezOp + doplataDron
     const lineNetto = applyMargin(dayRate * days, marginMultiplier)
     const rezOpText = data.crudeRezOpSurcharge ? ' + Reż-Op' : ''
@@ -161,7 +160,7 @@ export function getBreakdownWithPricing(
     })
   } else {
     safeArray<ShootingDay>(data.detailedShootingDays).forEach((day, i) => {
-      const dayNet = computeShootingDayNet(day, pro, tier)
+      const dayNet = computeShootingDayNet(day, pro)
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
         value: 'Szczegółowa wycena',
@@ -176,7 +175,7 @@ export function getBreakdownWithPricing(
   if (!data.isDetailedPostpro) {
     const unit = data.crudeEditUnit
     const q = safeNum(data.crudeEditCount, 0, 0)
-    const unitPrice = unit === 'dni' ? post.montazZaDzien[tier] : post.montazZaGodzine[tier]
+    const unitPrice = unit === 'dni' ? post.montazZaDzien : post.montazZaGodzine
     const value = unit === 'dni'
       ? (q % 1 === 0 ? `${q} dni` : `${q} dni`.replace('.', ','))
       : `${q} godz.`
@@ -189,7 +188,7 @@ export function getBreakdownWithPricing(
     })
   } else {
     safeArray<Deliverable>(data.detailedDeliverables).forEach((del, i) => {
-      const net = computeDeliverableNet(del, post, tier)
+      const net = computeDeliverableNet(del, post)
       const formatLabel = del.format.startsWith('Format: ') ? del.format.slice(8) : del.format
       postItems.push({
         label: `Format / Dostawa ${i + 1}`,
@@ -203,7 +202,7 @@ export function getBreakdownWithPricing(
 
   const dod = pricing.dodatkowe
   const km = safeNum(data.kosztDojazduKm, 0, 0)
-  const kmRate = dod.kosztDojazduKm[tier]
+  const kmRate = dod.kosztDojazduKm
   const travelNetto = applyMargin(kmRate * km, marginMultiplier)
   dodatkoweItems.push({
     label: 'Koszty dojazdu',
@@ -228,7 +227,7 @@ export function getBreakdownWithPricing(
   const baseSubtotal = phasesWithoutCopyright.reduce((s, p) => s + p.phaseNetto, 0)
 
   if (data.copyrightType === 'przekazanie') {
-    const pct = dod.pelnePrzekazaniePrawProcent[tier]
+    const pct = dod.pelnePrzekazaniePrawProcent
     const surcharge = baseSubtotal * (pct / 100)
     dodatkoweItems.push({
       label: 'Pełne przekazanie praw',
@@ -249,30 +248,26 @@ export function getBreakdownWithPricing(
 
 export function getProductionEkipaSprzetNetto(
   data: QuoteData,
-  tier: PricingTier,
   marginMultiplier: number,
   pricing: PricingConfigShape
 ): { ekipaNetto: number; sprzetNetto: number } {
   const pro = pricing.produkcja
 
-  // Roles vs equipment are split deterministically:
-  // - Ekipa filmowa: rezOp, asystent, gafer, dzwiekowiec, mua, aktor, model, statysta (+ ewentualne dopłaty Reż-Op)
-  // - Sprzęt filmowy: kamery (Sony/Red), obiektywy, stabilizacja, podgląd, światło, dron (+ ewentualne dopłaty Dron)
   if (!data.isDetailedProdukcja) {
     const days = safeNum(data.dniZdjeciowe, 0, 0)
     const crew = safeNum(data.wielkoscEkipy, 1, 1)
-    const stawkaOp = pro.stawkaOperatoraSzybkaWycena[tier]
+    const stawkaOp = pro.stawkaOperatoraSzybkaWycena
 
     const pakietKey = data.klasaSprzetu
     const pakiet =
       pakietKey === 'minimalistyczny'
-        ? pro.pakietSprzetowyMinimalistyczny[tier]
+        ? pro.pakietSprzetowyMinimalistyczny
         : pakietKey === 'kinowy'
-          ? pro.pakietSprzetowyKinowy[tier]
-          : pro.pakietSprzetowyStandard[tier]
+          ? pro.pakietSprzetowyKinowy
+          : pro.pakietSprzetowyStandard
 
-    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena[tier] : 0
-    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena[tier] : 0
+    const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena : 0
+    const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena : 0
 
     const ekipaBaseDayNetto = crew * stawkaOp + doplataRezOp
     const sprzetBaseDayNetto = pakiet + doplataDron
@@ -288,33 +283,33 @@ export function getProductionEkipaSprzetNetto(
 
   safeArray<ShootingDay>(data.detailedShootingDays).forEach((day) => {
     const rolesNetto =
-      day.rezOp * pro.rezOp[tier] +
-      day.asystent * pro.asystentOperator[tier] +
-      day.gafer * pro.gafer[tier] +
-      day.dzwiekowiec * pro.dzwiekowiec[tier] +
-      day.mua * pro.mua[tier] +
-      day.aktor * pro.aktor[tier] +
-      day.model * pro.model[tier] +
-      day.statysta * pro.statystaEpizodysta[tier]
+      day.rezOp * pro.rezOp +
+      day.asystent * pro.asystentOperator +
+      day.gafer * pro.gafer +
+      day.dzwiekowiec * pro.dzwiekowiec +
+      day.mua * pro.mua +
+      day.aktor * pro.aktor +
+      day.model * pro.model +
+      day.statysta * pro.statystaEpizodysta
 
     let equipmentNetto = 0
-    equipmentNetto += day.kameraSony * pro.kameraSonyMirrorless[tier]
-    equipmentNetto += day.kameraRed * pro.kameraRedKomodoX[tier]
+    equipmentNetto += day.kameraSony * pro.kameraSonyMirrorless
+    equipmentNetto += day.kameraRed * pro.kameraRedKomodoX
 
-    if (day.obiektywy === 'standard') equipmentNetto += pro.obiektywyStandard[tier]
-    if (day.obiektywy === 'rental') equipmentNetto += pro.obiektywyRental[tier]
+    if (day.obiektywy === 'standard') equipmentNetto += pro.obiektywyStandard
+    if (day.obiektywy === 'rental') equipmentNetto += pro.obiektywyRental
 
-    if (day.stabilizacja === 'standard') equipmentNetto += pro.stabilizacjaStandard[tier]
-    if (day.stabilizacja === 'rental') equipmentNetto += pro.stabilizacjaRental[tier]
+    if (day.stabilizacja === 'standard') equipmentNetto += pro.stabilizacjaStandard
+    if (day.stabilizacja === 'rental') equipmentNetto += pro.stabilizacjaRental
 
-    if (day.podglad === 'standard') equipmentNetto += pro.podgladStandard[tier]
-    if (day.podglad === 'rental') equipmentNetto += pro.podgladRental[tier]
+    if (day.podglad === 'standard') equipmentNetto += pro.podgladStandard
+    if (day.podglad === 'rental') equipmentNetto += pro.podgladRental
 
-    if (day.swiatlo === 'standard') equipmentNetto += pro.swiatloStandard[tier]
-    if (day.swiatlo === 'rental') equipmentNetto += pro.swiatloRental[tier]
+    if (day.swiatlo === 'standard') equipmentNetto += pro.swiatloStandard
+    if (day.swiatlo === 'rental') equipmentNetto += pro.swiatloRental
 
-    if (day.dron === 'dji') equipmentNetto += pro.dronDji[tier]
-    if (day.dron === 'fpv') equipmentNetto += pro.dronFpv[tier]
+    if (day.dron === 'dji') equipmentNetto += pro.dronDji
+    if (day.dron === 'fpv') equipmentNetto += pro.dronFpv
 
     ekipaNetto += applyMargin(rolesNetto, marginMultiplier)
     sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
@@ -325,11 +320,10 @@ export function getProductionEkipaSprzetNetto(
 
 export function getTotals(
   data: QuoteData,
-  tier: PricingTier,
   marginMultiplier: number,
   pricing: PricingConfigShape
 ): Totals {
-  const phases = getBreakdownWithPricing(data, tier, marginMultiplier, pricing)
+  const phases = getBreakdownWithPricing(data, marginMultiplier, pricing)
   const sumaNetto = phases.reduce((s, p) => s + p.phaseNetto, 0)
   const vat = sumaNetto * VAT_RATE
   const sumaBrutto = sumaNetto + vat

@@ -18,18 +18,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { Switch } from '@/components/ui/switch'
 import { useQuote } from '@/lib/quote-context'
-import { TIER_LABELS } from '@/lib/quote-context'
-import type { PricingConfigShape, PricingTier } from '@/lib/pricing-config'
+import type { PricingConfigShape } from '@/lib/pricing-config'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 
 interface SettingsModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
-const TIERS: PricingTier[] = ['tani', 'standard', 'agresywny']
 
 type CategoryKey = keyof PricingConfigShape
 
@@ -115,19 +111,7 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
   },
 ]
 
-function isTierPrices(
-  val: unknown
-): val is { tani: number; standard: number; agresywny: number } {
-  return (
-    typeof val === 'object' &&
-    val !== null &&
-    'tani' in val &&
-    'standard' in val &&
-    'agresywny' in val
-  )
-}
-
-const INPUT_COL_WIDTH = 'w-20'
+const INPUT_COL_WIDTH = 'w-24'
 
 function deepCloneConfig(config: PricingConfigShape): PricingConfigShape {
   return JSON.parse(JSON.stringify(config)) as PricingConfigShape
@@ -136,7 +120,6 @@ function deepCloneConfig(config: PricingConfigShape): PricingConfigShape {
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const { pricingConfig, setPricingConfig, resetPricingToDefault } = useQuote()
   const [localConfig, setLocalConfig] = useState<PricingConfigShape>(() => deepCloneConfig(pricingConfig))
-  const [showAdvancedTiers, setShowAdvancedTiers] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const syncFromContext = useCallback(() => {
@@ -152,11 +135,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   )
 
   const update = useCallback(
-    (category: CategoryKey, itemKey: string, tier: PricingTier, value: number) => {
+    (category: CategoryKey, itemKey: string, value: number) => {
       setLocalConfig((prev) => {
-        const cat = { ...(prev[category] as Record<string, { tani: number; standard: number; agresywny: number }>) }
-        const item = { ...(cat[itemKey] ?? { tani: 0, standard: 0, agresywny: 0 }), [tier]: value }
-        cat[itemKey] = item
+        const cat = { ...(prev[category] as Record<string, number>) }
+        cat[itemKey] = value
         return { ...prev, [category]: cat } as PricingConfigShape
       })
     },
@@ -204,34 +186,20 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-h-[90vh] flex flex-col overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-2xl"
+        className="max-h-[90vh] flex flex-col overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-lg"
         showCloseButton={true}
       >
         <DialogHeader>
           <DialogTitle className="text-white">Ustawienia stawek</DialogTitle>
           <p className="text-sm text-zinc-400">
-            Edytuj stawki netto (PLN) dla każdej pozycji i poziomu. Zmiany zapisują się lokalnie.
+            Edytuj stawki netto (PLN) dla każdej pozycji. Zmiany zapisują się lokalnie.
           </p>
         </DialogHeader>
-
-        <div className="rounded-xl border border-white/10 bg-zinc-900/30 p-4 mb-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-white">Pokaż skrajne stawki</p>
-              <p className="text-xs text-zinc-400 mt-0.5">Wyświetl kolumny Tani i Agresywny</p>
-            </div>
-            <Switch
-              checked={showAdvancedTiers}
-              onCheckedChange={setShowAdvancedTiers}
-              aria-label="Pokaż skrajne stawki"
-            />
-          </div>
-        </div>
 
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
           <Accordion type="multiple" className="w-full">
             {PRICING_STRUCTURE.map(({ category, title, rows }) => {
-              const categoryData = localConfig[category] as Record<string, { tani: number; standard: number; agresywny: number }> | undefined
+              const categoryData = localConfig[category] as Record<string, number> | undefined
               if (!categoryData) return null
               const visibleRows = rows.filter((row) => !row.key.startsWith('Format: '))
               return (
@@ -243,28 +211,15 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                     <div className="rounded-xl border border-white/10 bg-zinc-900/20 divide-y divide-white/5 overflow-hidden">
                       <div className="flex items-center gap-4 p-3 bg-zinc-900/40">
                         <div className="flex-1 text-[10px] font-medium uppercase text-zinc-500">
-                          Puste
+                          Pozycja
                         </div>
-                        <div className={`flex justify-end gap-2 ${showAdvancedTiers ? 'w-[16rem]' : 'w-20'}`}>
-                          {showAdvancedTiers ? (
-                            TIERS.map((t) => (
-                              <span
-                                key={t}
-                                className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}
-                              >
-                                {TIER_LABELS[t].split(' ')[0]}
-                              </span>
-                            ))
-                          ) : (
-                            <span className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}>
-                              Standard
-                            </span>
-                          )}
-                        </div>
+                        <span className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}>
+                          Cena (PLN)
+                        </span>
                       </div>
                       {visibleRows.map((row) => {
                         const itemVal = categoryData[row.key]
-                        if (!isTierPrices(itemVal)) return null
+                        if (typeof itemVal !== 'number') return null
                         const isKey = row.isKeyMetric === true
                         return (
                           <div
@@ -282,34 +237,16 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                                 </Badge>
                               )}
                             </div>
-                            <div className={`flex justify-end gap-2 ${showAdvancedTiers ? 'w-[16rem]' : 'w-20'}`}>
-                              {showAdvancedTiers ? (
-                                TIERS.map((t) => (
-                                  <Input
-                                    key={t}
-                                    type="number"
-                                    min={0}
-                                    step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
-                                    value={Math.max(0, Number(itemVal[t]) || 0)}
-                                    onChange={(e) =>
-                                      update(category, row.key, t, Math.max(0, Number(e.target.value) || 0))
-                                    }
-                                    className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
-                                  />
-                                ))
-                              ) : (
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
-                                  value={Math.max(0, Number(itemVal.standard) || 0)}
-                                  onChange={(e) =>
-                                    update(category, row.key, 'standard', Math.max(0, Number(e.target.value) || 0))
-                                  }
-                                  className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
-                                />
-                              )}
-                            </div>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
+                              value={Math.max(0, Number(itemVal) || 0)}
+                              onChange={(e) =>
+                                update(category, row.key, Math.max(0, Number(e.target.value) || 0))
+                              }
+                              className={`${INPUT_COL_WIDTH} h-8 text-right bg-black/40 border-white/10 text-sm`}
+                            />
                           </div>
                         )
                       })}

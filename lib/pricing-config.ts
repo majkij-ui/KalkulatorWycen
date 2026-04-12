@@ -1,11 +1,11 @@
 /**
  * Konfiguracja stawek netto (PLN) dla kalkulatora wyceny wideo.
- * Trzy poziomy: Tani (Freelancer), Standard (Boutique), Agresywny (Agency).
+ * Jedna stawka bazowa na pozycję (poprzedni format tani/standard/agresywny jest migrowany
+ * automatycznie – wartość "standard" staje się stawką bazową).
  */
 
-export type PricingTier = 'tani' | 'standard' | 'agresywny'
-
-export interface TierPrices {
+/** @deprecated Stary format wielo-tierowy; używany wyłącznie do migracji danych z localStorage/settings.json */
+export interface LegacyTierPrices {
   tani: number
   standard: number
   agresywny: number
@@ -18,123 +18,148 @@ export const REPORTAZ_FORMAT_KEY = 'Format: Reportaż 1-3min'
 
 export interface PricingConfigShape {
   preprodukcja: {
-    dzienDokumentacji: TierPrices
-    scenariuszPodstawowy: TierPrices
-    scenariuszRozbudowany: TierPrices
-    wizjaLokalna: TierPrices
-    kierownikProdukcji: TierPrices
+    dzienDokumentacji: number
+    scenariuszPodstawowy: number
+    scenariuszRozbudowany: number
+    wizjaLokalna: number
+    kierownikProdukcji: number
   }
   produkcja: {
-    stawkaOperatoraSzybkaWycena: TierPrices
-    doplataRezOpSzybkaWycena: TierPrices
-    doplataDronSzybkaWycena: TierPrices
-    pakietSprzetowyMinimalistyczny: TierPrices
-    pakietSprzetowyStandard: TierPrices
-    pakietSprzetowyKinowy: TierPrices
-    rezOp: TierPrices
-    asystentOperator: TierPrices
-    gafer: TierPrices
-    dzwiekowiec: TierPrices
-    mua: TierPrices
-    aktor: TierPrices
-    model: TierPrices
-    statystaEpizodysta: TierPrices
-    kameraSonyMirrorless: TierPrices
-    kameraRedKomodoX: TierPrices
-    obiektywyStandard: TierPrices
-    obiektywyRental: TierPrices
-    stabilizacjaStandard: TierPrices
-    stabilizacjaRental: TierPrices
-    podgladStandard: TierPrices
-    podgladRental: TierPrices
-    swiatloStandard: TierPrices
-    swiatloRental: TierPrices
-    dronDji: TierPrices
-    dronFpv: TierPrices
+    stawkaOperatoraSzybkaWycena: number
+    doplataRezOpSzybkaWycena: number
+    doplataDronSzybkaWycena: number
+    pakietSprzetowyMinimalistyczny: number
+    pakietSprzetowyStandard: number
+    pakietSprzetowyKinowy: number
+    rezOp: number
+    asystentOperator: number
+    gafer: number
+    dzwiekowiec: number
+    mua: number
+    aktor: number
+    model: number
+    statystaEpizodysta: number
+    kameraSonyMirrorless: number
+    kameraRedKomodoX: number
+    obiektywyStandard: number
+    obiektywyRental: number
+    stabilizacjaStandard: number
+    stabilizacjaRental: number
+    podgladStandard: number
+    podgladRental: number
+    swiatloStandard: number
+    swiatloRental: number
+    dronDji: number
+    dronFpv: number
   }
   postprodukcja: {
-    montazZaDzien: TierPrices
-    montazZaGodzine: TierPrices
-    korekcjaBarwnaPodstawowa: TierPrices
-    korekcjaBarwnaZaawansowana: TierPrices
-    animacje2d: TierPrices
-    animacjeAi: TierPrices
-    muzykaCopyfree: TierPrices
-    muzykaKompozytor: TierPrices
-    soundDesignProsty: TierPrices
-    soundDesignZlozony: TierPrices
-    masterDzwiekuPodstawowy: TierPrices
-    masterDzwiekuZlozony: TierPrices
-    lektorAi: TierPrices
-    lektorStudio: TierPrices
+    montazZaDzien: number
+    montazZaGodzine: number
+    korekcjaBarwnaPodstawowa: number
+    korekcjaBarwnaZaawansowana: number
+    animacje2d: number
+    animacjeAi: number
+    muzykaCopyfree: number
+    muzykaKompozytor: number
+    soundDesignProsty: number
+    soundDesignZlozony: number
+    masterDzwiekuPodstawowy: number
+    masterDzwiekuZlozony: number
+    lektorAi: number
+    lektorStudio: number
     /** Custom formats: key = "Format: <name>" */
-    [key: string]: TierPrices
+    [key: string]: number
   }
   dodatkowe: {
-    kosztDojazduKm: TierPrices
-    /** Pełne przekazanie praw – % dopłaty od sumy (Tani/Standard/Agresywny) */
-    pelnePrzekazaniePrawProcent: TierPrices
+    kosztDojazduKm: number
+    /** Pełne przekazanie praw – % dopłaty od sumy */
+    pelnePrzekazaniePrawProcent: number
   }
 }
 
 export const DEFAULT_PRICING: PricingConfigShape = {
   preprodukcja: {
-    dzienDokumentacji: { tani: 600, standard: 1200, agresywny: 2500 },
-    scenariuszPodstawowy: { tani: 800, standard: 1800, agresywny: 4500 },
-    scenariuszRozbudowany: { tani: 1500, standard: 3500, agresywny: 8000 },
-    wizjaLokalna: { tani: 400, standard: 800, agresywny: 1500 },
-    kierownikProdukcji: { tani: 600, standard: 1500, agresywny: 3000 },
+    dzienDokumentacji: 1200,
+    scenariuszPodstawowy: 1800,
+    scenariuszRozbudowany: 3500,
+    wizjaLokalna: 800,
+    kierownikProdukcji: 1500,
   },
   produkcja: {
-    stawkaOperatoraSzybkaWycena: { tani: 800, standard: 1500, agresywny: 2500 },
-    doplataRezOpSzybkaWycena: { tani: 500, standard: 1000, agresywny: 2000 },
-    doplataDronSzybkaWycena: { tani: 400, standard: 800, agresywny: 1500 },
-    pakietSprzetowyMinimalistyczny: { tani: 300, standard: 800, agresywny: 1500 },
-    pakietSprzetowyStandard: { tani: 600, standard: 1500, agresywny: 3000 },
-    pakietSprzetowyKinowy: { tani: 1500, standard: 3500, agresywny: 7000 },
-    rezOp: { tani: 1500, standard: 2500, agresywny: 4000 },
-    asystentOperator: { tani: 800, standard: 1500, agresywny: 2500 },
-    gafer: { tani: 800, standard: 1500, agresywny: 2500 },
-    dzwiekowiec: { tani: 800, standard: 1500, agresywny: 2500 },
-    mua: { tani: 600, standard: 1200, agresywny: 2000 },
-    aktor: { tani: 1000, standard: 2500, agresywny: 5000 },
-    model: { tani: 800, standard: 1500, agresywny: 3000 },
-    statystaEpizodysta: { tani: 200, standard: 400, agresywny: 800 },
-    kameraSonyMirrorless: { tani: 300, standard: 600, agresywny: 1000 },
-    kameraRedKomodoX: { tani: 800, standard: 1500, agresywny: 3000 },
-    obiektywyStandard: { tani: 200, standard: 500, agresywny: 1000 },
-    obiektywyRental: { tani: 600, standard: 1500, agresywny: 3000 },
-    stabilizacjaStandard: { tani: 200, standard: 400, agresywny: 800 },
-    stabilizacjaRental: { tani: 400, standard: 800, agresywny: 1500 },
-    podgladStandard: { tani: 150, standard: 300, agresywny: 600 },
-    podgladRental: { tani: 300, standard: 600, agresywny: 1200 },
-    swiatloStandard: { tani: 400, standard: 1000, agresywny: 2500 },
-    swiatloRental: { tani: 800, standard: 2000, agresywny: 5000 },
-    dronDji: { tani: 300, standard: 600, agresywny: 1200 },
-    dronFpv: { tani: 800, standard: 1500, agresywny: 3000 },
+    stawkaOperatoraSzybkaWycena: 1500,
+    doplataRezOpSzybkaWycena: 1000,
+    doplataDronSzybkaWycena: 800,
+    pakietSprzetowyMinimalistyczny: 800,
+    pakietSprzetowyStandard: 1500,
+    pakietSprzetowyKinowy: 3500,
+    rezOp: 2500,
+    asystentOperator: 1500,
+    gafer: 1500,
+    dzwiekowiec: 1500,
+    mua: 1200,
+    aktor: 2500,
+    model: 1500,
+    statystaEpizodysta: 400,
+    kameraSonyMirrorless: 600,
+    kameraRedKomodoX: 1500,
+    obiektywyStandard: 500,
+    obiektywyRental: 1500,
+    stabilizacjaStandard: 400,
+    stabilizacjaRental: 800,
+    podgladStandard: 300,
+    podgladRental: 600,
+    swiatloStandard: 1000,
+    swiatloRental: 2000,
+    dronDji: 600,
+    dronFpv: 1500,
   },
   postprodukcja: {
-    montazZaDzien: { tani: 800, standard: 1500, agresywny: 3000 },
-    montazZaGodzine: { tani: 100, standard: 200, agresywny: 400 },
-    'Format: do 30sek shorts/reel': { tani: 300, standard: 800, agresywny: 1500 },
-    'Format: Reportaż 1-3min': { tani: 1000, standard: 2500, agresywny: 5000 },
-    korekcjaBarwnaPodstawowa: { tani: 200, standard: 500, agresywny: 1000 },
-    korekcjaBarwnaZaawansowana: { tani: 500, standard: 1200, agresywny: 2500 },
-    animacje2d: { tani: 400, standard: 1000, agresywny: 2500 },
-    animacjeAi: { tani: 600, standard: 1500, agresywny: 3500 },
-    muzykaCopyfree: { tani: 100, standard: 300, agresywny: 800 },
-    muzykaKompozytor: { tani: 1000, standard: 3000, agresywny: 8000 },
-    soundDesignProsty: { tani: 200, standard: 500, agresywny: 1200 },
-    soundDesignZlozony: { tani: 600, standard: 1500, agresywny: 3500 },
-    masterDzwiekuPodstawowy: { tani: 150, standard: 400, agresywny: 800 },
-    masterDzwiekuZlozony: { tani: 400, standard: 1000, agresywny: 2000 },
-    lektorAi: { tani: 100, standard: 250, agresywny: 500 },
-    lektorStudio: { tani: 400, standard: 1000, agresywny: 2500 },
+    montazZaDzien: 1500,
+    montazZaGodzine: 200,
+    'Format: do 30sek shorts/reel': 800,
+    'Format: Reportaż 1-3min': 2500,
+    korekcjaBarwnaPodstawowa: 500,
+    korekcjaBarwnaZaawansowana: 1200,
+    animacje2d: 1000,
+    animacjeAi: 1500,
+    muzykaCopyfree: 300,
+    muzykaKompozytor: 3000,
+    soundDesignProsty: 500,
+    soundDesignZlozony: 1500,
+    masterDzwiekuPodstawowy: 400,
+    masterDzwiekuZlozony: 1000,
+    lektorAi: 250,
+    lektorStudio: 1000,
   },
   dodatkowe: {
-    kosztDojazduKm: { tani: 1.5, standard: 2.5, agresywny: 4 },
-    pelnePrzekazaniePrawProcent: { tani: 20, standard: 30, agresywny: 50 },
+    kosztDojazduKm: 2.5,
+    pelnePrzekazaniePrawProcent: 30,
   },
+}
+
+/** Migrate a value that may be the old `{ tani, standard, agresywny }` object or already a number. */
+function migrateLegacyPrice(val: unknown): number {
+  if (typeof val === 'number') return val
+  if (
+    typeof val === 'object' &&
+    val !== null &&
+    'standard' in val &&
+    typeof (val as LegacyTierPrices).standard === 'number'
+  ) {
+    return (val as LegacyTierPrices).standard
+  }
+  return 0
+}
+
+function migrateSection(
+  base: Record<string, number>,
+  saved: Record<string, unknown>
+): Record<string, number> {
+  const result: Record<string, number> = { ...base }
+  for (const [k, v] of Object.entries(saved)) {
+    result[k] = migrateLegacyPrice(v)
+  }
+  return result
 }
 
 const STORAGE_KEY = 'quote-gen-pricing-config'
@@ -148,13 +173,33 @@ export function getPricingConfig(): PricingConfigShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return deepClone(DEFAULT_PRICING)
-    const parsed = JSON.parse(raw) as PricingConfigShape
-    const merged = deepClone(DEFAULT_PRICING)
-    if (parsed.preprodukcja) merged.preprodukcja = { ...merged.preprodukcja, ...parsed.preprodukcja }
-    if (parsed.produkcja) merged.produkcja = { ...merged.produkcja, ...parsed.produkcja }
-    if (parsed.postprodukcja) merged.postprodukcja = { ...merged.postprodukcja, ...parsed.postprodukcja }
-    if (parsed.dodatkowe) merged.dodatkowe = { ...merged.dodatkowe, ...parsed.dodatkowe }
-    return merged
+    const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>
+    const base = deepClone(DEFAULT_PRICING)
+    if (parsed.preprodukcja) {
+      base.preprodukcja = migrateSection(
+        base.preprodukcja as unknown as Record<string, number>,
+        parsed.preprodukcja
+      ) as PricingConfigShape['preprodukcja']
+    }
+    if (parsed.produkcja) {
+      base.produkcja = migrateSection(
+        base.produkcja as unknown as Record<string, number>,
+        parsed.produkcja
+      ) as PricingConfigShape['produkcja']
+    }
+    if (parsed.postprodukcja) {
+      base.postprodukcja = migrateSection(
+        base.postprodukcja as unknown as Record<string, number>,
+        parsed.postprodukcja
+      ) as PricingConfigShape['postprodukcja']
+    }
+    if (parsed.dodatkowe) {
+      base.dodatkowe = migrateSection(
+        base.dodatkowe as unknown as Record<string, number>,
+        parsed.dodatkowe
+      ) as PricingConfigShape['dodatkowe']
+    }
+    return base
   } catch {
     return deepClone(DEFAULT_PRICING)
   }

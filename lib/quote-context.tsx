@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
-import type { PricingTier, PricingConfigShape, TierPrices } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING } from './pricing-config'
+import type { PricingConfigShape } from './pricing-config'
+import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
 import { safeNum, safeArray } from './safe-numbers'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
@@ -19,9 +19,7 @@ interface QuoteContextValue {
   totals: Totals
   formatCurrency: (amount: number) => string
   isCalculating: boolean
-  // Pricing tier & margin
-  pricingTier: PricingTier
-  setPricingTier: (tier: PricingTier) => void
+  // Margin
   marginMultiplier: number
   setMarginMultiplier: (value: number) => void
   // Breakdown for summary & PDF
@@ -78,12 +76,6 @@ function saveTemplatesToStorage(templates: SavedTemplate[]): void {
   }
 }
 
-const TIER_LABELS: Record<PricingTier, string> = {
-  tani: 'Tani (Freelancer)',
-  standard: 'Standard (Boutique)',
-  agresywny: 'Agresywny (Agency)',
-}
-
 function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
   const merged: QuoteData = { ...defaultQuoteData, ...partial }
   merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
@@ -97,19 +89,14 @@ function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
 export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<QuoteData>(defaultQuoteData)
   const [isCalculating, setIsCalculating] = useState(false)
-  const [pricingTier, setPricingTierState] = useState<PricingTier>('standard')
   const [marginMultiplier, setMarginMultiplier] = useState(1.0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
-  /** Po `loadPersistedSnapshot` — bez zapisu przed przywróceniem (SSR-safe: brak odczytu localStorage w initializerze). */
   const [restorationComplete, setRestorationComplete] = useState(false)
 
   const applyPersistedSettings = useCallback((saved: PersistedAppSettings) => {
     if (saved.data) {
       setData(mergeQuoteDataPartial(saved.data))
-    }
-    if (saved.pricingTier && saved.pricingTier in TIER_LABELS) {
-      setPricingTierState(saved.pricingTier)
     }
     if (typeof saved.marginMultiplier === 'number' && Number.isFinite(saved.marginMultiplier)) {
       setMarginMultiplier(saved.marginMultiplier)
@@ -159,7 +146,6 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     if (!restorationComplete) return
     const snapshot = buildPersistedSnapshot({
       data,
-      pricingTier,
       marginMultiplier,
       pricingConfig,
       templates,
@@ -170,7 +156,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       })
     }, PERSIST_DEBOUNCE_MS)
     return () => window.clearTimeout(t)
-  }, [restorationComplete, data, pricingTier, marginMultiplier, pricingConfig, templates])
+  }, [restorationComplete, data, marginMultiplier, pricingConfig, templates])
 
   const updateField = useCallback(<K extends keyof QuoteData>(key: K, value: QuoteData[K]) => {
     setData(prev => ({ ...prev, [key]: value }))
@@ -199,12 +185,22 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  /** All format keys for delivery dropdown (config keys starting with "Format: ") */
+  const availableFormats = useMemo(() => {
+    return Object.keys(pricingConfig.postprodukcja).filter(k => k.startsWith('Format: '))
+  }, [pricingConfig])
+
   const addDeliverable = useCallback(() => {
+    // Use the first available format so new cards never show a stale/missing format
+    const firstFormat = availableFormats[0] ?? DEFAULT_FORMAT_KEY
     setData(prev => ({
       ...prev,
-      detailedDeliverables: [...(prev.detailedDeliverables ?? []), createDefaultDeliverable()],
+      detailedDeliverables: [
+        ...(prev.detailedDeliverables ?? []),
+        { ...createDefaultDeliverable(), format: firstFormat },
+      ],
     }))
-  }, [])
+  }, [availableFormats])
 
   const removeDeliverable = useCallback((id: string) => {
     setData(prev => ({
@@ -222,33 +218,31 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
-  /** All format keys for delivery dropdown (config keys starting with "Format: ") */
-  const availableFormats = useMemo(() => {
-    return Object.keys(pricingConfig.postprodukcja).filter(k => k.startsWith('Format: '))
-  }, [pricingConfig])
-
   const getFormatStandardPrice = useCallback((formatKey: string): number => {
     const post = pricingConfig.postprodukcja
-    const prices = post[formatKey]
-    return prices && typeof prices.standard === 'number' ? prices.standard : 0
+    const price = post[formatKey]
+    return typeof price === 'number' ? price : 0
   }, [pricingConfig])
 
+  // Alias — with single-tier pricing both functions return the same value
   const getFormatPriceAtTier = useCallback((formatKey: string): number => {
     const post = pricingConfig.postprodukcja
-    const prices = post[formatKey]
-    if (!prices || typeof prices[pricingTier] !== 'number') return 0
-    return prices[pricingTier]
-  }, [pricingConfig, pricingTier])
+    let price = post[formatKey]
+    // Fall back to first available format so display matches the total calculation
+    if (typeof price !== 'number') {
+      const firstKey = Object.keys(post).find(k => k.startsWith('Format: '))
+      price = firstKey != null ? post[firstKey] : 0
+    }
+    return typeof price === 'number' ? price : 0
+  }, [pricingConfig])
 
   const addCustomFormat = useCallback((name: string, standardPrice: number) => {
     const key = `Format: ${name.trim()}`
     if (!key || key === 'Format: ') return
-    const tiers: TierPrices = {
-      tani: Math.round(standardPrice * 0.5),
-      standard: Math.round(standardPrice),
-      agresywny: Math.round(standardPrice * 2),
-    }
-    setPricingConfig({ ...pricingConfig, postprodukcja: { ...pricingConfig.postprodukcja, [key]: tiers } })
+    setPricingConfig({
+      ...pricingConfig,
+      postprodukcja: { ...pricingConfig.postprodukcja, [key]: Math.round(standardPrice) },
+    })
   }, [pricingConfig, setPricingConfig])
 
   const editCustomFormat = useCallback((oldName: string, newName: string, standardPrice: number) => {
@@ -257,11 +251,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     if (!newKey || newKey === 'Format: ') return
     const post = { ...pricingConfig.postprodukcja }
     delete post[oldKey]
-    post[newKey] = {
-      tani: Math.round(standardPrice * 0.5),
-      standard: Math.round(standardPrice),
-      agresywny: Math.round(standardPrice * 2),
-    }
+    post[newKey] = Math.round(standardPrice)
     setPricingConfig({ ...pricingConfig, postprodukcja: post })
     setData(prev => ({
       ...prev,
@@ -389,13 +379,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }, 500)
   }, [templates])
 
-  const setPricingTier = useCallback((tier: PricingTier) => {
-    setPricingTierState(tier)
-    setIsCalculating(true)
-    setTimeout(() => setIsCalculating(false), 500)
-  }, [])
-
-  const baseTotals = getTotals(data, pricingTier, marginMultiplier, pricingConfig)
+  const baseTotals = getTotals(data, marginMultiplier, pricingConfig)
   const autoCrewDays = calculateTotalCrewDays()
   const cateringCost = data.includeCatering
     ? (data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays) * safeNum(data.cateringRate, 100, 0)
@@ -411,7 +395,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     sumaBrutto: sumaNettoWithLogistics * (1 + VAT_RATE),
   }
 
-  const baseBreakdown = getBreakdownWithPricing(data, pricingTier, marginMultiplier, pricingConfig)
+  const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricingConfig)
   const breakdown =
     cateringCost > 0 || lodgingCost > 0
       ? (() => {
@@ -460,8 +444,6 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     totals,
     formatCurrency,
     isCalculating,
-    pricingTier,
-    setPricingTier,
     marginMultiplier,
     setMarginMultiplier,
     breakdown,
@@ -498,5 +480,3 @@ export function useQuote() {
   if (!ctx) throw new Error('useQuote must be used within QuoteProvider')
   return ctx
 }
-
-export { TIER_LABELS }
