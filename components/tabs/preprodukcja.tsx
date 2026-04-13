@@ -9,7 +9,9 @@ import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { GlassCard } from '@/components/glass-card'
+import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
+import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import type { ScenarioType } from '@/lib/quote-types'
 
 const container = {
@@ -25,8 +27,11 @@ const item = {
   show: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.4, ease: 'easeOut' } },
 }
 
+const DP = DEFAULT_PRICING
+
 export function PreprodukcjaTab() {
-  const { data, updateField } = useQuote()
+  const { data, updateField, pricingConfig, updatePricingValue } = useQuote()
+  const pc = pricingConfig.preprodukcja
   const isDetailed = data.isDetailedPrepro
 
   const dniValue = Math.max(0, Math.min(10, Number(data.dniDokumentacji) || 0))
@@ -70,6 +75,14 @@ export function PreprodukcjaTab() {
                     <span className="text-lg font-semibold tabular-nums text-white">
                       {dniValue % 1 === 0 ? dniValue : dniValue.toFixed(1).replace('.', ',')}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500">Stawka za dzień</span>
+                    <InlinePrice
+                      value={pc.dzienDokumentacji}
+                      onChange={(v) => updatePricingValue('preprodukcja', 'dzienDokumentacji', v)}
+                      isModified={pc.dzienDokumentacji !== DP.preprodukcja.dzienDokumentacji}
+                    />
                   </div>
                   <div className="flex items-center gap-4">
                     <Button
@@ -146,13 +159,13 @@ export function PreprodukcjaTab() {
             transition={{ opacity: { duration: 0.3 }, height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }, filter: { duration: 0.3 } }}
             className="overflow-hidden"
           >
-            {/* Re-trigger the container variants so children become visible */}
             <motion.div
               variants={container}
               initial="hidden"
               animate="show"
               className="space-y-5 pt-1 pb-1"
             >
+              {/* Scenariusz */}
               <motion.div variants={item}>
                 <GlassCard>
                   <div className="mb-4 flex items-center gap-3">
@@ -170,30 +183,41 @@ export function PreprodukcjaTab() {
                   className="grid grid-cols-1 gap-3 sm:grid-cols-3"
                 >
                   {([
-                    { value: 'brak', label: 'Brak', desc: 'Bez scenariusza' },
-                    { value: 'podstawowy', label: 'Podstawowy', desc: 'Zarys i kluczowe sceny' },
-                    { value: 'rozbudowany', label: 'Rozbudowany', desc: 'Pełny scenariusz z dialogami' },
-                  ] as const).map((opt) => (
-                    <Label
-                      key={opt.value}
-                      htmlFor={`scenario-${opt.value}`}
-                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${
-                        data.scenariusz === opt.value
-                          ? 'border-primary/50 bg-primary/5'
-                          : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
-                      }`}
-                    >
-                      <RadioGroupItem value={opt.value} id={`scenario-${opt.value}`} className="mt-0.5" />
-                      <div>
-                        <span className="text-sm font-medium text-white">{opt.label}</span>
-                        <p className="text-xs text-zinc-400">{opt.desc}</p>
-                      </div>
-                    </Label>
+                    { value: 'brak', label: 'Brak', desc: 'Bez scenariusza', priceKey: null },
+                    { value: 'podstawowy', label: 'Podstawowy', desc: 'Zarys i kluczowe sceny', priceKey: 'scenariuszPodstawowy' as const },
+                    { value: 'rozbudowany', label: 'Rozbudowany', desc: 'Pełny scenariusz z dialogami', priceKey: 'scenariuszRozbudowany' as const },
+                  ]).map((opt) => (
+                    <div key={opt.value} className="flex flex-col gap-1">
+                      <Label
+                        htmlFor={`scenario-${opt.value}`}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${
+                          data.scenariusz === opt.value
+                            ? 'border-primary/50 bg-primary/5'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
+                        }`}
+                      >
+                        <RadioGroupItem value={opt.value} id={`scenario-${opt.value}`} className="mt-0.5" />
+                        <div>
+                          <span className="text-sm font-medium text-white">{opt.label}</span>
+                          <p className="text-xs text-zinc-400">{opt.desc}</p>
+                        </div>
+                      </Label>
+                      {opt.priceKey && (
+                        <div className="flex justify-end pr-1">
+                          <InlinePrice
+                            value={pc[opt.priceKey]}
+                            onChange={(v) => updatePricingValue('preprodukcja', opt.priceKey!, v)}
+                            isModified={pc[opt.priceKey] !== DP.preprodukcja[opt.priceKey]}
+                          />
+                        </div>
+                      )}
+                    </div>
                   ))}
                   </RadioGroup>
                 </GlassCard>
               </motion.div>
 
+              {/* Wizja lokalna */}
               <motion.div variants={item}>
                 <GlassCard>
                   <div className="flex items-center justify-between">
@@ -206,15 +230,23 @@ export function PreprodukcjaTab() {
                         <p className="text-xs text-zinc-400">Sprawdzenie lokacji przed zdjęciami</p>
                       </div>
                     </div>
-                    <Switch
-                      checked={data.wizjaLokalna}
-                      onCheckedChange={(val) => updateField('wizjaLokalna', val)}
-                      aria-label="Wizja lokalna"
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <InlinePrice
+                        value={pc.wizjaLokalna}
+                        onChange={(v) => updatePricingValue('preprodukcja', 'wizjaLokalna', v)}
+                        isModified={pc.wizjaLokalna !== DP.preprodukcja.wizjaLokalna}
+                      />
+                      <Switch
+                        checked={data.wizjaLokalna}
+                        onCheckedChange={(val) => updateField('wizjaLokalna', val)}
+                        aria-label="Wizja lokalna"
+                      />
+                    </div>
                   </div>
                 </GlassCard>
               </motion.div>
 
+              {/* Kierownik produkcji */}
               <motion.div variants={item}>
                 <GlassCard>
                   <div className="flex items-center justify-between">
@@ -227,11 +259,18 @@ export function PreprodukcjaTab() {
                         <p className="text-xs text-zinc-400">Dedykowany koordynator projektu</p>
                       </div>
                     </div>
-                    <Switch
-                      checked={data.kierownikProdukcji}
-                      onCheckedChange={(val) => updateField('kierownikProdukcji', val)}
-                      aria-label="Kierownik produkcji"
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <InlinePrice
+                        value={pc.kierownikProdukcji}
+                        onChange={(v) => updatePricingValue('preprodukcja', 'kierownikProdukcji', v)}
+                        isModified={pc.kierownikProdukcji !== DP.preprodukcja.kierownikProdukcji}
+                      />
+                      <Switch
+                        checked={data.kierownikProdukcji}
+                        onCheckedChange={(val) => updateField('kierownikProdukcji', val)}
+                        aria-label="Kierownik produkcji"
+                      />
+                    </div>
                   </div>
                 </GlassCard>
               </motion.div>

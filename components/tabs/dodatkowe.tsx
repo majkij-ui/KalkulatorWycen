@@ -11,8 +11,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Counter } from '@/components/counter'
 import { GlassCard } from '@/components/glass-card'
+import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
+import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import type { QuoteData } from '@/lib/quote-types'
+
+const DP = DEFAULT_PRICING
 
 const container = {
   hidden: { opacity: 0 },
@@ -60,8 +64,9 @@ function LogistykaRow({ label, icon: Icon, children }: { label: string; icon: Re
 }
 
 export function DodatkoweTab() {
-  const { data, updateField, calculateTotalCrewDays } = useQuote()
+  const { data, updateField, calculateTotalCrewDays, pricingConfig, updatePricingValue } = useQuote()
   const totalCrewDays = calculateTotalCrewDays()
+  const pc = pricingConfig.dodatkowe
 
   return (
     <motion.div
@@ -110,6 +115,18 @@ export function DodatkoweTab() {
                 step={10}
                 className="flex-1 py-1"
               />
+              <div className="flex items-center justify-end gap-1 text-xs text-zinc-500">
+                <span>Stawka:</span>
+                <InlinePrice
+                  value={pc.kosztDojazduKm}
+                  onChange={(v) => updatePricingValue('dodatkowe', 'kosztDojazduKm', v)}
+                  isModified={pc.kosztDojazduKm !== DP.dodatkowe.kosztDojazduKm}
+                  suffix="zł/km"
+                  step={0.1}
+                  decimals={2}
+                  min={0}
+                />
+              </div>
             </div>
           </LogistykaRow>
           <div className="flex justify-between px-0 text-[10px] text-zinc-1000">
@@ -335,6 +352,20 @@ export function DodatkoweTab() {
               </button>
             ))}
           </div>
+          {data.copyrightType === 'przekazanie' && (
+            <div className="mt-3 flex items-center justify-end gap-2 text-xs text-zinc-500">
+              <span>Dopłata:</span>
+              <InlinePrice
+                value={pc.pelnePrzekazaniePrawProcent}
+                onChange={(v) => updatePricingValue('dodatkowe', 'pelnePrzekazaniePrawProcent', v)}
+                isModified={pc.pelnePrzekazaniePrawProcent !== DP.dodatkowe.pelnePrzekazaniePrawProcent}
+                suffix="%"
+                step={1}
+                min={0}
+              />
+              <span>od sumy netto</span>
+            </div>
+          )}
         </GlassCard>
       </motion.div>
 

@@ -10,8 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Counter } from '@/components/counter'
 import { GlassCard } from '@/components/glass-card'
+import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
+import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import type { PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } from '@/lib/quote-types'
+
+const DP = DEFAULT_PRICING
 
 const container = {
   hidden: { opacity: 0 },
@@ -38,10 +42,10 @@ const DRON_OPCJE: { value: DronOpcja; label: string }[] = [
   { value: 'fpv', label: 'FPV' },
 ]
 
-const PAKIET_OPCJE: { value: PakietSprzetu; label: string; desc: string }[] = [
-  { value: 'minimalistyczny', label: 'Minimalistyczny', desc: 'Run & gun, reportaże' },
-  { value: 'standard', label: 'Standard', desc: 'Wywiady, mniejsze plany' },
-  { value: 'kinowy', label: 'Kinowy', desc: 'Reklama, zaawansowany sprzęt (RED/ARRI)' },
+const PAKIET_OPCJE: { value: PakietSprzetu; label: string; desc: string; priceKey: 'pakietSprzetowyMinimalistyczny' | 'pakietSprzetowyStandard' | 'pakietSprzetowyKinowy' }[] = [
+  { value: 'minimalistyczny', label: 'Minimalistyczny', desc: 'Run & gun, reportaże', priceKey: 'pakietSprzetowyMinimalistyczny' },
+  { value: 'standard', label: 'Standard', desc: 'Wywiady, mniejsze plany', priceKey: 'pakietSprzetowyStandard' },
+  { value: 'kinowy', label: 'Kinowy', desc: 'Reklama, zaawansowany sprzęt (RED/ARRI)', priceKey: 'pakietSprzetowyKinowy' },
 ]
 
 function PillGroup<T extends string>({
@@ -75,9 +79,11 @@ function PillGroup<T extends string>({
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-      <span className="text-sm text-zinc-400">{label}</span>
-      {children}
+    <div className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 gap-2">
+      <span className="text-sm text-zinc-400 shrink-0">{label}</span>
+      <div className="flex items-center gap-2 flex-wrap justify-end">
+        {children}
+      </div>
     </div>
   )
 }
@@ -95,6 +101,9 @@ function DayCard({
   onRemove: () => void
   canRemove: boolean
 }) {
+  const { pricingConfig, updatePricingValue } = useQuote()
+  const pc = pricingConfig.produkcja
+
   return (
     <GlassCard className="relative">
       <div className="mb-4 flex items-center justify-between">
@@ -117,18 +126,23 @@ function DayCard({
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6 first:mt-0">Ekipa</h4>
         <div className="space-y-0">
           <Row label="ReżOp">
+            <InlinePrice value={pc.rezOp} onChange={(v) => updatePricingValue('produkcja', 'rezOp', v)} isModified={pc.rezOp !== DP.produkcja.rezOp} />
             <Counter compact label="" value={day.rezOp} onChange={(v) => onUpdate('rezOp', v)} min={0} max={2} />
           </Row>
           <Row label="Asystent/Operator">
+            <InlinePrice value={pc.asystentOperator} onChange={(v) => updatePricingValue('produkcja', 'asystentOperator', v)} isModified={pc.asystentOperator !== DP.produkcja.asystentOperator} />
             <Counter compact label="" value={day.asystent} onChange={(v) => onUpdate('asystent', v)} min={0} max={4} />
           </Row>
           <Row label="Gafer">
+            <InlinePrice value={pc.gafer} onChange={(v) => updatePricingValue('produkcja', 'gafer', v)} isModified={pc.gafer !== DP.produkcja.gafer} />
             <Counter compact label="" value={day.gafer} onChange={(v) => onUpdate('gafer', v)} min={0} max={2} />
           </Row>
           <Row label="Dźwiękowiec">
+            <InlinePrice value={pc.dzwiekowiec} onChange={(v) => updatePricingValue('produkcja', 'dzwiekowiec', v)} isModified={pc.dzwiekowiec !== DP.produkcja.dzwiekowiec} />
             <Counter compact label="" value={day.dzwiekowiec} onChange={(v) => onUpdate('dzwiekowiec', v)} min={0} max={2} />
           </Row>
           <Row label="MUA (Wizaż)">
+            <InlinePrice value={pc.mua} onChange={(v) => updatePricingValue('produkcja', 'mua', v)} isModified={pc.mua !== DP.produkcja.mua} />
             <Counter compact label="" value={day.mua} onChange={(v) => onUpdate('mua', v)} min={0} max={2} />
           </Row>
         </div>
@@ -136,12 +150,15 @@ function DayCard({
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Obsada</h4>
         <div className="space-y-0">
           <Row label="Aktor">
+            <InlinePrice value={pc.aktor} onChange={(v) => updatePricingValue('produkcja', 'aktor', v)} isModified={pc.aktor !== DP.produkcja.aktor} />
             <Counter compact label="" value={day.aktor} onChange={(v) => onUpdate('aktor', v)} min={0} max={5} />
           </Row>
           <Row label="Model">
+            <InlinePrice value={pc.model} onChange={(v) => updatePricingValue('produkcja', 'model', v)} isModified={pc.model !== DP.produkcja.model} />
             <Counter compact label="" value={day.model} onChange={(v) => onUpdate('model', v)} min={0} max={5} />
           </Row>
           <Row label="Statysta/Epizodysta">
+            <InlinePrice value={pc.statystaEpizodysta} onChange={(v) => updatePricingValue('produkcja', 'statystaEpizodysta', v)} isModified={pc.statystaEpizodysta !== DP.produkcja.statystaEpizodysta} />
             <Counter compact label="" value={day.statysta} onChange={(v) => onUpdate('statysta', v)} min={0} max={20} />
           </Row>
         </div>
@@ -149,25 +166,62 @@ function DayCard({
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Sprzęt</h4>
         <div className="space-y-0">
           <Row label="Kamera Sony Mirrorless">
+            <InlinePrice value={pc.kameraSonyMirrorless} onChange={(v) => updatePricingValue('produkcja', 'kameraSonyMirrorless', v)} isModified={pc.kameraSonyMirrorless !== DP.produkcja.kameraSonyMirrorless} />
             <Counter compact label="" value={day.kameraSony} onChange={(v) => onUpdate('kameraSony', v)} min={0} max={2} />
           </Row>
           <Row label="Kamera Red Komodo X">
+            <InlinePrice value={pc.kameraRedKomodoX} onChange={(v) => updatePricingValue('produkcja', 'kameraRedKomodoX', v)} isModified={pc.kameraRedKomodoX !== DP.produkcja.kameraRedKomodoX} />
             <Counter compact label="" value={day.kameraRed} onChange={(v) => onUpdate('kameraRed', v)} min={0} max={2} />
           </Row>
           <Row label="Obiektywy">
-            <PillGroup value={day.obiektywy} options={SPRZET_OPCJE} onChange={(v) => onUpdate('obiektywy', v)} />
+            {day.obiektywy !== 'brak' && (
+              <InlinePrice
+                value={day.obiektywy === 'standard' ? pc.obiektywyStandard : pc.obiektywyRental}
+                onChange={(v) => updatePricingValue('produkcja', day.obiektywy === 'standard' ? 'obiektywyStandard' : 'obiektywyRental', v)}
+                isModified={day.obiektywy === 'standard' ? pc.obiektywyStandard !== DP.produkcja.obiektywyStandard : pc.obiektywyRental !== DP.produkcja.obiektywyRental}
+              />
+            )}
+            <PillGroup value={day.obiektywy} options={SPRZET_OPCJE} onChange={(v) => onUpdate('obiektywy', v as SprzetOpcja)} />
           </Row>
           <Row label="Stabilizacja">
-            <PillGroup value={day.stabilizacja} options={SPRZET_OPCJE} onChange={(v) => onUpdate('stabilizacja', v)} />
+            {day.stabilizacja !== 'brak' && (
+              <InlinePrice
+                value={day.stabilizacja === 'standard' ? pc.stabilizacjaStandard : pc.stabilizacjaRental}
+                onChange={(v) => updatePricingValue('produkcja', day.stabilizacja === 'standard' ? 'stabilizacjaStandard' : 'stabilizacjaRental', v)}
+                isModified={day.stabilizacja === 'standard' ? pc.stabilizacjaStandard !== DP.produkcja.stabilizacjaStandard : pc.stabilizacjaRental !== DP.produkcja.stabilizacjaRental}
+              />
+            )}
+            <PillGroup value={day.stabilizacja} options={SPRZET_OPCJE} onChange={(v) => onUpdate('stabilizacja', v as SprzetOpcja)} />
           </Row>
           <Row label="Podgląd">
-            <PillGroup value={day.podglad} options={SPRZET_OPCJE} onChange={(v) => onUpdate('podglad', v)} />
+            {day.podglad !== 'brak' && (
+              <InlinePrice
+                value={day.podglad === 'standard' ? pc.podgladStandard : pc.podgladRental}
+                onChange={(v) => updatePricingValue('produkcja', day.podglad === 'standard' ? 'podgladStandard' : 'podgladRental', v)}
+                isModified={day.podglad === 'standard' ? pc.podgladStandard !== DP.produkcja.podgladStandard : pc.podgladRental !== DP.produkcja.podgladRental}
+              />
+            )}
+            <PillGroup value={day.podglad} options={SPRZET_OPCJE} onChange={(v) => onUpdate('podglad', v as SprzetOpcja)} />
           </Row>
           <Row label="Światło">
-            <PillGroup value={day.swiatlo} options={SPRZET_OPCJE} onChange={(v) => onUpdate('swiatlo', v)} />
+            {day.swiatlo !== 'brak' && (
+              <InlinePrice
+                value={day.swiatlo === 'standard' ? pc.swiatloStandard : pc.swiatloRental}
+                onChange={(v) => updatePricingValue('produkcja', day.swiatlo === 'standard' ? 'swiatloStandard' : 'swiatloRental', v)}
+                isModified={day.swiatlo === 'standard' ? pc.swiatloStandard !== DP.produkcja.swiatloStandard : pc.swiatloRental !== DP.produkcja.swiatloRental}
+              />
+            )}
+            <PillGroup value={day.swiatlo} options={SPRZET_OPCJE} onChange={(v) => onUpdate('swiatlo', v as SprzetOpcja)} />
           </Row>
           <Row label="Dron">
-            <PillGroup value={day.dron} options={DRON_OPCJE} onChange={(v) => onUpdate('dron', v)} />
+            {day.dron !== 'brak' && (
+              <InlinePrice
+                value={day.dron === 'dji' ? pc.dronDji : pc.dronFpv}
+                onChange={(v) => updatePricingValue('produkcja', day.dron === 'dji' ? 'dronDji' : 'dronFpv', v)}
+                isModified={day.dron === 'dji' ? pc.dronDji !== DP.produkcja.dronDji : pc.dronFpv !== DP.produkcja.dronFpv}
+              />
+            )}
+            <PillGroup value={day.dron} options={DRON_OPCJE} onChange={(v) => onUpdate('dron', v as DronOpcja)} />
           </Row>
         </div>
       </div>
@@ -176,7 +230,8 @@ function DayCard({
 }
 
 export function ProdukcjaTab() {
-  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay } = useQuote()
+  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, updatePricingValue } = useQuote()
+  const pc = pricingConfig.produkcja
   const isDetailed = data.isDetailedProdukcja
   const days = data.detailedShootingDays ?? []
 
@@ -221,6 +276,14 @@ export function ProdukcjaTab() {
                     <span className="text-lg font-semibold tabular-nums text-white">
                       {Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500">Stawka operatora / dzień</span>
+                    <InlinePrice
+                      value={pc.stawkaOperatoraSzybkaWycena}
+                      onChange={(v) => updatePricingValue('produkcja', 'stawkaOperatoraSzybkaWycena', v)}
+                      isModified={pc.stawkaOperatoraSzybkaWycena !== DP.produkcja.stawkaOperatoraSzybkaWycena}
+                    />
                   </div>
                   <div className="flex items-center gap-4">
                     <Button
@@ -288,22 +351,36 @@ export function ProdukcjaTab() {
                       <p className="text-sm font-medium text-white">Dopłata za Reż-Opa</p>
                       <p className="text-xs text-zinc-400">Dodatkowa stawka za łączenie funkcji reżysera i operatora</p>
                     </div>
-                    <Switch
-                      checked={data.crudeRezOpSurcharge}
-                      onCheckedChange={(v) => updateField('crudeRezOpSurcharge', v)}
-                      aria-label="Dopłata za Reż-Opa"
-                    />
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <InlinePrice
+                        value={pc.doplataRezOpSzybkaWycena}
+                        onChange={(v) => updatePricingValue('produkcja', 'doplataRezOpSzybkaWycena', v)}
+                        isModified={pc.doplataRezOpSzybkaWycena !== DP.produkcja.doplataRezOpSzybkaWycena}
+                      />
+                      <Switch
+                        checked={data.crudeRezOpSurcharge}
+                        onCheckedChange={(v) => updateField('crudeRezOpSurcharge', v)}
+                        aria-label="Dopłata za Reż-Opa"
+                      />
+                    </div>
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
                     <div>
                       <p className="text-sm font-medium text-white">Dopłata za drona</p>
                       <p className="text-xs text-zinc-400">Dodatkowa stawka dzienna za ujęcia lotnicze</p>
                     </div>
-                    <Switch
-                      checked={data.crudeDroneSurcharge}
-                      onCheckedChange={(v) => updateField('crudeDroneSurcharge', v)}
-                      aria-label="Dopłata za drona"
-                    />
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <InlinePrice
+                        value={pc.doplataDronSzybkaWycena}
+                        onChange={(v) => updatePricingValue('produkcja', 'doplataDronSzybkaWycena', v)}
+                        isModified={pc.doplataDronSzybkaWycena !== DP.produkcja.doplataDronSzybkaWycena}
+                      />
+                      <Switch
+                        checked={data.crudeDroneSurcharge}
+                        onCheckedChange={(v) => updateField('crudeDroneSurcharge', v)}
+                        aria-label="Dopłata za drona"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -325,19 +402,27 @@ export function ProdukcjaTab() {
                   className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3"
                 >
                   {PAKIET_OPCJE.map((opt) => (
-                    <Label
-                      key={opt.value}
-                      htmlFor={`equip-${opt.value}`}
-                      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${
-                        data.klasaSprzetu === opt.value ? 'border-primary/50 bg-primary/5' : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
-                      }`}
-                    >
-                      <RadioGroupItem value={opt.value} id={`equip-${opt.value}`} className="mt-0.5" />
-                      <div>
-                        <span className="text-sm font-medium text-white">{opt.label}</span>
-                        <p className="text-xs text-zinc-400">{opt.desc}</p>
+                    <div key={opt.value} className="flex flex-col gap-1">
+                      <Label
+                        htmlFor={`equip-${opt.value}`}
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all ${
+                          data.klasaSprzetu === opt.value ? 'border-primary/50 bg-primary/5' : 'border-white/10 bg-white/[0.02] hover:bg-white/5'
+                        }`}
+                      >
+                        <RadioGroupItem value={opt.value} id={`equip-${opt.value}`} className="mt-0.5" />
+                        <div>
+                          <span className="text-sm font-medium text-white">{opt.label}</span>
+                          <p className="text-xs text-zinc-400">{opt.desc}</p>
+                        </div>
+                      </Label>
+                      <div className="flex justify-end pr-1">
+                        <InlinePrice
+                          value={pc[opt.priceKey]}
+                          onChange={(v) => updatePricingValue('produkcja', opt.priceKey, v)}
+                          isModified={pc[opt.priceKey] !== DP.produkcja[opt.priceKey]}
+                        />
                       </div>
-                    </Label>
+                    </div>
                   ))}
                 </RadioGroup>
                 </GlassCard>

@@ -192,7 +192,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         <DialogHeader>
           <DialogTitle className="text-white">Ustawienia stawek</DialogTitle>
           <p className="text-sm text-zinc-400">
-            Edytuj stawki netto (PLN) dla każdej pozycji. Zmiany zapisują się lokalnie.
+            Domyślne stawki cennika (netto, PLN). Kalkulator wraca do tych wartości po twardym resecie.
           </p>
         </DialogHeader>
 

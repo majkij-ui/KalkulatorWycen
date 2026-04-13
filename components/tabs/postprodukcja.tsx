@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Counter } from '@/components/counter'
 import { GlassCard } from '@/components/glass-card'
+import { InlinePrice } from '@/components/ui/inline-price'
 import {
   Select,
   SelectContent,
@@ -26,8 +27,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
+import { DEFAULT_PRICING, DEFAULT_FORMAT_KEY, REPORTAZ_FORMAT_KEY } from '@/lib/pricing-config'
 import { cn } from '@/lib/utils'
-import { DEFAULT_FORMAT_KEY, REPORTAZ_FORMAT_KEY } from '@/lib/pricing-config'
 import type {
   Deliverable,
   DeliverableFormat,
@@ -38,6 +39,8 @@ import type {
   MasterDzwiekuOpcja,
   LektorPostproOpcja,
 } from '@/lib/quote-types'
+
+const DP = DEFAULT_PRICING
 
 const container = {
   hidden: { opacity: 0 },
@@ -120,9 +123,11 @@ function PillGroup<T extends string>({
 function OptionRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
-      <div className="flex items-center justify-between py-2">
-        <span className="text-sm text-zinc-400">{label}</span>
-        {children}
+      <div className="flex items-center justify-between py-2 gap-2">
+        <span className="text-sm text-zinc-400 shrink-0">{label}</span>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {children}
+        </div>
       </div>
       <Separator className="my-2 bg-white/5" />
     </>
@@ -139,30 +144,77 @@ function toFormatKey(legacyOrKey: string): string {
   return legacyOrKey
 }
 
+/** Map korekcja selection to the config key for its price */
+function korekcjaKey(val: KorekcjaBarwnaOpcja): string | null {
+  if (val === 'podstawowa') return 'korekcjaBarwnaPodstawowa'
+  if (val === 'zaawansowana') return 'korekcjaBarwnaZaawansowana'
+  return null
+}
+function animacjeKey(val: AnimacjePostproOpcja): string | null {
+  if (val === '2d') return 'animacje2d'
+  if (val === 'ai') return 'animacjeAi'
+  return null
+}
+function muzykaKey(val: MuzykaPostproOpcja): string | null {
+  if (val === 'copyfree') return 'muzykaCopyfree'
+  if (val === 'kompozytor') return 'muzykaKompozytor'
+  return null
+}
+function soundKey(val: SoundDesignOpcja): string | null {
+  if (val === 'prosty') return 'soundDesignProsty'
+  if (val === 'zlozony') return 'soundDesignZlozony'
+  return null
+}
+function masterKey(val: MasterDzwiekuOpcja): string | null {
+  if (val === 'podstawowy') return 'masterDzwiekuPodstawowy'
+  if (val === 'zlozony') return 'masterDzwiekuZlozony'
+  return null
+}
+function lektorKey(val: LektorPostproOpcja): string | null {
+  if (val === 'ai') return 'lektorAi'
+  if (val === 'studio') return 'lektorStudio'
+  return null
+}
+
 function DeliverableCard({
   del,
-  index,
   availableFormats,
-  getFormatPriceAtTier,
   onUpdate,
   onRemove,
   onOpenFormatManager,
   canRemove,
 }: {
   del: Deliverable
-  index: number
   availableFormats: string[]
-  getFormatPriceAtTier: (formatKey: string) => number
   onUpdate: <K extends keyof Deliverable>(field: K, value: Deliverable[K]) => void
   onRemove: () => void
   onOpenFormatManager: () => void
   canRemove: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const { pricingConfig, updatePricingValue } = useQuote()
+  const pc = pricingConfig.postprodukcja
+
   const formatKey = toFormatKey(del.format)
-  const unitPrice = getFormatPriceAtTier(formatKey)
-  const linePrice = unitPrice * del.ilosc
-  const displayPrice = linePrice.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const unitPrice: number = typeof pc[formatKey] === 'number' ? (pc[formatKey] as number) : 0
+  const lineTotal = unitPrice * del.ilosc
+  const isFormatModified = formatKey in DP.postprodukcja
+    ? unitPrice !== DP.postprodukcja[formatKey]
+    : false
+
+  // Helper to render InlinePrice for a post-option key
+  function OptionPrice({ configKey }: { configKey: string | null }) {
+    if (!configKey) return null
+    const val = typeof pc[configKey] === 'number' ? (pc[configKey] as number) : 0
+    const def = DP.postprodukcja[configKey]
+    return (
+      <InlinePrice
+        value={val}
+        onChange={(v) => updatePricingValue('postprodukcja', configKey, v)}
+        isModified={typeof def === 'number' && val !== def}
+      />
+    )
+  }
 
   return (
     <GlassCard className="relative">
@@ -204,6 +256,7 @@ function DeliverableCard({
             </SelectItem>
           </SelectContent>
         </Select>
+
         <Counter
           compact
           label=""
@@ -212,8 +265,18 @@ function DeliverableCard({
           min={1}
           max={20}
         />
-        <div className="ml-auto flex items-center gap-1">
-          <span className="text-base font-mono tracking-tight text-white/80">{displayPrice} zł</span>
+
+        <div className="ml-auto flex items-center gap-2">
+          <InlinePrice
+            value={unitPrice}
+            onChange={(v) => updatePricingValue('postprodukcja', formatKey, v)}
+            isModified={isFormatModified}
+          />
+          {del.ilosc > 1 && (
+            <span className="text-xs text-zinc-500 whitespace-nowrap">
+              × {del.ilosc} = {lineTotal.toLocaleString('pl-PL')} zł
+            </span>
+          )}
           {canRemove && (
             <Button
               type="button"
@@ -251,23 +314,31 @@ function DeliverableCard({
           >
             <div className="space-y-0">
               <OptionRow label="Korekcja barwna">
+                <OptionPrice configKey={korekcjaKey(del.korekcjaBarwna)} />
                 <PillGroup value={del.korekcjaBarwna} options={KOREKCJA_OPCJE} onChange={(v) => onUpdate('korekcjaBarwna', v)} />
               </OptionRow>
               <OptionRow label="Animacje">
+                <OptionPrice configKey={animacjeKey(del.animacje)} />
                 <PillGroup value={del.animacje} options={ANIMACJE_OPCJE} onChange={(v) => onUpdate('animacje', v)} />
               </OptionRow>
               <OptionRow label="Muzyka">
+                <OptionPrice configKey={muzykaKey(del.muzyka)} />
                 <PillGroup value={del.muzyka} options={MUZYKA_OPCJE} onChange={(v) => onUpdate('muzyka', v)} />
               </OptionRow>
               <OptionRow label="Sound Design">
+                <OptionPrice configKey={soundKey(del.soundDesign)} />
                 <PillGroup value={del.soundDesign} options={SOUND_DESIGN_OPCJE} onChange={(v) => onUpdate('soundDesign', v)} />
               </OptionRow>
               <OptionRow label="Master dźwięku">
+                <OptionPrice configKey={masterKey(del.masterDzwieku)} />
                 <PillGroup value={del.masterDzwieku} options={MASTER_OPCJE} onChange={(v) => onUpdate('masterDzwieku', v)} />
               </OptionRow>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-zinc-400">Lektor</span>
-                <PillGroup value={del.lektor} options={LEKTOR_OPCJE} onChange={(v) => onUpdate('lektor', v)} />
+              <div className="flex items-center justify-between py-2 gap-2">
+                <span className="text-sm text-zinc-400 shrink-0">Lektor</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <OptionPrice configKey={lektorKey(del.lektor)} />
+                  <PillGroup value={del.lektor} options={LEKTOR_OPCJE} onChange={(v) => onUpdate('lektor', v)} />
+                </div>
               </div>
             </div>
           </motion.div>
@@ -422,8 +493,10 @@ export function PostprodukcjaTab() {
     removeDeliverable,
     updateDeliverable,
     availableFormats,
-    getFormatPriceAtTier,
+    pricingConfig,
+    updatePricingValue,
   } = useQuote()
+  const pc = pricingConfig.postprodukcja
   const isDetailed = data.isDetailedPostpro
   const deliverables = data.detailedDeliverables ?? []
   const unit = data.crudeEditUnit
@@ -431,6 +504,8 @@ export function PostprodukcjaTab() {
 
   const sliderMax = unit === 'dni' ? 30 : 100
   const sliderStep = unit === 'dni' ? 0.5 : 1
+  const crudeRateKey = unit === 'dni' ? 'montazZaDzien' : 'montazZaGodzine'
+  const crudeRate: number = typeof pc[crudeRateKey] === 'number' ? (pc[crudeRateKey] as number) : 0
 
   return (
     <motion.div
@@ -469,29 +544,39 @@ export function PostprodukcjaTab() {
                     </div>
                   </div>
 
-                  <div className="mb-4 flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => updateField('crudeEditUnit', 'dni')}
-                      className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
-                        unit === 'dni'
-                          ? 'border-primary/50 bg-primary/10 text-white'
-                          : 'border-white/5 bg-zinc-900/50 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                      }`}
-                    >
-                      Dni
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateField('crudeEditUnit', 'godziny')}
-                      className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
-                        unit === 'godziny'
-                          ? 'border-primary/50 bg-primary/10 text-white'
-                          : 'border-white/5 bg-zinc-900/50 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                      }`}
-                    >
-                      Godziny
-                    </button>
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateField('crudeEditUnit', 'dni')}
+                        className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
+                          unit === 'dni'
+                            ? 'border-primary/50 bg-primary/10 text-white'
+                            : 'border-white/5 bg-zinc-900/50 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
+                        }`}
+                      >
+                        Dni
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateField('crudeEditUnit', 'godziny')}
+                        className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
+                          unit === 'godziny'
+                            ? 'border-primary/50 bg-primary/10 text-white'
+                            : 'border-white/5 bg-zinc-900/50 text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
+                        }`}
+                      >
+                        Godziny
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-zinc-500">
+                      <span>Stawka:</span>
+                      <InlinePrice
+                        value={crudeRate}
+                        onChange={(v) => updatePricingValue('postprodukcja', crudeRateKey, v)}
+                        isModified={crudeRate !== DP.postprodukcja[crudeRateKey]}
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -602,13 +687,11 @@ export function PostprodukcjaTab() {
                   Zarządzaj formatami
                 </Button>
               </motion.div>
-              {deliverables.map((del, index) => (
+              {deliverables.map((del) => (
                 <motion.div key={del.id} variants={item}>
                   <DeliverableCard
                     del={del}
-                    index={index}
                     availableFormats={availableFormats}
-                    getFormatPriceAtTier={getFormatPriceAtTier}
                     onUpdate={(field, value) => updateDeliverable(del.id, field, value)}
                     onRemove={() => removeDeliverable(del.id)}
                     onOpenFormatManager={() => setFormatManagerOpen(true)}

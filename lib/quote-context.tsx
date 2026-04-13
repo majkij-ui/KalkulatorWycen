@@ -27,6 +27,7 @@ interface QuoteContextValue {
   // Settings: custom pricing (persisted in localStorage)
   pricingConfig: PricingConfigShape
   setPricingConfig: (config: PricingConfigShape) => void
+  updatePricingValue: (category: keyof PricingConfigShape, key: string, value: number) => void
   reloadPricingFromStorage: () => void
   resetPricingToDefault: () => void
   // Produkcja detailed: shooting days
@@ -123,6 +124,21 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const resetPricing = useCallback(() => {
     const def = resetPricingToDefault()
     setPricingConfigState(def)
+  }, [])
+
+  const updatePricingValue = useCallback((
+    category: keyof PricingConfigShape,
+    key: string,
+    value: number,
+  ) => {
+    setPricingConfigState((prev) => {
+      const next: PricingConfigShape = {
+        ...prev,
+        [category]: { ...(prev[category] as Record<string, number>), [key]: value },
+      }
+      savePricingConfig(next)
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -449,6 +465,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     breakdown,
     pricingConfig,
     setPricingConfig,
+    updatePricingValue,
     reloadPricingFromStorage,
     resetPricingToDefault: resetPricing,
     addShootingDay,
