@@ -216,6 +216,7 @@ export function PodgladPdfTab() {
   const [draftHydrationStatus, setDraftHydrationStatus] = useState<'loading' | 'ready'>('loading')
   const [isUsingDraft, setIsUsingDraft] = useState(false)
   const [showDraftPrompt, setShowDraftPrompt] = useState(false)
+  const [previewResetKey, setPreviewResetKey] = useState(0)
 
   const terms = useMemo(() => getTermsAndConditions(), [getTermsAndConditions])
   const [uwagiManualText, setUwagiManualText] = useState('')
@@ -423,6 +424,7 @@ export function PodgladPdfTab() {
     setIsUsingDraft(false)
     setShowDraftPrompt(false)
     setLocalPdfState(init)
+    setPreviewResetKey((k) => k + 1)
   }
 
   const handleContinueEditing = () => {
@@ -672,7 +674,7 @@ export function PodgladPdfTab() {
                   <div className="col-span-6">Opis</div>
                 </div>
 
-                <div className="rounded-md border border-zinc-200">
+                <div key={previewResetKey} className="rounded-md border border-zinc-200">
                   {ROWS.map((r) => {
                     const row = localPdfState.rows[r.key]
                     const nettoValue = row.cenaNetto

@@ -2,7 +2,7 @@
 
 Short-term priorities and UX changes for the video quote calculator (Kalkulator Wyceny Wideo).
 
-Items 1, 3, 4, 5 are **done**. Item 2 is the active focus.
+**Status:** Items 1, 2, 3, 4, 5, 6 are **done**. PDF texts editor and bug fixes queued below.
 
 ---
 
@@ -67,35 +67,103 @@ Items 1, 3, 4, 5 are **done**. Item 2 is the active focus.
 
 ---
 
-## 6. Header action bar rework (future / mark for later)
+## 6. ✅ Header action bar rework
 
-**Problem:** The current header has a reset icon and a cog icon. The reset is ambiguous (what does it reset exactly?) and there are missing actions users would need.
+**Done.** Six-button action bar implemented:
+- **Load quote** (FolderOpen) — file input → `loadQuoteSnapshot`
+- **Save quote** (FileDown) — exports JSON with version/data/pricing/margin; Tauri `writeFile` to Downloads; web uses blob anchor; green success flash
+- **Save defaults** (Save) — calls `saveAsDefaults()` with amber success flash
+- **Reset** (RotateCcw) — calls `resetToZero()`
+- **Hard reset** (Eraser) — 2-click confirmation (3s window); red glow; calls `hardReset()` which restores user-saved defaults or factory defaults
+- **Settings** (Settings) — opens SettingsSheet
 
-**New button layout (right side of header):**
-
-| Button | Action |
-|---|---|
-| **Reset** | Zeroes all quantities / selections in the current quote. Prices (Cennik) untouched. |
-| **Hard reset** | Zeroes everything AND restores all prices to DEFAULT_PRICING defaults. |
-| **Save defaults** | Saves the current Cennik values as the new persistent defaults (writes to `settings.json` / localStorage). |
-| **Save quote** | Exports the full current quote state to a `.json` file the user can reload later. |
-| **Load quote** | Opens a file picker to load a previously saved quote `.json`. |
-| **Cog (⚙)** | Opens the existing Settings / Cennik modal (default values editor). |
-
-Implementation notes:
-- "Reset" = `resetToZero()` (already exists, keep it).
-- "Hard reset" = `resetToZero()` + `resetPricingToDefault()` (both already exist, just combine).
-- "Save defaults" = persist current `pricingConfig` as the baseline (overwrite `DEFAULT_PRICING` stored copy in localStorage / `settings.json`).
-- "Save quote" / "Load quote" = serialize / deserialize full `QuoteData` + `pricingConfig` snapshot. Tauri: use `fs.writeFile` / `fs.readFile`. Web: use download anchor / file input.
+Separated into 3 groups with visual dividers. `migratePricingConfig()` helper extracts legacy tier pricing on load.
 
 ---
 
-## Suggested order going forward
+## 7. ✅ PDF texts editor (Edytuj treści PDF)
 
-1. **Item 2 — Inline price editing** (the active task).
-2. **Item 6 — Header action bar** (once inline editing is stable, the reset semantics become more important).
-3. **Settings modal PDF placeholder texts** (minor polish, can be parallelised).
+**Done.** New modal in Settings sheet allows user to customize all PDF-facing texts:
+
+**Dane firmy (4 fields):**
+- Document title (default: "WYCENA PRODUKCJI WIDEO")
+- Company name (default: "Nonoise Media")
+- Producer name (default: "Michał Jagniątkowski")
+- Contact email (default: "contact@nonoise.media")
+
+**Szablony uwag (5 textareas):**
+- Term — niewyłączna licencja (Uwagi when copyright type = "licencja")
+- Term — pełne przekazanie praw (Uwagi when copyright type = "przekazanie")
+- Term — nadgodziny (Uwagi when overtime toggle on; supports `{hours}` and `{rate}` tokens)
+- Term — poprawki montażowe (Uwagi when revisions toggle on; supports `{count}` and `{price}` tokens)
+- Term — netto disclaimer (always appended to Uwagi; used to swap text when VAT mode toggled)
+
+Stored in localStorage (`quote-gen-pdf-texts`). Token replacement via `renderTermOvertime()` and `renderTermRevisions()` helpers. Integrated into `getTermsAndConditions()` in quote-context.
 
 ---
 
-*Document status: Items 1, 3, 4, 5 done. Item 2 in design/implementation. Items 6+ queued.*
+## 🐛 Bug fixes & enhancements queue
+
+### 1. Initial load — "[object object]" and NaN total
+
+**Issue:** On first app load, line items show "[object object]" in orange text instead of actual default prices. Grand total shows NaN instead of 0.
+
+**Root cause:** TBD — likely `pricingConfig` not initialized before first render, or missing fallback in price getters.
+
+**Fix:** Ensure `pricingConfig` is hydrated from localStorage before any component mounts. Add safe guards in price calculation (return 0 if price is undefined). Test on fresh browser.
+
+---
+
+### 2. Hard reset — custom values don't revert
+
+**Issue:** When user customizes prices and clicks hard reset, the amber-dot custom values remain instead of reverting to defaults.
+
+**Root cause:** Likely `hardReset()` in quote-context is not properly restoring `pricingConfig` to `getUserDefault()` or factory defaults. Or `setPricingConfig` is not being called, or the state update is not being applied.
+
+**Fix:** Trace hard reset flow: verify `hardReset()` calls `setPricingConfig(getUserDefault())` (or factory default if no user default). Verify state updates reach all subscribers. Test with custom prices → hard reset → verify prices revert + orange dots disappear.
+
+---
+
+### 3. Delta animation — low readability
+
+**Issue:** Current delta badge (green/red floating text) above total is hard to read and easy to miss.
+
+**Enhancement:** Replace the floating badge with a temporary takeover: delta value appears **in place of** the total amount, animated in with spinning digits effect (same as `AnimatedCurrency`), stays for 2s, then animates out to reveal the updated total. Use green for positive delta, red for negative.
+
+**Implementation sketch:**
+- Modify `sticky-header.tsx` — instead of `AnimatePresence` badge overlay, switch the `AnimatedCurrency` display to show delta + apply `delta > 0 ? 'text-emerald-400' : 'text-red-400'` while delta is active.
+- Use same 2s timer. Ensure spinning digits animation is synchronized.
+
+---
+
+### 4. PDF text templates — expand to auto-generated descriptions
+
+**Issue:** Current `termLicencja`, `termPrzekazanie`, etc. only cover header/footer terms. But PDF also contains auto-generated descriptions like:
+- Production (ekipa): *"Tryb szybkiej wyceny: 0 dni × 1 os. Dopłata Reż-Op: Nie."* (from `getOpisInitial()` in `podglad-pdf.tsx`)
+- Other phase descriptions (preprodukcja, sprzet, logistyka, postprodukcja, inne) also have templates
+
+**Enhancement:** Extend `PdfTextsConfig` with templates for these auto-generated descriptions (one per phase):
+- `opisPreprodukcja` — templates for "Dokumentacja: N dni. Scenariusz: X."
+- `opisEkipa` — template for "Tryb szybkiej wyceny: N dni × M os..."
+- `opisSprzet` — template for "Klasa sprzętu: X..."
+- `opisLogistyka` — template for "Dojazd: N km..."
+- `opisPostprodukcja` — template for "Montaż w trybie szybkiej wyceny: N dni/godz."
+- `opisInne` — template for "Lektor: Tak/Nie..."
+
+Each template should use `{tokens}` for dynamic values (dni, osoby, klasa, km, etc.) and be substituted in `getOpisInitial()`.
+
+**Benefit:** Users can customize how the PDF describes each phase, not just the boilerplate terms.
+
+---
+
+### 5. PDF preview sync bug
+
+**Issue:** When user clicks *"Pobierz nowe dane z kalkulatora"* on the draft prompt, the preview doesn't update visually (totals stay stale), but the exported PDF has correct values. Clicking on the preview text fixes the display glitch.
+
+**Root cause:** Likely the preview state isn't being reset/recomputed when `handleRestoreFromCalculator()` fires, or the `useEffect` deps don't trigger a refresh.
+
+**Fix:** Trace `handleRestoreFromCalculator()` in `podglad-pdf.tsx` — ensure it resets `localPdfState` by calling `buildInitialState()` and triggering a full re-render. Check `useEffect` dependencies and `touchedRowsRef` state. May need to force a recalculation or add a cache-bust key.
+
+---
+
+*Document status: Items 1, 2, 3, 4, 5, 6, 7 done. Bugs 1-5 and enhancement 4 queued for next session.*

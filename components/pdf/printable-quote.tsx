@@ -3,6 +3,7 @@
 import React from 'react'
 import { formatCurrency } from '@/lib/quote-calc'
 import type { LocalPdfState, PdfRowKey } from '@/lib/quote-types'
+import { useQuote } from '@/lib/quote-context'
 
 const VAT_RATE = 0.23
 
@@ -13,6 +14,7 @@ function valueForDisplay(cenaNetto: number, showVat: boolean): number {
 }
 
 export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState }) {
+  const { pdfTexts } = useQuote()
   const { showVat } = localPdfState
 
   const totalNetto = ROW_ORDER.reduce((sum, key) => sum + (localPdfState.rows[key]?.cenaNetto ?? 0), 0)
@@ -45,7 +47,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="NonoiseMedia" className="h-10 w-10 rounded-md object-cover" />
         <div className="flex-1 text-center">
-          <div className="text-[16px] font-bold tracking-widest">WYCENA PRODUKCJI WIDEO</div>
+          <div className="text-[16px] font-bold tracking-widest">{pdfTexts.documentTitle}</div>
         </div>
         <div className="w-10" aria-hidden />
       </div>
@@ -55,13 +57,13 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
         {/* Wykonawca: 3 linie */}
         <div className="text-zinc-900 leading-tight min-w-0">
           <div>
-            <span className="font-bold">Wykonawca:</span> Nonoise Media
+            <span className="font-bold">Wykonawca:</span> {pdfTexts.companyName}
           </div>
           <div>
-            <span className="font-bold">Producent:</span> Michał Jagniątkowski
+            <span className="font-bold">Producent:</span> {pdfTexts.producerName}
           </div>
           <div>
-            <span className="font-bold">email:</span> contact@nonoise.media
+            <span className="font-bold">email:</span> {pdfTexts.contactEmail}
           </div>
         </div>
 

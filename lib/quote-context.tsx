@@ -3,7 +3,9 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
+import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
+import type { PdfTextsConfig } from './pdf-texts-config'
+import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRevisions } from './pdf-texts-config'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
 import { safeNum, safeArray } from './safe-numbers'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
@@ -50,6 +52,15 @@ interface QuoteContextValue {
   /** T&Cs for PDF "Uwagi" section – array of strings from active toggles */
   getTermsAndConditions: () => string[]
   resetToZero: () => void
+  /** Save current pricingConfig as user-defined defaults (hard reset target) */
+  saveAsDefaults: () => void
+  /** Reset quote data + margin to zero AND restore pricing to user/factory defaults */
+  hardReset: () => void
+  /** Apply a saved quote snapshot (data + pricing + margin) loaded from a file */
+  loadQuoteSnapshot: (snapshot: { data?: Partial<QuoteData>; pricingConfig?: unknown; marginMultiplier?: number }) => void
+  /** Editable PDF placeholder texts (company info + terms templates) */
+  pdfTexts: PdfTextsConfig
+  setPdfTexts: (config: PdfTextsConfig) => void
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
@@ -92,6 +103,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [isCalculating, setIsCalculating] = useState(false)
   const [marginMultiplier, setMarginMultiplier] = useState(1.0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
+  const [pdfTexts, setPdfTextsState] = useState<PdfTextsConfig>(() => getPdfTextsConfig())
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [restorationComplete, setRestorationComplete] = useState(false)
 
@@ -103,8 +115,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       setMarginMultiplier(saved.marginMultiplier)
     }
     if (saved.pricingConfig && typeof saved.pricingConfig === 'object') {
-      setPricingConfigState(saved.pricingConfig)
-      savePricingConfig(saved.pricingConfig)
+      const migrated = migratePricingConfig(
+        saved.pricingConfig as unknown as Record<string, Record<string, unknown>>
+      )
+      setPricingConfigState(migrated)
+      savePricingConfig(migrated)
     }
     if (Array.isArray(saved.templates)) {
       setTemplates(saved.templates)
@@ -139,6 +154,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       savePricingConfig(next)
       return next
     })
+  }, [])
+
+  const setPdfTexts = useCallback((config: PdfTextsConfig) => {
+    setPdfTextsState(config)
+    savePdfTextsConfig(config)
   }, [])
 
   useEffect(() => {
@@ -321,33 +341,24 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   const getTermsAndConditions = useMemo(() => {
     return function terms(): string[] {
-      const terms: string[] = []
+      const t: string[] = []
       if (data.copyrightType === 'licencja') {
-        terms.push(
-          'Cena obejmuje realizację filmu oraz udzielenie niewyłącznej licencji na jego wykorzystanie w Internecie na kanałach własnych Zamawiającego oraz do użytku wewnętrznego, bez ograniczeń terytorialnych, na czas nieoznaczony, z zastrzeżeniem że w przypadku wykorzystania wizerunku aktorów lub materiałów licencjonowanych, okres licencji może zostać ograniczony zgodnie z warunkami udzielonych zgód i licencji.'
-        )
+        t.push(pdfTexts.termLicencja)
       }
       if (data.copyrightType === 'przekazanie') {
-        terms.push(
-          'Cena obejmuje realizację filmu oraz pełne przeniesienie autorskich praw majątkowych do dzieła na Zamawiającego na wszystkich znanych polach eksploatacji, bez ograniczeń czasowych i terytorialnych.'
-        )
+        t.push(pdfTexts.termPrzekazanie)
       }
       if (data.includeOvertimeInfo) {
-        terms.push(
-          `1 dzień zdjęciowy obejmuje maksymalnie ${data.standardDayHours} godzin pracy na planie. Praca powyżej tego czasu rozliczana jest jako nadgodziny w kwocie ${data.overtimeHourlyRate} zł netto za członka ekipy, liczone za każdą rozpoczętą godzinę.`
-        )
+        t.push(renderTermOvertime(pdfTexts.termOvertime, data.standardDayHours, data.overtimeHourlyRate))
       }
       if (data.includeRevisionsInfo) {
-        terms.push(
-          `Cena obejmuje do ${data.includedRevisions} rund poprawek montażowych. Kolejne zmiany podlegają dodatkowej wycenie w kwocie ${data.extraRevisionPrice} zł netto za rundę.`
-        )
+        t.push(renderTermRevisions(pdfTexts.termRevisions, data.includedRevisions, data.extraRevisionPrice))
       }
-      terms.push(
-        'Podane kwoty są kwotami netto. Do kwot należy doliczyć VAT zgodnie z obowiązującymi przepisami.'
-      )
-      return terms
+      t.push(pdfTexts.termNetto)
+      return t
     }
   }, [
+    pdfTexts,
     data.copyrightType,
     data.includeOvertimeInfo,
     data.standardDayHours,
@@ -360,6 +371,36 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const resetToZero = useCallback(() => {
     setData({ ...defaultQuoteData })
     setMarginMultiplier(1.0)
+  }, [])
+
+  const saveAsDefaults = useCallback(() => {
+    saveAsUserDefault(pricingConfig)
+  }, [pricingConfig])
+
+  const hardReset = useCallback(() => {
+    setData({ ...defaultQuoteData })
+    setMarginMultiplier(1.0)
+    const target = getUserDefault()
+    setPricingConfigState(target)
+    savePricingConfig(target)
+  }, [])
+
+  const loadQuoteSnapshot = useCallback((snapshot: {
+    data?: Partial<QuoteData>
+    pricingConfig?: unknown
+    marginMultiplier?: number
+  }) => {
+    if (snapshot.data) setData(mergeQuoteDataPartial(snapshot.data))
+    if (snapshot.pricingConfig && typeof snapshot.pricingConfig === 'object') {
+      const migrated = migratePricingConfig(
+        snapshot.pricingConfig as Record<string, Record<string, unknown>>
+      )
+      setPricingConfigState(migrated)
+      savePricingConfig(migrated)
+    }
+    if (typeof snapshot.marginMultiplier === 'number' && Number.isFinite(snapshot.marginMultiplier)) {
+      setMarginMultiplier(snapshot.marginMultiplier)
+    }
   }, [])
 
   const saveTemplate = useCallback((name: string) => {
@@ -483,6 +524,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     calculateTotalCrewDays,
     getTermsAndConditions,
     resetToZero,
+    saveAsDefaults,
+    hardReset,
+    loadQuoteSnapshot,
+    pdfTexts,
+    setPdfTexts,
   }
 
   return (

@@ -163,9 +163,42 @@ function migrateSection(
 }
 
 const STORAGE_KEY = 'quote-gen-pricing-config'
+const USER_DEFAULT_KEY = 'quote-gen-user-default-pricing'
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
+}
+
+/** Apply migration to a raw parsed pricing object, filling in defaults for missing keys. */
+export function migratePricingConfig(
+  parsed: Record<string, Record<string, unknown>>
+): PricingConfigShape {
+  const base = deepClone(DEFAULT_PRICING)
+  if (parsed.preprodukcja) {
+    base.preprodukcja = migrateSection(
+      base.preprodukcja as unknown as Record<string, number>,
+      parsed.preprodukcja
+    ) as PricingConfigShape['preprodukcja']
+  }
+  if (parsed.produkcja) {
+    base.produkcja = migrateSection(
+      base.produkcja as unknown as Record<string, number>,
+      parsed.produkcja
+    ) as PricingConfigShape['produkcja']
+  }
+  if (parsed.postprodukcja) {
+    base.postprodukcja = migrateSection(
+      base.postprodukcja as unknown as Record<string, number>,
+      parsed.postprodukcja
+    ) as PricingConfigShape['postprodukcja']
+  }
+  if (parsed.dodatkowe) {
+    base.dodatkowe = migrateSection(
+      base.dodatkowe as unknown as Record<string, number>,
+      parsed.dodatkowe
+    ) as PricingConfigShape['dodatkowe']
+  }
+  return base
 }
 
 export function getPricingConfig(): PricingConfigShape {
@@ -173,33 +206,7 @@ export function getPricingConfig(): PricingConfigShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return deepClone(DEFAULT_PRICING)
-    const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>
-    const base = deepClone(DEFAULT_PRICING)
-    if (parsed.preprodukcja) {
-      base.preprodukcja = migrateSection(
-        base.preprodukcja as unknown as Record<string, number>,
-        parsed.preprodukcja
-      ) as PricingConfigShape['preprodukcja']
-    }
-    if (parsed.produkcja) {
-      base.produkcja = migrateSection(
-        base.produkcja as unknown as Record<string, number>,
-        parsed.produkcja
-      ) as PricingConfigShape['produkcja']
-    }
-    if (parsed.postprodukcja) {
-      base.postprodukcja = migrateSection(
-        base.postprodukcja as unknown as Record<string, number>,
-        parsed.postprodukcja
-      ) as PricingConfigShape['postprodukcja']
-    }
-    if (parsed.dodatkowe) {
-      base.dodatkowe = migrateSection(
-        base.dodatkowe as unknown as Record<string, number>,
-        parsed.dodatkowe
-      ) as PricingConfigShape['dodatkowe']
-    }
-    return base
+    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
   } catch {
     return deepClone(DEFAULT_PRICING)
   }
@@ -211,6 +218,28 @@ export function savePricingConfig(config: PricingConfigShape): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
   } catch {
     // ignore
+  }
+}
+
+/** Save the current config as the user's personal default (used by hard-reset). */
+export function saveAsUserDefault(config: PricingConfigShape): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(USER_DEFAULT_KEY, JSON.stringify(config))
+  } catch {
+    // ignore
+  }
+}
+
+/** Return the user's saved default pricing, or fall back to factory DEFAULT_PRICING. */
+export function getUserDefault(): PricingConfigShape {
+  if (typeof window === 'undefined') return deepClone(DEFAULT_PRICING)
+  try {
+    const raw = localStorage.getItem(USER_DEFAULT_KEY)
+    if (!raw) return deepClone(DEFAULT_PRICING)
+    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
+  } catch {
+    return deepClone(DEFAULT_PRICING)
   }
 }
 
