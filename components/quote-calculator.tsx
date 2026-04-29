@@ -22,9 +22,22 @@ const tabs = [
   { value: 'podglad', label: 'Podglad i PDF', icon: FileDown },
 ]
 
+const CATEGORY_TO_TAB: Record<string, string> = {
+  Preprodukcja: 'preprodukcja',
+  Produkcja: 'produkcja',
+  Postprodukcja: 'postprodukcja',
+  Dodatkowe: 'dodatkowe',
+}
+
 function QuoteCalculatorInner() {
   const [activeTab, setActiveTab] = useState('preprodukcja')
-  const { isCalculating } = useQuote()
+  const { isCalculating, breakdown } = useQuote()
+
+  const phaseNetMap: Record<string, number> = {}
+  for (const phase of breakdown) {
+    const key = CATEGORY_TO_TAB[phase.category]
+    if (key) phaseNetMap[key] = phase.phaseNetto
+  }
 
   return (
     <div className="relative min-h-screen bg-[#050505]">
@@ -38,14 +51,22 @@ function QuoteCalculatorInner() {
             <TabsList className="inline-flex items-center justify-center rounded-full border border-white/5 bg-black/60 p-1 backdrop-blur-xl">
               {tabs.map((tab) => {
                 const Icon = tab.icon
+                const phaseNetto = phaseNetMap[tab.value] ?? 0
                 return (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="inline-flex items-center gap-2 rounded-full px-6 py-2 text-sm text-zinc-400 data-[state=active]:bg-zinc-800 data-[state=active]:text-white transition-all"
+                    className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-zinc-400 data-[state=active]:bg-zinc-800 data-[state=active]:text-white transition-all"
                   >
                     <Icon className="size-4 shrink-0" />
-                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="hidden sm:flex flex-col items-start leading-[1.15]">
+                      <span>{tab.label}</span>
+                      {phaseNetto > 0 && (
+                        <span className="text-[10px] tabular-nums font-normal text-amber-400/70">
+                          {Math.round(phaseNetto).toLocaleString('pl-PL')} zł
+                        </span>
+                      )}
+                    </span>
                     <span className="text-[10px] leading-tight sm:hidden">{tab.label.split(' ')[0]}</span>
                   </TabsTrigger>
                 )

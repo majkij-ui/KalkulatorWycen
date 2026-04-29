@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useState, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Clapperboard, Users, Camera, Plus, Minus, Trash2 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
@@ -13,7 +14,8 @@ import { GlassCard } from '@/components/glass-card'
 import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
-import type { PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } from '@/lib/quote-types'
+import type { CrewRoleKey, PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } from '@/lib/quote-types'
+import { computeShootingDayNet } from '@/lib/quote-calc'
 
 const DP = DEFAULT_PRICING
 
@@ -77,7 +79,7 @@ function PillGroup<T extends string>({
   )
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-white/5 last:border-0 gap-2">
       <span className="text-sm text-zinc-400 shrink-0">{label}</span>
@@ -85,6 +87,106 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
         {children}
       </div>
     </div>
+  )
+}
+
+// Click-to-edit inline label for crew role names.
+function EditableLabel({ value, placeholder, onChange }: {
+  value: string
+  placeholder: string
+  onChange: (v: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const isCustom = !!value
+
+  function startEdit() { setDraft(value); setEditing(true) }
+  function commit() { setEditing(false); onChange(draft.trim()) }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        autoFocus
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        placeholder={placeholder}
+        className="text-sm bg-transparent border-b border-primary/40 outline-none text-zinc-200 w-28 max-w-[7rem]"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      title="Kliknij aby edytować"
+      className={`text-sm text-left group flex items-center gap-1 shrink-0 ${isCustom ? 'text-zinc-200' : 'text-zinc-400 hover:text-zinc-300'}`}
+    >
+      <span>{isCustom ? value : placeholder}</span>
+      <span className="text-[9px] opacity-0 group-hover:opacity-40 transition-opacity leading-none">✎</span>
+    </button>
+  )
+}
+
+// Inline editable adjustment amount (can be negative).
+function AdjustmentInput({ value, onChange, formatCurrency }: {
+  value: number
+  onChange: (v: number) => void
+  formatCurrency: (n: number) => string
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  function startEdit() { setDraft(value === 0 ? '' : String(value)); setEditing(true) }
+  function commit() {
+    setEditing(false)
+    const parsed = parseFloat(draft.replace(',', '.').replace(/\s/g, ''))
+    onChange(isNaN(parsed) ? 0 : Math.round(parsed))
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        placeholder="0"
+        className="text-sm text-right bg-transparent border-b border-primary/40 outline-none text-zinc-200 w-24 tabular-nums"
+      />
+    )
+  }
+
+  const display = value === 0
+    ? <span className="text-zinc-600 text-sm">+ 0</span>
+    : <span className={`text-sm tabular-nums font-medium ${value < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+        {value > 0 ? '+' : ''}{formatCurrency(value)}
+      </span>
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      title="Kliknij aby ustawić korektę"
+      className="group flex items-center gap-1"
+    >
+      {display}
+      <span className="text-[9px] opacity-0 group-hover:opacity-40 transition-opacity leading-none text-zinc-400">✎</span>
+    </button>
   )
 }
 
@@ -101,8 +203,18 @@ function DayCard({
   onRemove: () => void
   canRemove: boolean
 }) {
-  const { pricingConfig, updatePricingValue } = useQuote()
+  const { pricingConfig, updatePricingValue, marginMultiplier, formatCurrency } = useQuote()
   const pc = pricingConfig.produkcja
+  const crewNames = day.crewNames ?? {}
+
+  function setCrewName(role: CrewRoleKey, name: string) {
+    onUpdate('crewNames', { ...crewNames, [role]: name })
+  }
+
+  // Live day subtotal displayed at the bottom of the card.
+  const dayBaseNetto = computeShootingDayNet(day, pc) * marginMultiplier
+  const adj = day.dayAdjustment ?? 0
+  const dayFinalNetto = dayBaseNetto + adj
 
   return (
     <GlassCard className="relative">
@@ -125,41 +237,41 @@ function DayCard({
       <div>
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6 first:mt-0">Ekipa</h4>
         <div className="space-y-0">
-          <Row label="ReżOp">
+          <Row label={<EditableLabel value={crewNames.rezOp ?? ''} placeholder="ReżOp" onChange={(v) => setCrewName('rezOp', v)} />}>
             <InlinePrice value={pc.rezOp} onChange={(v) => updatePricingValue('produkcja', 'rezOp', v)} isModified={pc.rezOp !== DP.produkcja.rezOp} />
-            <Counter compact label="" value={day.rezOp} onChange={(v) => onUpdate('rezOp', v)} min={0} max={2} />
+            <Counter compact label="" value={day.rezOp} onChange={(v) => onUpdate('rezOp', v)} min={0} />
           </Row>
-          <Row label="Asystent/Operator">
+          <Row label={<EditableLabel value={crewNames.asystent ?? ''} placeholder="Asystent/Operator" onChange={(v) => setCrewName('asystent', v)} />}>
             <InlinePrice value={pc.asystentOperator} onChange={(v) => updatePricingValue('produkcja', 'asystentOperator', v)} isModified={pc.asystentOperator !== DP.produkcja.asystentOperator} />
-            <Counter compact label="" value={day.asystent} onChange={(v) => onUpdate('asystent', v)} min={0} max={4} />
+            <Counter compact label="" value={day.asystent} onChange={(v) => onUpdate('asystent', v)} min={0} />
           </Row>
-          <Row label="Gafer">
+          <Row label={<EditableLabel value={crewNames.gafer ?? ''} placeholder="Gafer" onChange={(v) => setCrewName('gafer', v)} />}>
             <InlinePrice value={pc.gafer} onChange={(v) => updatePricingValue('produkcja', 'gafer', v)} isModified={pc.gafer !== DP.produkcja.gafer} />
-            <Counter compact label="" value={day.gafer} onChange={(v) => onUpdate('gafer', v)} min={0} max={2} />
+            <Counter compact label="" value={day.gafer} onChange={(v) => onUpdate('gafer', v)} min={0} />
           </Row>
-          <Row label="Dźwiękowiec">
+          <Row label={<EditableLabel value={crewNames.dzwiekowiec ?? ''} placeholder="Dźwiękowiec" onChange={(v) => setCrewName('dzwiekowiec', v)} />}>
             <InlinePrice value={pc.dzwiekowiec} onChange={(v) => updatePricingValue('produkcja', 'dzwiekowiec', v)} isModified={pc.dzwiekowiec !== DP.produkcja.dzwiekowiec} />
-            <Counter compact label="" value={day.dzwiekowiec} onChange={(v) => onUpdate('dzwiekowiec', v)} min={0} max={2} />
+            <Counter compact label="" value={day.dzwiekowiec} onChange={(v) => onUpdate('dzwiekowiec', v)} min={0} />
           </Row>
-          <Row label="MUA (Wizaż)">
+          <Row label={<EditableLabel value={crewNames.mua ?? ''} placeholder="MUA (Wizaż)" onChange={(v) => setCrewName('mua', v)} />}>
             <InlinePrice value={pc.mua} onChange={(v) => updatePricingValue('produkcja', 'mua', v)} isModified={pc.mua !== DP.produkcja.mua} />
-            <Counter compact label="" value={day.mua} onChange={(v) => onUpdate('mua', v)} min={0} max={2} />
+            <Counter compact label="" value={day.mua} onChange={(v) => onUpdate('mua', v)} min={0} />
           </Row>
         </div>
 
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Obsada</h4>
         <div className="space-y-0">
-          <Row label="Aktor">
+          <Row label={<EditableLabel value={crewNames.aktor ?? ''} placeholder="Aktor" onChange={(v) => setCrewName('aktor', v)} />}>
             <InlinePrice value={pc.aktor} onChange={(v) => updatePricingValue('produkcja', 'aktor', v)} isModified={pc.aktor !== DP.produkcja.aktor} />
-            <Counter compact label="" value={day.aktor} onChange={(v) => onUpdate('aktor', v)} min={0} max={5} />
+            <Counter compact label="" value={day.aktor} onChange={(v) => onUpdate('aktor', v)} min={0} />
           </Row>
-          <Row label="Model">
+          <Row label={<EditableLabel value={crewNames.model ?? ''} placeholder="Model" onChange={(v) => setCrewName('model', v)} />}>
             <InlinePrice value={pc.model} onChange={(v) => updatePricingValue('produkcja', 'model', v)} isModified={pc.model !== DP.produkcja.model} />
-            <Counter compact label="" value={day.model} onChange={(v) => onUpdate('model', v)} min={0} max={5} />
+            <Counter compact label="" value={day.model} onChange={(v) => onUpdate('model', v)} min={0} />
           </Row>
-          <Row label="Statysta/Epizodysta">
+          <Row label={<EditableLabel value={crewNames.statysta ?? ''} placeholder="Statysta/Epizodysta" onChange={(v) => setCrewName('statysta', v)} />}>
             <InlinePrice value={pc.statystaEpizodysta} onChange={(v) => updatePricingValue('produkcja', 'statystaEpizodysta', v)} isModified={pc.statystaEpizodysta !== DP.produkcja.statystaEpizodysta} />
-            <Counter compact label="" value={day.statysta} onChange={(v) => onUpdate('statysta', v)} min={0} max={20} />
+            <Counter compact label="" value={day.statysta} onChange={(v) => onUpdate('statysta', v)} min={0} />
           </Row>
         </div>
 
@@ -167,11 +279,11 @@ function DayCard({
         <div className="space-y-0">
           <Row label="Kamera Sony Mirrorless">
             <InlinePrice value={pc.kameraSonyMirrorless} onChange={(v) => updatePricingValue('produkcja', 'kameraSonyMirrorless', v)} isModified={pc.kameraSonyMirrorless !== DP.produkcja.kameraSonyMirrorless} />
-            <Counter compact label="" value={day.kameraSony} onChange={(v) => onUpdate('kameraSony', v)} min={0} max={2} />
+            <Counter compact label="" value={day.kameraSony} onChange={(v) => onUpdate('kameraSony', v)} min={0} />
           </Row>
           <Row label="Kamera Red Komodo X">
             <InlinePrice value={pc.kameraRedKomodoX} onChange={(v) => updatePricingValue('produkcja', 'kameraRedKomodoX', v)} isModified={pc.kameraRedKomodoX !== DP.produkcja.kameraRedKomodoX} />
-            <Counter compact label="" value={day.kameraRed} onChange={(v) => onUpdate('kameraRed', v)} min={0} max={2} />
+            <Counter compact label="" value={day.kameraRed} onChange={(v) => onUpdate('kameraRed', v)} min={0} />
           </Row>
           <Row label="Obiektywy">
             {day.obiektywy !== 'brak' && (
@@ -225,15 +337,41 @@ function DayCard({
           </Row>
         </div>
       </div>
+
+      {/* Day subtotal + adjustment */}
+      <div className="mt-5 pt-4 border-t border-white/10 space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-zinc-500">Podstawa dnia</span>
+          <span className="tabular-nums text-zinc-400">{formatCurrency(Math.round(dayBaseNetto))}</span>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-zinc-500">Korekta / Zniżka</span>
+          <AdjustmentInput
+            value={adj}
+            onChange={(v) => onUpdate('dayAdjustment', v)}
+            formatCurrency={formatCurrency}
+          />
+        </div>
+        {adj !== 0 && (
+          <div className="flex items-center justify-between text-sm font-semibold pt-1.5 border-t border-white/5">
+            <span className="text-zinc-300">Razem dzień</span>
+            <span className={`tabular-nums ${adj < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {formatCurrency(Math.round(dayFinalNetto))}
+            </span>
+          </div>
+        )}
+      </div>
     </GlassCard>
   )
 }
 
 export function ProdukcjaTab() {
-  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, updatePricingValue } = useQuote()
+  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, updatePricingValue, formatCurrency } = useQuote()
   const pc = pricingConfig.produkcja
   const isDetailed = data.isDetailedProdukcja
   const days = data.detailedShootingDays ?? []
+  const dniZdjeciowe = Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))
+  const crudeDaysTotal = dniZdjeciowe * pc.stawkaOperatoraSzybkaWycena
 
   return (
     <motion.div
@@ -274,7 +412,7 @@ export function ProdukcjaTab() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-400">Dni</span>
                     <span className="text-lg font-semibold tabular-nums text-white">
-                      {Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))}
+                      {dniZdjeciowe}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
@@ -298,7 +436,7 @@ export function ProdukcjaTab() {
                       <Minus className="size-4" />
                     </Button>
                     <Slider
-                      value={[Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))]}
+                      value={[dniZdjeciowe]}
                       onValueChange={([val]) => updateField('dniZdjeciowe', Math.max(0, Math.min(14, Number(val) ?? 0)))}
                       min={0}
                       max={14}
@@ -320,6 +458,9 @@ export function ProdukcjaTab() {
                   <div className="flex justify-between text-xs text-zinc-400">
                     <span>0 dni</span>
                     <span>14 dni</span>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs text-zinc-300">
+                    Razem (stawka × dni): <span className="font-medium text-white">{formatCurrency(crudeDaysTotal)}</span>
                   </div>
                 </div>
 

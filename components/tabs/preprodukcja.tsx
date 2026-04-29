@@ -30,12 +30,13 @@ const item = {
 const DP = DEFAULT_PRICING
 
 export function PreprodukcjaTab() {
-  const { data, updateField, pricingConfig, updatePricingValue } = useQuote()
+  const { data, updateField, pricingConfig, updatePricingValue, formatCurrency } = useQuote()
   const pc = pricingConfig.preprodukcja
   const isDetailed = data.isDetailedPrepro
 
   const dniValue = Math.max(0, Math.min(10, Number(data.dniDokumentacji) || 0))
   const setDni = (v: number) => updateField('dniDokumentacji', Math.max(0, Math.min(10, Number(v) ?? 0)))
+  const dniTotal = dniValue * pc.dzienDokumentacji
 
   return (
     <motion.div
@@ -119,6 +120,9 @@ export function PreprodukcjaTab() {
                   <div className="flex justify-between text-xs text-zinc-400">
                     <span>0</span>
                     <span>10 dni</span>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs text-zinc-300">
+                    Razem (stawka × dni): <span className="font-medium text-white">{formatCurrency(dniTotal)}</span>
                   </div>
                 </div>
                 </GlassCard>

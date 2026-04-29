@@ -48,6 +48,8 @@ export function createDefaultDeliverable(): Deliverable {
 export type SprzetOpcja = 'brak' | 'standard' | 'rental'
 export type DronOpcja = 'brak' | 'dji' | 'fpv'
 
+export type CrewRoleKey = 'rezOp' | 'asystent' | 'gafer' | 'dzwiekowiec' | 'mua' | 'aktor' | 'model' | 'statysta'
+
 export interface ShootingDay {
   id: string
   rezOp: number
@@ -65,6 +67,10 @@ export interface ShootingDay {
   podglad: SprzetOpcja
   swiatlo: SprzetOpcja
   dron: DronOpcja
+  /** Flat post-margin netto delta for this day (negative = discount, positive = surcharge). */
+  dayAdjustment: number
+  /** Per-day overrides for crew/role labels (empty = use default label). */
+  crewNames: Partial<Record<CrewRoleKey, string>>
 }
 
 function createShootingDayId(): string {
@@ -89,6 +95,15 @@ export function createDefaultShootingDay(): ShootingDay {
     podglad: 'brak',
     swiatlo: 'brak',
     dron: 'brak',
+    dayAdjustment: 0,
+    crewNames: {},
+  }
+}
+
+export function cloneShootingDay(source: ShootingDay): ShootingDay {
+  return {
+    ...source,
+    id: createShootingDayId(),
   }
 }
 
@@ -133,6 +148,11 @@ export interface QuoteData {
   licencjaMuzyczna: MusicLicense
   /** Licencja podstawowa (w cenie) vs pełne przekazanie praw (dopłata %) */
   copyrightType: 'licencja' | 'przekazanie'
+  /** One-shot PLN net per actor for transferring copyright (independent of shooting days). */
+  actorRightsTransferAmount: number
+  /** Number of actors used to multiply actorRightsTransferAmount.
+   *  Defaults to 0; the user can copy "aktor" count from detailedShootingDays[0] via a UI button. */
+  liczbaAktorow: number
   /** Czy uwzględnić w PDF informację o limitach poprawek */
   includeRevisionsInfo: boolean
   includedRevisions: number
@@ -181,6 +201,8 @@ export const defaultQuoteData: QuoteData = {
   lektor: false,
   licencjaMuzyczna: 'stock',
   copyrightType: 'licencja',
+  actorRightsTransferAmount: 0,
+  liczbaAktorow: 0,
   includeRevisionsInfo: true,
   includedRevisions: 2,
   extraRevisionPrice: 200,
@@ -364,7 +386,7 @@ export function getBreakdown(data: QuoteData): LegacyBreakdownPhase[] {
 // PDF (react-to-print) state
 // =========================
 
-export type PdfRowKey = 'preprodukcja' | 'ekipa' | 'sprzet' | 'logistyka' | 'postprodukcja' | 'inne'
+export type PdfRowKey = 'preprodukcja' | 'ekipa' | 'obsada' | 'sprzet' | 'logistyka' | 'postprodukcja' | 'inne'
 
 export interface PdfRowState {
   key: PdfRowKey
@@ -381,6 +403,13 @@ export interface LocalPdfState {
   terminZdjec: string
 
   showVat: boolean // if true, UI/print shows gross values (VAT 23%)
+
+  /** Language of the printed PDF (and its in-page preview). 'pl' = Polish, 'en' = English. */
+  pdfLanguage: 'pl' | 'en'
+  /** Currency on the printed PDF. Internal math always stays in PLN. */
+  currency: 'PLN' | 'EUR'
+  /** EUR/PLN exchange rate used when currency = 'EUR'. Editable; can be filled via NBP fetch. */
+  exchangeRate: number
 
   rows: Record<PdfRowKey, PdfRowState>
 

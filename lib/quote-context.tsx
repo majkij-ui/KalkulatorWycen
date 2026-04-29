@@ -1,11 +1,12 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
-import { QuoteData, defaultQuoteData, createDefaultShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
 import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRevisions } from './pdf-texts-config'
+import type { PdfLang } from './pdf-i18n'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
 import { safeNum, safeArray } from './safe-numbers'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
@@ -49,18 +50,37 @@ interface QuoteContextValue {
   removeCustomFormat: (name: string) => void
   // Osobodni (man-days) for logistics
   calculateTotalCrewDays: () => number
-  /** T&Cs for PDF "Uwagi" section – array of strings from active toggles */
-  getTermsAndConditions: () => string[]
+  /** T&Cs for PDF "Uwagi" section – array of strings from active toggles. Defaults to Polish; pass 'en' for the English-language PDF. */
+  getTermsAndConditions: (lang?: PdfLang) => string[]
   resetToZero: () => void
   /** Save current pricingConfig as user-defined defaults (hard reset target) */
   saveAsDefaults: () => void
   /** Reset quote data + margin to zero AND restore pricing to user/factory defaults */
   hardReset: () => void
-  /** Apply a saved quote snapshot (data + pricing + margin) loaded from a file */
-  loadQuoteSnapshot: (snapshot: { data?: Partial<QuoteData>; pricingConfig?: unknown; marginMultiplier?: number }) => void
+  /** Apply a saved quote snapshot (data + pricing + margin + PDF draft) loaded from a file */
+  loadQuoteSnapshot: (snapshot: {
+    data?: Partial<QuoteData>
+    pricingConfig?: unknown
+    marginMultiplier?: number
+    pdfDraft?: unknown
+  }) => void
   /** Editable PDF placeholder texts (company info + terms templates) */
   pdfTexts: PdfTextsConfig
   setPdfTexts: (config: PdfTextsConfig) => void
+  /**
+   * Bridge for the PDF preview tab so the sticky-header save/load JSON flow can
+   * snapshot and restore the PDF draft (toggles, opisy, terminZdjec, etc.)
+   * without lifting the entire localPdfState reducer up here.
+   */
+  registerPdfDraftBridge: (bridge: PdfDraftBridge | null) => void
+  getPdfDraftSnapshot: () => unknown
+}
+
+export interface PdfDraftBridge {
+  /** Returns a JSON-serialisable snapshot of the current PDF draft (or null). */
+  snapshot: () => unknown
+  /** Applies a previously saved PDF draft snapshot, coercing missing fields. */
+  apply: (raw: unknown) => void
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
@@ -199,10 +219,15 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const addShootingDay = useCallback(() => {
-    setData(prev => ({
-      ...prev,
-      detailedShootingDays: [...(prev.detailedShootingDays ?? []), createDefaultShootingDay()],
-    }))
+    setData(prev => {
+      const days = prev.detailedShootingDays ?? []
+      const lastDay = days[days.length - 1]
+      const nextDay = lastDay ? cloneShootingDay(lastDay) : createDefaultShootingDay()
+      return {
+        ...prev,
+        detailedShootingDays: [...days, nextDay],
+      }
+    })
   }, [])
 
   const removeShootingDay = useCallback((id: string) => {
@@ -326,9 +351,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
           day.mua +
           day.aktor +
           day.model +
-          day.statysta +
-          day.kameraSony +
-          day.kameraRed
+          day.statysta
         return acc + crew
       }, 0)
     }
@@ -340,22 +363,33 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   ])
 
   const getTermsAndConditions = useMemo(() => {
-    return function terms(): string[] {
-      const t: string[] = []
-      if (data.copyrightType === 'licencja') {
-        t.push(pdfTexts.termLicencja)
+    return function terms(lang: PdfLang = 'pl'): string[] {
+      const isEn = lang === 'en'
+      // Pick EN twin when active, but fall back gracefully to PL (and finally
+      // an empty string handled below) if a saved config is missing the EN field.
+      const pickEn = (en: string | undefined, pl: string | undefined): string =>
+        (typeof en === 'string' && en.trim() ? en : (typeof pl === 'string' ? pl : ''))
+      const tplLicencja = isEn ? pickEn(pdfTexts.termLicencja_en, pdfTexts.termLicencja) : (pdfTexts.termLicencja ?? '')
+      const tplPrzekazanie = isEn ? pickEn(pdfTexts.termPrzekazanie_en, pdfTexts.termPrzekazanie) : (pdfTexts.termPrzekazanie ?? '')
+      const tplOvertime = isEn ? pickEn(pdfTexts.termOvertime_en, pdfTexts.termOvertime) : (pdfTexts.termOvertime ?? '')
+      const tplRevisions = isEn ? pickEn(pdfTexts.termRevisions_en, pdfTexts.termRevisions) : (pdfTexts.termRevisions ?? '')
+      const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
+
+      const out: string[] = []
+      if (data.copyrightType === 'licencja' && tplLicencja) {
+        out.push(tplLicencja)
       }
-      if (data.copyrightType === 'przekazanie') {
-        t.push(pdfTexts.termPrzekazanie)
+      if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
+        out.push(tplPrzekazanie)
       }
-      if (data.includeOvertimeInfo) {
-        t.push(renderTermOvertime(pdfTexts.termOvertime, data.standardDayHours, data.overtimeHourlyRate))
+      if (data.includeOvertimeInfo && tplOvertime) {
+        out.push(renderTermOvertime(tplOvertime, data.standardDayHours, data.overtimeHourlyRate))
       }
-      if (data.includeRevisionsInfo) {
-        t.push(renderTermRevisions(pdfTexts.termRevisions, data.includedRevisions, data.extraRevisionPrice))
+      if (data.includeRevisionsInfo && tplRevisions) {
+        out.push(renderTermRevisions(tplRevisions, data.includedRevisions, data.extraRevisionPrice))
       }
-      t.push(pdfTexts.termNetto)
-      return t
+      if (tplNetto) out.push(tplNetto)
+      return out
     }
   }, [
     pdfTexts,
@@ -383,12 +417,33 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     const target = getUserDefault()
     setPricingConfigState(target)
     savePricingConfig(target)
+    // Write the combined snapshot immediately so a quick refresh can't restore old pricing
+    // from the debounced persist effect's stale capture.
+    void savePersistedSnapshot(buildPersistedSnapshot({
+      data: defaultQuoteData,
+      marginMultiplier: 1.0,
+      pricingConfig: target,
+      templates,
+    })).catch(() => { /* ignore */ })
+  }, [templates])
+
+  const pdfDraftBridgeRef = useRef<PdfDraftBridge | null>(null)
+  const registerPdfDraftBridge = useCallback((bridge: PdfDraftBridge | null) => {
+    pdfDraftBridgeRef.current = bridge
+  }, [])
+  const getPdfDraftSnapshot = useCallback((): unknown => {
+    try {
+      return pdfDraftBridgeRef.current?.snapshot() ?? null
+    } catch {
+      return null
+    }
   }, [])
 
   const loadQuoteSnapshot = useCallback((snapshot: {
     data?: Partial<QuoteData>
     pricingConfig?: unknown
     marginMultiplier?: number
+    pdfDraft?: unknown
   }) => {
     if (snapshot.data) setData(mergeQuoteDataPartial(snapshot.data))
     if (snapshot.pricingConfig && typeof snapshot.pricingConfig === 'object') {
@@ -400,6 +455,13 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }
     if (typeof snapshot.marginMultiplier === 'number' && Number.isFinite(snapshot.marginMultiplier)) {
       setMarginMultiplier(snapshot.marginMultiplier)
+    }
+    if (snapshot.pdfDraft && typeof snapshot.pdfDraft === 'object') {
+      try {
+        pdfDraftBridgeRef.current?.apply(snapshot.pdfDraft)
+      } catch {
+        // ignore corrupted PDF draft — keep currently active draft
+      }
     }
   }, [])
 
@@ -529,6 +591,8 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     loadQuoteSnapshot,
     pdfTexts,
     setPdfTexts,
+    registerPdfDraftBridge,
+    getPdfDraftSnapshot,
   }
 
   return (

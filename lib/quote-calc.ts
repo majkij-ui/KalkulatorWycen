@@ -63,7 +63,7 @@ function computeDeliverableNet(d: Deliverable, post: PricingConfigShape['postpro
   return total
 }
 
-function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja']): number {
+export function computeShootingDayNet(day: ShootingDay, pro: PricingConfigShape['produkcja']): number {
   let total = 0
   total += day.rezOp * pro.rezOp
   total += day.asystent * pro.asystentOperator
@@ -161,12 +161,14 @@ export function getBreakdownWithPricing(
   } else {
     safeArray<ShootingDay>(data.detailedShootingDays).forEach((day, i) => {
       const dayNet = computeShootingDayNet(day, pro)
+      const adjustment = safeNum(day.dayAdjustment, 0)
+      const lineNetto = applyMargin(dayNet, marginMultiplier) + adjustment
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
         value: 'Szczegółowa wycena',
         quantity: 1,
         unitPriceNet: dayNet,
-        lineNetto: applyMargin(dayNet, marginMultiplier),
+        lineNetto,
       })
     })
   }
@@ -198,6 +200,25 @@ export function getBreakdownWithPricing(
         lineNetto: applyMargin(net, marginMultiplier),
       })
     })
+  }
+
+  // One-shot per-actor copyright transfer fee (independent of shooting days).
+  // Lands in Produkcja phase so the PDF Cast bucket reflects it; the
+  // percentage-based "Pełne przekazanie praw" surcharge below still stacks
+  // on top (acts on the resulting subtotal).
+  if (data.copyrightType === 'przekazanie') {
+    const liczbaAktorow = safeNum(data.liczbaAktorow, 0, 0)
+    const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
+    if (liczbaAktorow > 0 && perActor > 0) {
+      const flat = perActor * liczbaAktorow
+      proItems.push({
+        label: 'Przekazanie praw aktorów',
+        value: `${liczbaAktorow} aktor(ów) × ${perActor.toLocaleString('pl-PL')} zł`,
+        quantity: liczbaAktorow,
+        unitPriceNet: perActor,
+        lineNetto: applyMargin(flat, marginMultiplier),
+      })
+    }
   }
 
   const dod = pricing.dodatkowe
@@ -246,12 +267,36 @@ export function getBreakdownWithPricing(
   ]
 }
 
-export function getProductionEkipaSprzetNetto(
+/**
+ * Splits the production phase into three PDF-presentation buckets:
+ *   - ekipaNetto  → film crew (rezOp, asystent, gafer, dzwiekowiec, mua)
+ *   - castNetto   → cast (aktor, model, statysta) — detailed mode only; 0 in quick mode
+ *   - sprzetNetto → equipment (cameras, lenses, stab, monitoring, light, drone)
+ *
+ * The sum (ekipaNetto + castNetto + sprzetNetto) equals the legacy Produkcja phase
+ * total, so calculator math, totals, and the breakdown summary remain unchanged.
+ *
+ * In quick (non-detailed) mode there is no per-role split, so the entire crew
+ * cost (`crew × stawkaOp + Reż-Op surcharge`) lands in `ekipaNetto` and `castNetto`
+ * stays at 0 — the PDF Cast row notes the user is in quick mode.
+ */
+export function getProductionEkipaCastSprzetNetto(
   data: QuoteData,
   marginMultiplier: number,
   pricing: PricingConfigShape
-): { ekipaNetto: number; sprzetNetto: number } {
+): { ekipaNetto: number; castNetto: number; sprzetNetto: number } {
   const pro = pricing.produkcja
+
+  // Per-actor flat copyright transfer fee (applies in both quick & detailed
+  // modes once user chooses "przekazanie" + fills the fields). Always added
+  // to the Cast bucket so PDF presentation matches Produkcja phase total.
+  const actorRightsBucket = (() => {
+    if (data.copyrightType !== 'przekazanie') return 0
+    const liczba = safeNum(data.liczbaAktorow, 0, 0)
+    const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
+    if (liczba <= 0 || perActor <= 0) return 0
+    return applyMargin(perActor * liczba, marginMultiplier)
+  })()
 
   if (!data.isDetailedProdukcja) {
     const days = safeNum(data.dniZdjeciowe, 0, 0)
@@ -274,20 +319,24 @@ export function getProductionEkipaSprzetNetto(
 
     return {
       ekipaNetto: applyMargin(ekipaBaseDayNetto * days, marginMultiplier),
+      castNetto: actorRightsBucket,
       sprzetNetto: applyMargin(sprzetBaseDayNetto * days, marginMultiplier),
     }
   }
 
   let ekipaNetto = 0
+  let castNetto = 0
   let sprzetNetto = 0
 
   safeArray<ShootingDay>(data.detailedShootingDays).forEach((day) => {
-    const rolesNetto =
+    const crewNetto =
       day.rezOp * pro.rezOp +
       day.asystent * pro.asystentOperator +
       day.gafer * pro.gafer +
       day.dzwiekowiec * pro.dzwiekowiec +
-      day.mua * pro.mua +
+      day.mua * pro.mua
+
+    const castDayNetto =
       day.aktor * pro.aktor +
       day.model * pro.model +
       day.statysta * pro.statystaEpizodysta
@@ -311,11 +360,32 @@ export function getProductionEkipaSprzetNetto(
     if (day.dron === 'dji') equipmentNetto += pro.dronDji
     if (day.dron === 'fpv') equipmentNetto += pro.dronFpv
 
-    ekipaNetto += applyMargin(rolesNetto, marginMultiplier)
+    ekipaNetto += applyMargin(crewNetto, marginMultiplier)
+    castNetto += applyMargin(castDayNetto, marginMultiplier)
     sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
+    ekipaNetto += safeNum(day.dayAdjustment, 0)
   })
 
-  return { ekipaNetto, sprzetNetto }
+  castNetto += actorRightsBucket
+
+  return { ekipaNetto, castNetto, sprzetNetto }
+}
+
+/**
+ * Backward-compatible wrapper. Folds Cast back into Ekipa for any caller that
+ * still wants the legacy 2-bucket split (Produkcja phase total stays the same).
+ */
+export function getProductionEkipaSprzetNetto(
+  data: QuoteData,
+  marginMultiplier: number,
+  pricing: PricingConfigShape
+): { ekipaNetto: number; sprzetNetto: number } {
+  const { ekipaNetto, castNetto, sprzetNetto } = getProductionEkipaCastSprzetNetto(
+    data,
+    marginMultiplier,
+    pricing
+  )
+  return { ekipaNetto: ekipaNetto + castNetto, sprzetNetto }
 }
 
 export function getTotals(

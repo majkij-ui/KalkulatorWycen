@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Car, Utensils, Bed, Scale, FileText, Minus, Plus, Sparkles } from 'lucide-react'
+import { Car, Utensils, Bed, Scale, FileText, Minus, Plus, Sparkles, Users, Copy } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -64,9 +64,14 @@ function LogistykaRow({ label, icon: Icon, children }: { label: string; icon: Re
 }
 
 export function DodatkoweTab() {
-  const { data, updateField, calculateTotalCrewDays, pricingConfig, updatePricingValue } = useQuote()
+  const { data, updateField, calculateTotalCrewDays, pricingConfig, updatePricingValue, breakdown, formatCurrency } = useQuote()
   const totalCrewDays = calculateTotalCrewDays()
   const pc = pricingConfig.dodatkowe
+
+  const dodPhase = breakdown.find(p => p.category === 'Dodatkowe')
+  const travelNetto = dodPhase?.items.find(i => i.label === 'Koszty dojazdu')?.lineNetto ?? 0
+  const cateringNetto = dodPhase?.items.find(i => i.label === 'Catering')?.lineNetto ?? 0
+  const lodgingNetto = dodPhase?.items.find(i => i.label === 'Noclegi')?.lineNetto ?? 0
 
   return (
     <motion.div
@@ -127,6 +132,12 @@ export function DodatkoweTab() {
                   min={0}
                 />
               </div>
+              {travelNetto > 0 && (
+                <div className="flex items-center justify-end gap-1 text-xs">
+                  <span className="text-zinc-500">Łącznie:</span>
+                  <span className="text-amber-400/80 tabular-nums font-medium">{formatCurrency(travelNetto)}</span>
+                </div>
+              )}
             </div>
           </LogistykaRow>
           <div className="flex justify-between px-0 text-[10px] text-zinc-1000">
@@ -139,11 +150,19 @@ export function DodatkoweTab() {
           {/* Row 2: Wyżywienie (Catering) */}
           <div className="flex flex-col gap-3">
             <LogistykaRow label="Wyżywienie (Catering)" icon={Utensils}>
-              <Switch
-                checked={data.includeCatering}
-                onCheckedChange={(v) => updateField('includeCatering', v)}
-                aria-label="Wyżywienie (Catering)"
-              />
+              <div className="flex items-center gap-3">
+                {cateringNetto > 0 && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-zinc-500">Łącznie:</span>
+                    <span className="tabular-nums font-medium text-amber-400/80">{formatCurrency(cateringNetto)}</span>
+                  </div>
+                )}
+                <Switch
+                  checked={data.includeCatering}
+                  onCheckedChange={(v) => updateField('includeCatering', v)}
+                  aria-label="Wyżywienie (Catering)"
+                />
+              </div>
             </LogistykaRow>
             <AnimatePresence initial={false}>
               {data.includeCatering && (
@@ -233,11 +252,19 @@ export function DodatkoweTab() {
           {/* Row 3: Nocleg (Lodging) */}
           <div className="flex flex-col gap-3">
             <LogistykaRow label="Nocleg (Hotele/Apartamenty)" icon={Bed}>
-              <Switch
-                checked={data.includeLodging}
-                onCheckedChange={(v) => updateField('includeLodging', v)}
-                aria-label="Nocleg"
-              />
+              <div className="flex items-center gap-3">
+                {lodgingNetto > 0 && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-zinc-500">Łącznie:</span>
+                    <span className="tabular-nums font-medium text-amber-400/80">{formatCurrency(lodgingNetto)}</span>
+                  </div>
+                )}
+                <Switch
+                  checked={data.includeLodging}
+                  onCheckedChange={(v) => updateField('includeLodging', v)}
+                  aria-label="Nocleg"
+                />
+              </div>
             </LogistykaRow>
             <AnimatePresence initial={false}>
               {data.includeLodging && (
@@ -352,20 +379,122 @@ export function DodatkoweTab() {
               </button>
             ))}
           </div>
-          {data.copyrightType === 'przekazanie' && (
-            <div className="mt-3 flex items-center justify-end gap-2 text-xs text-zinc-500">
-              <span>Dopłata:</span>
-              <InlinePrice
-                value={pc.pelnePrzekazaniePrawProcent}
-                onChange={(v) => updatePricingValue('dodatkowe', 'pelnePrzekazaniePrawProcent', v)}
-                isModified={pc.pelnePrzekazaniePrawProcent !== DP.dodatkowe.pelnePrzekazaniePrawProcent}
-                suffix="%"
-                step={1}
-                min={0}
-              />
-              <span>od sumy netto</span>
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {data.copyrightType === 'przekazanie' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 flex items-center justify-end gap-2 text-xs text-zinc-500">
+                  <span>Dopłata:</span>
+                  <InlinePrice
+                    value={pc.pelnePrzekazaniePrawProcent}
+                    onChange={(v) => updatePricingValue('dodatkowe', 'pelnePrzekazaniePrawProcent', v)}
+                    isModified={pc.pelnePrzekazaniePrawProcent !== DP.dodatkowe.pelnePrzekazaniePrawProcent}
+                    suffix="%"
+                    step={1}
+                    min={0}
+                  />
+                  <span>od sumy netto</span>
+                </div>
+
+                <Separator className="my-4 bg-white/5" />
+
+                {/* Per-actor copyright transfer fee — flat, independent of shooting days */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-white/5 text-zinc-400">
+                      <Users className="size-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm text-zinc-300">Honorarium aktorów za przekazanie praw</span>
+                      <p className="text-xs text-zinc-500">
+                        Jednorazowa kwota za aktora (niezależna od liczby dni zdjęciowych).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 pl-9">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="actor-rights-amount" className="text-xs text-zinc-400 whitespace-nowrap">
+                        Kwota za aktora (PLN)
+                      </Label>
+                      <Input
+                        id="actor-rights-amount"
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={Math.max(0, Number(data.actorRightsTransferAmount) || 0)}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === '') {
+                            updateField('actorRightsTransferAmount', 0)
+                            return
+                          }
+                          const n = Number(raw)
+                          updateField('actorRightsTransferAmount', Number.isFinite(n) ? Math.max(0, n) : 0)
+                        }}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="actor-rights-count" className="text-xs text-zinc-400 whitespace-nowrap">
+                        Liczba aktorów
+                      </Label>
+                      <Input
+                        id="actor-rights-count"
+                        type="number"
+                        min={0}
+                        max={99}
+                        value={Math.max(0, Math.min(99, Number(data.liczbaAktorow) || 0))}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          if (raw === '') {
+                            updateField('liczbaAktorow', 0)
+                            return
+                          }
+                          const n = parseInt(raw, 10)
+                          if (!isNaN(n)) updateField('liczbaAktorow', Math.max(0, Math.min(99, n)))
+                        }}
+                        className={inputClass}
+                      />
+                      {data.isDetailedProdukcja && Array.isArray(data.detailedShootingDays) && data.detailedShootingDays.length > 0 && (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="size-8 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
+                          onClick={() => {
+                            const aktor = Number(data.detailedShootingDays?.[0]?.aktor) || 0
+                            updateField('liczbaAktorow', Math.max(0, Math.min(99, aktor)))
+                          }}
+                          aria-label="Skopiuj liczbę aktorów z 1. dnia zdjęciowego"
+                          title="Skopiuj z 1. dnia zdjęciowego"
+                        >
+                          <Copy className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {(Number(data.actorRightsTransferAmount) || 0) > 0 && (Number(data.liczbaAktorow) || 0) > 0 && (
+                    <div className="pl-9 text-xs text-zinc-500">
+                      Razem:{' '}
+                      <span className="text-primary tabular-nums">
+                        {((Number(data.actorRightsTransferAmount) || 0) * (Number(data.liczbaAktorow) || 0)).toLocaleString('pl-PL', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        zł
+                      </span>{' '}
+                      (doliczone do Produkcji)
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </GlassCard>
       </motion.div>
 

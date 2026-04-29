@@ -32,7 +32,12 @@
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "$DOWNLOAD/**" }]
-    }
+      "allow": [{ "path": "$DOWNLOAD/**" }, { "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$DOWNLOAD/**" }, { "path": "$HOME/**" }]
+    },
+    "dialog:allow-save"
   ]
 }

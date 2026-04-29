@@ -17,7 +17,7 @@ interface CounterProps {
   compact?: boolean
 }
 
-export function Counter({ value, onChange, min = 0, max = 99, step = 1, label, className, compact }: CounterProps) {
+export function Counter({ value, onChange, min = 0, max = 999, step = 1, label, className, compact }: CounterProps) {
   const safeValue = Math.max(min, Math.min(max, Number(value) ?? min))
   const displayValue = Number.isFinite(safeValue) ? safeValue : min
   return (

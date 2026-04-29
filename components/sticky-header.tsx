@@ -21,6 +21,7 @@ export function StickyHeader() {
     loadQuoteSnapshot,
     data,
     pricingConfig,
+    getPdfDraftSnapshot,
   } = useQuote()
 
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -82,32 +83,39 @@ export function StickyHeader() {
   // ── Save Quote ───────────────────────────────────────────────────────────────
   const handleSaveQuote = useCallback(async () => {
     const snapshot = {
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       data,
       pricingConfig,
       marginMultiplier,
+      pdfDraft: getPdfDraftSnapshot(),
     }
     const json = JSON.stringify(snapshot, null, 2)
     const date = new Date().toISOString().slice(0, 10)
-    const fileName = `wycena-${date}.json`
+    const defaultName = `wycena-${date}.json`
 
     const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
     if (isTauri) {
       try {
-        const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
-        await writeFile(fileName, new TextEncoder().encode(json), { baseDir: BaseDirectory.Download })
+        const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog')
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+        const chosen = await showSaveDialog({
+          defaultPath: defaultName,
+          filters: [{ name: 'Wycena JSON', extensions: ['json'] }],
+        })
+        if (!chosen) return // user cancelled
+        await writeFile(chosen, new TextEncoder().encode(json))
       } catch {
-        downloadBlob(json, fileName)
+        downloadBlob(json, defaultName)
       }
     } else {
-      downloadBlob(json, fileName)
+      await saveWithPickerOrBlob(json, defaultName, 'application/json')
     }
 
     if (quoteSavedTimerRef.current) clearTimeout(quoteSavedTimerRef.current)
     setQuoteSaved(true)
     quoteSavedTimerRef.current = setTimeout(() => setQuoteSaved(false), 2000)
-  }, [data, pricingConfig, marginMultiplier])
+  }, [data, pricingConfig, marginMultiplier, getPdfDraftSnapshot])
 
   // ── Load Quote ───────────────────────────────────────────────────────────────
   const handleLoadFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,6 +128,7 @@ export function StickyHeader() {
           data?: Record<string, unknown>
           pricingConfig?: unknown
           marginMultiplier?: number
+          pdfDraft?: unknown
         }
         loadQuoteSnapshot(snapshot)
       } catch {
@@ -317,12 +326,34 @@ function ActionButton({
   )
 }
 
-function downloadBlob(json: string, fileName: string) {
-  const blob = new Blob([json], { type: 'application/json' })
+function downloadBlob(content: string, fileName: string, mimeType = 'application/json') {
+  const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = fileName
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/** Web: use showSaveFilePicker (Chrome/Edge) for native overwrite-protect; fall back to blob download. */
+async function saveWithPickerOrBlob(content: string, fileName: string, mimeType: string) {
+  if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+    try {
+      const ext = fileName.split('.').pop() ?? ''
+      // @ts-expect-error — File System Access API not yet in TS lib
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'File', accept: { [mimeType]: [`.${ext}`] } }],
+      })
+      const writable = await handle.createWritable()
+      await writable.write(content)
+      await writable.close()
+      return
+    } catch (e) {
+      // AbortError = user cancelled; anything else falls through to blob
+      if (e instanceof Error && e.name === 'AbortError') return
+    }
+  }
+  downloadBlob(content, fileName, mimeType)
 }

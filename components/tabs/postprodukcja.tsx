@@ -495,6 +495,7 @@ export function PostprodukcjaTab() {
     availableFormats,
     pricingConfig,
     updatePricingValue,
+    formatCurrency,
   } = useQuote()
   const pc = pricingConfig.postprodukcja
   const isDetailed = data.isDetailedPostpro
@@ -506,6 +507,7 @@ export function PostprodukcjaTab() {
   const sliderStep = unit === 'dni' ? 0.5 : 1
   const crudeRateKey = unit === 'dni' ? 'montazZaDzien' : 'montazZaGodzine'
   const crudeRate: number = typeof pc[crudeRateKey] === 'number' ? (pc[crudeRateKey] as number) : 0
+  const crudeTotal = count * crudeRate
 
   return (
     <motion.div
@@ -622,6 +624,9 @@ export function PostprodukcjaTab() {
                     <div className="flex justify-between text-xs text-zinc-400">
                       <span>0</span>
                       <span>{sliderMax} {unit === 'dni' ? 'dni' : 'godz.'}</span>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs text-zinc-300">
+                      Razem (stawka × {unit === 'dni' ? 'dni' : 'godziny'}): <span className="font-medium text-white">{formatCurrency(crudeTotal)}</span>
                     </div>
                   </div>
                 </GlassCard>

@@ -2,7 +2,21 @@
 
 Short-term priorities and UX changes for the video quote calculator (Kalkulator Wyceny Wideo).
 
-**Status:** Items 1, 2, 3, 4, 5, 6 are **done**. PDF texts editor and bug fixes queued below.
+**Status:** Items 1, 2, 3, 4, 5, 6 are **done**. PDF texts editor shipped; bug fixes and animation polish queued below.
+
+---
+
+## ⚠️ Important follow-ups (priority)
+
+1. **PDF tab — „Pobierz nowe dane z kalkulatora”** — On that action, **sync only values** (amounts, line totals, breakdown numbers from the calculator). **Do not replace or reset** user-edited PDF text (Uwagi, opisy, placeholders, draft field copy). Treat it as a **numeric refresh**, not a full draft rebuild from template strings.
+
+2. **Hard reset** — **Still broken** in practice (custom / inline prices and related state not reliably reverting to saved or factory defaults). Needs another pass end-to-end; treat as **high priority** until verified with: custom prices → hard reset → orange dots gone + Cennik matches user default or factory default.
+
+3. **Total amount animations** — Restore the **previous Casio-style rolling digit** treatment for **all** grand-total (and related total) displays. Current behaviour regressed to a **simple fade**; the old **per-digit counter / odometer** animation should drive **every** total-amount motion (including delta / temporary takeover flows once implemented). Audit `AnimatedCurrency` (and any replacements) in `sticky-header` and elsewhere.
+
+4. **Save quote — broken; move to real save UI** — The current **save quote** flow does not work reliably. Move toward a **native / system save experience** (e.g. Tauri **`dialog::save`** or browser **Save As** with user-chosen path and filename). **Never silently overwrite** an existing file: if the chosen path already exists, show a **confirm replace** dialog (or force “Save as…” with a new name). Same pattern on web: download should not blindly reuse a fixed name without user intent where the platform allows it.
+
+5. **Export PDF — same pattern as save** — PDF export today can **auto-overwrite** or feel opaque (fixed path / no confirmation). Add a **save / export dialog** so the user picks **location + filename**, with **overwrite protection** (confirm if file exists). Align desktop (Tauri) and web behaviour as far as each platform allows.
 
 ---
 
@@ -114,25 +128,28 @@ Stored in localStorage (`quote-gen-pdf-texts`). Token replacement via `renderTer
 
 ---
 
-### 2. Hard reset — custom values don't revert
+### 2. Hard reset — custom values don't revert (**STILL NOT FIXED**)
 
-**Issue:** When user customizes prices and clicks hard reset, the amber-dot custom values remain instead of reverting to defaults.
+**Issue:** When user customizes prices and clicks hard reset, the amber-dot custom values **still** remain instead of reverting to defaults. Reported again after header / defaults work — treat as open until manually verified.
 
-**Root cause:** Likely `hardReset()` in quote-context is not properly restoring `pricingConfig` to `getUserDefault()` or factory defaults. Or `setPricingConfig` is not being called, or the state update is not being applied.
+**Root cause:** Likely `hardReset()` in quote-context is not properly restoring `pricingConfig` to `getUserDefault()` or factory defaults. Or `setPricingConfig` is not being called, or the state update is not being applied. Possible race with persistence (Tauri / localStorage) re-applying old config after reset.
 
-**Fix:** Trace hard reset flow: verify `hardReset()` calls `setPricingConfig(getUserDefault())` (or factory default if no user default). Verify state updates reach all subscribers. Test with custom prices → hard reset → verify prices revert + orange dots disappear.
+**Fix:** Trace hard reset flow: verify `hardReset()` calls `setPricingConfig(getUserDefault())` (or factory default if no user default). Verify state updates reach all subscribers. Confirm persist layer does not immediately overwrite with stale snapshot. Test with custom prices → hard reset → verify prices revert + orange dots disappear.
 
 ---
 
-### 3. Delta animation — low readability
+### 3. Total & delta animations — Casio-style digits everywhere
 
-**Issue:** Current delta badge (green/red floating text) above total is hard to read and easy to miss.
+**Issue:** We used to have **rolling / odometer-style digit animations** (Casio machine feel) on totals; behaviour has regressed to a **plain fade**. Delta badge (if present) is also easy to miss.
 
-**Enhancement:** Replace the floating badge with a temporary takeover: delta value appears **in place of** the total amount, animated in with spinning digits effect (same as `AnimatedCurrency`), stays for 2s, then animates out to reveal the updated total. Use green for positive delta, red for negative.
+**Product ask:** Restore the **previous per-digit counter animation** for **all** total-amount UI (main grand total and any variant that shows the same number). Deltas should use the same digit treatment, not only opacity fades.
+
+**Enhancement (delta):** Optional temporary takeover: delta value appears **in place of** the total, with **rolling digits**, stays ~2s, then rolls to the new total. Green for positive delta, red for negative.
 
 **Implementation sketch:**
-- Modify `sticky-header.tsx` — instead of `AnimatePresence` badge overlay, switch the `AnimatedCurrency` display to show delta + apply `delta > 0 ? 'text-emerald-400' : 'text-red-400'` while delta is active.
-- Use same 2s timer. Ensure spinning digits animation is synchronized.
+- Audit `AnimatedCurrency` / Framer usage in `sticky-header.tsx` — ensure digit columns animate on value change like the old implementation; remove fade-only shortcuts.
+- Align delta display with the same component or shared digit strip so **one** animation language for totals + deltas.
+- Use same timer / colour rules as current delta badge if keeping a two-phase UX.
 
 ---
 
@@ -156,14 +173,16 @@ Each template should use `{tokens}` for dynamic values (dni, osoby, klasa, km, e
 
 ---
 
-### 5. PDF preview sync bug
+### 5. PDF preview sync + „Pobierz nowe dane” semantics
 
-**Issue:** When user clicks *"Pobierz nowe dane z kalkulatora"* on the draft prompt, the preview doesn't update visually (totals stay stale), but the exported PDF has correct values. Clicking on the preview text fixes the display glitch.
+**Issue A (display):** When user clicks *"Pobierz nowe dane z kalkulatora"* on the draft prompt, the preview sometimes doesn't update visually (totals stay stale), but the exported PDF has correct values. Clicking on the preview text fixes the display glitch.
 
-**Root cause:** Likely the preview state isn't being reset/recomputed when `handleRestoreFromCalculator()` fires, or the `useEffect` deps don't trigger a refresh.
+**Issue B (behaviour — critical):** That same action must **change only values** (numbers, line amounts, totals derived from the calculator). It must **not** overwrite user-edited **text** in the PDF draft (custom Uwagi, opisy, company fields, any typed copy). If the implementation currently rebuilds the whole draft from templates, split **numeric sync** from **text preservation**.
 
-**Fix:** Trace `handleRestoreFromCalculator()` in `podglad-pdf.tsx` — ensure it resets `localPdfState` by calling `buildInitialState()` and triggering a full re-render. Check `useEffect` dependencies and `touchedRowsRef` state. May need to force a recalculation or add a cache-bust key.
+**Root cause:** Likely the preview state isn't being reset/recomputed when `handleRestoreFromCalculator()` fires, or `buildInitialState()` replaces more than numeric fields. Check `useEffect` deps and `touchedRowsRef`.
+
+**Fix:** Trace `handleRestoreFromCalculator()` in `podglad-pdf.tsx` — merge calculator numbers into `localPdfState` without clobbering text keys; or re-run only the value pipeline. For the stale UI bug, ensure a full re-render / dependency fix or cache-bust key.
 
 ---
 
-*Document status: Items 1, 2, 3, 4, 5, 6, 7 done. Bugs 1-5 and enhancement 4 queued for next session.*
+*Document status: Items 1–7 done. Queue: bugs 1–5 + PDF template expansion (§4). Priority follow-ups: § „Important follow-ups” (PDF values-only sync, hard reset, Casio-style totals, save/PDF dialogs & overwrite safety).*
