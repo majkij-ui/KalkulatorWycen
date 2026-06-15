@@ -95,6 +95,7 @@ export function StickyHeader() {
     const defaultName = `wycena-${date}.json`
 
     const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
+    let saved = false
     if (isTauri) {
       try {
         const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog')
@@ -105,12 +106,16 @@ export function StickyHeader() {
         })
         if (!chosen) return // user cancelled
         await writeFile(chosen, new TextEncoder().encode(json))
+        saved = true
       } catch {
         downloadBlob(json, defaultName)
+        saved = true
       }
     } else {
-      await saveWithPickerOrBlob(json, defaultName, 'application/json')
+      saved = await saveWithPickerOrBlob(json, defaultName, 'application/json')
     }
+
+    if (!saved) return
 
     if (quoteSavedTimerRef.current) clearTimeout(quoteSavedTimerRef.current)
     setQuoteSaved(true)
@@ -337,7 +342,7 @@ function downloadBlob(content: string, fileName: string, mimeType = 'application
 }
 
 /** Web: use showSaveFilePicker (Chrome/Edge) for native overwrite-protect; fall back to blob download. */
-async function saveWithPickerOrBlob(content: string, fileName: string, mimeType: string) {
+async function saveWithPickerOrBlob(content: string, fileName: string, mimeType: string): Promise<boolean> {
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const ext = fileName.split('.').pop() ?? ''
@@ -349,11 +354,12 @@ async function saveWithPickerOrBlob(content: string, fileName: string, mimeType:
       const writable = await handle.createWritable()
       await writable.write(content)
       await writable.close()
-      return
+      return true
     } catch (e) {
       // AbortError = user cancelled; anything else falls through to blob
-      if (e instanceof Error && e.name === 'AbortError') return
+      if (e instanceof Error && e.name === 'AbortError') return false
     }
   }
   downloadBlob(content, fileName, mimeType)
+  return true
 }

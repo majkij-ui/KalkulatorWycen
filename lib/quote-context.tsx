@@ -6,6 +6,8 @@ import type { PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
 import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRevisions } from './pdf-texts-config'
+import type { PortfolioCatalogueEntry } from './portfolio-catalogue'
+import { getPortfolioCatalogue, savePortfolioCatalogue } from './portfolio-catalogue'
 import type { PdfLang } from './pdf-i18n'
 import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
 import { safeNum, safeArray } from './safe-numbers'
@@ -67,12 +69,17 @@ interface QuoteContextValue {
   /** Editable PDF placeholder texts (company info + terms templates) */
   pdfTexts: PdfTextsConfig
   setPdfTexts: (config: PdfTextsConfig) => void
+  /** App-level catalogue of reusable video references for the PDF "Przykładowe realizacje" section. */
+  portfolioCatalogue: PortfolioCatalogueEntry[]
+  setPortfolioCatalogue: (entries: PortfolioCatalogueEntry[]) => void
   /**
    * Bridge for the PDF preview tab so the sticky-header save/load JSON flow can
    * snapshot and restore the PDF draft (toggles, opisy, terminZdjec, etc.)
    * without lifting the entire localPdfState reducer up here.
    */
   registerPdfDraftBridge: (bridge: PdfDraftBridge | null) => void
+  /** Keep the latest PDF draft in context so save/load works when the PDF tab is unmounted. */
+  syncPdfDraftSnapshot: (snapshot: unknown) => void
   getPdfDraftSnapshot: () => unknown
 }
 
@@ -124,6 +131,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [marginMultiplier, setMarginMultiplier] = useState(1.0)
   const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
   const [pdfTexts, setPdfTextsState] = useState<PdfTextsConfig>(() => getPdfTextsConfig())
+  const [portfolioCatalogue, setPortfolioCatalogueState] = useState<PortfolioCatalogueEntry[]>(() =>
+    getPortfolioCatalogue()
+  )
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [restorationComplete, setRestorationComplete] = useState(false)
 
@@ -179,6 +189,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const setPdfTexts = useCallback((config: PdfTextsConfig) => {
     setPdfTextsState(config)
     savePdfTextsConfig(config)
+  }, [])
+
+  const setPortfolioCatalogue = useCallback((entries: PortfolioCatalogueEntry[]) => {
+    setPortfolioCatalogueState(entries)
+    savePortfolioCatalogue(entries)
   }, [])
 
   useEffect(() => {
@@ -428,14 +443,30 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   }, [templates])
 
   const pdfDraftBridgeRef = useRef<PdfDraftBridge | null>(null)
+  const pdfDraftSnapshotRef = useRef<unknown>(null)
+  const pendingPdfDraftRef = useRef<unknown>(null)
+
+  const syncPdfDraftSnapshot = useCallback((snapshot: unknown) => {
+    pdfDraftSnapshotRef.current = snapshot
+  }, [])
+
   const registerPdfDraftBridge = useCallback((bridge: PdfDraftBridge | null) => {
     pdfDraftBridgeRef.current = bridge
+    if (bridge && pendingPdfDraftRef.current != null) {
+      try {
+        bridge.apply(pendingPdfDraftRef.current)
+        pendingPdfDraftRef.current = null
+      } catch {
+        // ignore corrupted pending draft
+      }
+    }
   }, [])
+
   const getPdfDraftSnapshot = useCallback((): unknown => {
     try {
-      return pdfDraftBridgeRef.current?.snapshot() ?? null
+      return pdfDraftBridgeRef.current?.snapshot() ?? pdfDraftSnapshotRef.current ?? null
     } catch {
-      return null
+      return pdfDraftSnapshotRef.current ?? null
     }
   }, [])
 
@@ -457,10 +488,15 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       setMarginMultiplier(snapshot.marginMultiplier)
     }
     if (snapshot.pdfDraft && typeof snapshot.pdfDraft === 'object') {
-      try {
-        pdfDraftBridgeRef.current?.apply(snapshot.pdfDraft)
-      } catch {
-        // ignore corrupted PDF draft — keep currently active draft
+      pdfDraftSnapshotRef.current = snapshot.pdfDraft
+      if (pdfDraftBridgeRef.current) {
+        try {
+          pdfDraftBridgeRef.current.apply(snapshot.pdfDraft)
+        } catch {
+          // ignore corrupted PDF draft — keep currently active draft
+        }
+      } else {
+        pendingPdfDraftRef.current = snapshot.pdfDraft
       }
     }
   }, [])
@@ -591,7 +627,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     loadQuoteSnapshot,
     pdfTexts,
     setPdfTexts,
+    portfolioCatalogue,
+    setPortfolioCatalogue,
     registerPdfDraftBridge,
+    syncPdfDraftSnapshot,
     getPdfDraftSnapshot,
   }
 

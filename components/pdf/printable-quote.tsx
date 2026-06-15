@@ -42,10 +42,17 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
   const totalVat = totalNetto * VAT_RATE
   const totalBrutto = totalNetto + totalVat
 
-  const portfolioLinks = localPdfState.portfolioLinksText
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
+  // Prefer structured portfolio rows; fall back to the legacy newline-separated
+  // string for any old draft snapshot that hasn't been migrated yet.
+  const portfolioItems: { url: string; description: string }[] = Array.isArray(localPdfState.portfolioRows)
+    ? localPdfState.portfolioRows
+        .map((r) => ({ url: (r?.url ?? '').trim(), description: (r?.description ?? '').trim() }))
+        .filter((r) => r.url || r.description)
+    : (localPdfState.portfolioLinksText ?? '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((url) => ({ url, description: '' }))
 
   const clientName = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : L.emptyDash
   const projectName = localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : L.emptyDash
@@ -197,15 +204,19 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
           {/* Portfolio: right after additional options */}
           <div data-pdf-break="after" className="border border-zinc-200 rounded-md p-3 break-inside-avoid">
             <div className="text-[8pt] font-bold text-zinc-700">{L.portfolio}</div>
-            {portfolioLinks.length > 0 ? (
+            {portfolioItems.length > 0 ? (
               <ul className="mt-1.5 space-y-1 text-[8pt] text-zinc-700">
-                {portfolioLinks.map((l) => {
-                  const href = l.startsWith('http') ? l : `https://${l}`
+                {portfolioItems.map((it, i) => {
+                  const href = it.url.startsWith('http') ? it.url : `https://${it.url}`
                   return (
-                    <li key={l} className="break-words">
-                      <a href={href} className="text-primary">
-                        {l}
-                      </a>
+                    <li key={`${i}-${it.url || it.description.slice(0, 16)}`} className="break-words">
+                      {it.url && (
+                        <a href={href} className="text-primary">
+                          {it.url}
+                        </a>
+                      )}
+                      {it.url && it.description && <span className="text-zinc-600"> — </span>}
+                      {it.description && <span className="text-zinc-600">{it.description}</span>}
                     </li>
                   )
                 })}

@@ -13,9 +13,10 @@ import { Switch } from '@/components/ui/switch'
 import { GlassCard } from '@/components/glass-card'
 import { useQuote } from '@/lib/quote-context'
 import { PrintableQuote } from '@/components/pdf/printable-quote'
+import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeArray, safeNum } from '@/lib/safe-numbers'
 import { getProductionEkipaCastSprzetNetto, type LineItemRow } from '@/lib/quote-calc'
-import type { LocalPdfState, PdfRowKey, QuoteData } from '@/lib/quote-types'
+import type { LocalPdfState, PdfRowKey, PortfolioRow, QuoteData } from '@/lib/quote-types'
 import { isTauriRuntime } from '@/lib/storage'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
 import { formatPdfAmount, type PdfCurrency } from '@/lib/pdf-currency'
@@ -42,6 +43,41 @@ const PDF_DRAFT_STORAGE_KEY = 'nonoise-pdf-draft'
 
 const PDF_ROW_KEYS: PdfRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
 
+/** Two empty portfolio rows by default; the user can add more with the + button. */
+function defaultPortfolioRows(): PortfolioRow[] {
+  return [
+    { url: '', description: '' },
+    { url: '', description: '' },
+  ]
+}
+
+/**
+ * Coerce persisted portfolio data into structured rows. Accepts the new
+ * `portfolioRows` array and, for backward compatibility, migrates the legacy
+ * newline-separated `portfolioLinksText` string from older saved drafts.
+ */
+function coercePortfolioRows(raw: unknown, legacyText: unknown, fallbackRows: PortfolioRow[]): PortfolioRow[] {
+  if (Array.isArray(raw)) {
+    const rows = raw
+      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+      .map((o) => ({
+        url: typeof o.url === 'string' ? o.url : '',
+        description: typeof o.description === 'string' ? o.description : '',
+      }))
+      .slice(0, 50)
+    return rows.length ? rows : fallbackRows.map((r) => ({ ...r }))
+  }
+  if (typeof legacyText === 'string' && legacyText.trim()) {
+    const rows = legacyText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((url) => ({ url, description: '' }))
+    if (rows.length) return rows
+  }
+  return fallbackRows.map((r) => ({ ...r }))
+}
+
 function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfState {
   if (!raw || typeof raw !== 'object') return fallback
   const r = raw as Partial<LocalPdfState> & { [k: string]: unknown }
@@ -54,6 +90,10 @@ function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfSta
   const coerceStr = (v: unknown, fb: string): string => (typeof v === 'string' ? v : fb)
   const coerceBool = (v: unknown, fb: boolean): boolean => (typeof v === 'boolean' ? v : fb)
 
+  // Older drafts stored cast inside `ekipa` before the separate `obsada` row existed.
+  const draftHasObsada =
+    'obsada' in draftRows && draftRows.obsada != null && typeof draftRows.obsada === 'object'
+
   const nextRows: LocalPdfState['rows'] = { ...fallback.rows }
   PDF_ROW_KEYS.forEach((key) => {
     const base = fallback.rows[key]
@@ -64,7 +104,10 @@ function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfSta
       key,
       title: coerceStr(candidateObj?.title, base.title),
       opis: coerceStr(candidateObj?.opis, base.opis),
-      cenaNetto: safeNum(candidateObj?.cenaNetto, base.cenaNetto, 0),
+      cenaNetto:
+        key === 'obsada' && !draftHasObsada
+          ? 0
+          : safeNum(candidateObj?.cenaNetto, base.cenaNetto, 0),
     }
   })
 
@@ -72,12 +115,18 @@ function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfSta
   const coercedCurrency: 'PLN' | 'EUR' = r.currency === 'EUR' ? 'EUR' : 'PLN'
   const coercedRate = safeNum(r.exchangeRate, fallback.exchangeRate, DEFAULT_EXCHANGE_RATE)
 
+  // The issue date must always reflect when the PDF is actually generated — never a
+  // stale value frozen into a persisted draft. Recompute "today" (in the active
+  // language's format) on every hydration/restore instead of trusting the saved string.
+  const today = new Date()
+  const dateFmt = coercedLang === 'en' ? 'dd/MM/yyyy' : 'dd.MM.yyyy'
+
   return {
     ...fallback,
     clientName: coerceStr(r.clientName, fallback.clientName),
     projectName: coerceStr(r.projectName, fallback.projectName),
-    issueDateIso: coerceStr(r.issueDateIso, fallback.issueDateIso),
-    validUntilIso: coerceStr(r.validUntilIso, fallback.validUntilIso),
+    issueDateIso: format(today, dateFmt),
+    validUntilIso: format(addDays(today, 30), dateFmt),
     terminZdjec: coerceStr(r.terminZdjec, fallback.terminZdjec),
     showVat: coerceBool(r.showVat, fallback.showVat),
     pdfLanguage: coercedLang,
@@ -86,7 +135,7 @@ function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState): LocalPdfSta
     rows: nextRows,
     materialyKoncowe: coerceStr(r.materialyKoncowe, fallback.materialyKoncowe),
     opcjeDodatkowe: coerceStr(r.opcjeDodatkowe, fallback.opcjeDodatkowe),
-    portfolioLinksText: coerceStr(r.portfolioLinksText, fallback.portfolioLinksText),
+    portfolioRows: coercePortfolioRows(r.portfolioRows, r.portfolioLinksText, fallback.portfolioRows),
     termsAndConditions: safeArray<string>(r.termsAndConditions).slice(0, 200),
   }
 }
@@ -308,6 +357,7 @@ export function PodgladPdfTab() {
     pricingConfig,
     marginMultiplier,
     registerPdfDraftBridge,
+    syncPdfDraftSnapshot,
   } = useQuote()
 
   const issueDate = useMemo(() => new Date(), [])
@@ -434,7 +484,7 @@ export function PodgladPdfTab() {
 
       materialyKoncowe: '',
       opcjeDodatkowe: data.opcjeDodatkowe ?? '',
-      portfolioLinksText: '',
+      portfolioRows: defaultPortfolioRows(),
       termsAndConditions: termsArg,
     }
   }
@@ -509,7 +559,8 @@ export function PodgladPdfTab() {
   const localPdfStateRef = useRef(localPdfState)
   useEffect(() => {
     localPdfStateRef.current = localPdfState
-  }, [localPdfState])
+    syncPdfDraftSnapshot(localPdfState)
+  }, [localPdfState, syncPdfDraftSnapshot])
 
   useEffect(() => {
     registerPdfDraftBridge({
@@ -517,6 +568,7 @@ export function PodgladPdfTab() {
       apply: (raw) => {
         const coerced = coerceLocalPdfDraft(raw, localPdfStateRef.current)
         setLocalPdfState(coerced)
+        syncPdfDraftSnapshot(coerced)
         setIsUsingDraft(true)
         setShowDraftPrompt(false)
         // Mark every row + opcjeDodatkowe as user-touched so the auto-rebuild
@@ -530,8 +582,11 @@ export function PodgladPdfTab() {
         updateField('projectName', coerced.projectName)
       },
     })
-    return () => registerPdfDraftBridge(null)
-  }, [registerPdfDraftBridge, updateField])
+    return () => {
+      syncPdfDraftSnapshot(localPdfStateRef.current)
+      registerPdfDraftBridge(null)
+    }
+  }, [registerPdfDraftBridge, syncPdfDraftSnapshot, updateField])
 
   useEffect(() => {
     if (draftHydrationStatus !== 'ready') return
@@ -557,7 +612,7 @@ export function PodgladPdfTab() {
         currency: prev.currency,
         exchangeRate: prev.exchangeRate,
         materialyKoncowe: prev.materialyKoncowe,
-        portfolioLinksText: prev.portfolioLinksText,
+        portfolioRows: prev.portfolioRows,
         terminZdjec: prev.terminZdjec,
         opcjeDodatkowe: touchedOpcjeRef.current ? prev.opcjeDodatkowe : init.opcjeDodatkowe,
         rows: nextRows,
@@ -601,7 +656,7 @@ export function PodgladPdfTab() {
 
   const handleRestoreFromCalculator = () => {
     // Refresh ONLY numeric values (cenaNetto per row) from the current calculator state.
-    // Every text field — opis per row, materialyKoncowe, opcjeDodatkowe, portfolioLinksText,
+    // Every text field — opis per row, materialyKoncowe, opcjeDodatkowe, portfolioRows,
     // terminZdjec, uwagiManualText — stays exactly as the user left it.
     // We stay in draft mode so future calculator changes don't silently overwrite the kept text.
     const fresh = buildInitialState({
@@ -722,16 +777,21 @@ export function PodgladPdfTab() {
       const pxPerMm = canvas.width / pdfW
       const pageHpx = pdfH * pxPerMm
 
+      // The true content ends at the bottom of the last section break; everything
+      // below it (the printable container's pb-8) is decorative whitespace. Stop the
+      // pager there so that trailing padding doesn't spill onto an extra blank page.
+      const contentHeight = breakPxs.length ? breakPxs[breakPxs.length - 1] : canvas.height
+
       let yStart = 0
       let firstPage = true
-      while (yStart < canvas.height) {
+      while (yStart < contentHeight) {
         const limit = yStart + pageHpx
-        const candidates = breakPxs.filter((b) => b > yStart && b <= Math.min(limit, canvas.height))
+        const candidates = breakPxs.filter((b) => b > yStart && b <= Math.min(limit, contentHeight))
         // Prefer the latest break that fits on this page; fall back to a hard cut
         // if there's no candidate (single section taller than A4 — rare).
         const yEnd = candidates.length
           ? candidates[candidates.length - 1]
-          : Math.min(limit, canvas.height)
+          : Math.min(limit, contentHeight)
         const sliceH = yEnd - yStart
         if (sliceH <= 0) break
 
@@ -1166,14 +1226,13 @@ export function PodgladPdfTab() {
                         </div>
 
                         <div className="rounded-lg border border-zinc-200 p-3">
-                          <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary mb-1">
+                          <div className="text-[10.5px] font-extrabold uppercase tracking-widest text-primary mb-2">
                             {L.portfolio}
                           </div>
-                          <AutoGrowTextarea
+                          <PortfolioRowsEditor
                             disabled={isCalculating}
-                            value={localPdfState.portfolioLinksText}
-                            onChange={(next) => setLocalPdfState((prev) => ({ ...prev, portfolioLinksText: next }))}
-                            placeholder="Każdy link w osobnej linii…"
+                            rows={localPdfState.portfolioRows}
+                            onChange={(rows) => setLocalPdfState((prev) => ({ ...prev, portfolioRows: rows }))}
                           />
                         </div>
 

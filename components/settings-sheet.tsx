@@ -21,7 +21,8 @@ import { Label } from '@/components/ui/label'
 import { useQuote } from '@/lib/quote-context'
 import { SettingsModal } from '@/components/settings-modal'
 import { PdfTextsModal } from '@/components/pdf-texts-modal'
-import { BookmarkPlus, FileText, Trash2 } from 'lucide-react'
+import { PortfolioCatalogueModal } from '@/components/portfolio-catalogue-modal'
+import { BookmarkPlus, FileText, Film, Trash2 } from 'lucide-react'
 
 interface SettingsSheetProps {
   open: boolean
@@ -37,6 +38,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
   } = useQuote()
   const [priceEditorOpen, setPriceEditorOpen] = useState(false)
   const [pdfTextsOpen, setPdfTextsOpen] = useState(false)
+  const [portfolioOpen, setPortfolioOpen] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState('')
 
@@ -82,6 +84,18 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
             >
               <FileText className="size-4 mr-2" />
               Edytuj treści PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-white/10 bg-zinc-900/40 text-white hover:bg-white/10"
+              onClick={() => {
+                onOpenChange(false)
+                setPortfolioOpen(true)
+              }}
+            >
+              <Film className="size-4 mr-2" />
+              Katalog realizacji
             </Button>
             <Button
               type="button"
@@ -176,6 +190,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
 
       <SettingsModal open={priceEditorOpen} onOpenChange={setPriceEditorOpen} />
       <PdfTextsModal open={pdfTextsOpen} onOpenChange={setPdfTextsOpen} />
+      <PortfolioCatalogueModal open={portfolioOpen} onOpenChange={setPortfolioOpen} />
     </>
   )
 }

@@ -140,7 +140,7 @@ export function DodatkoweTab() {
               )}
             </div>
           </LogistykaRow>
-          <div className="flex justify-between px-0 text-[10px] text-zinc-1000">
+          <div className="flex justify-between px-0 text-[10px] text-zinc-500">
             <span>0 km</span>
             <span>1000 km</span>
           </div>
@@ -194,7 +194,7 @@ export function DodatkoweTab() {
                     />
                   </div>
                   {!data.cateringOverride ? (
-                    <span className="text-sm text-zinc-1000">
+                    <span className="text-sm text-zinc-500">
                       Wyliczono automatycznie: {totalCrewDays} osobodni
                     </span>
                   ) : (
@@ -296,7 +296,7 @@ export function DodatkoweTab() {
                     />
                   </div>
                   {!data.lodgingOverride ? (
-                    <span className="text-sm text-zinc-1000">
+                    <span className="text-sm text-zinc-500">
                       Wyliczono automatycznie: {totalCrewDays} osobodni
                     </span>
                   ) : (
@@ -651,7 +651,7 @@ export function DodatkoweTab() {
             value={data.opcjeDodatkowe}
             onChange={(e) => updateField('opcjeDodatkowe', e.target.value)}
             placeholder={'np. - ujęcia z drona FPV: 1000 zł\n- dodatkowa wersja 9:16 (Reels): 800 zł'}
-            className="bg-black/40 border-white/10 resize-none min-h-[100px] text-sm text-white placeholder:text-zinc-1000"
+            className="bg-black/40 border-white/10 resize-none min-h-[100px] text-sm text-white placeholder:text-zinc-500"
           />
         </GlassCard>
       </motion.div>

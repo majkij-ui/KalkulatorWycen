@@ -13,6 +13,7 @@
 - [x] **PDF Texts Editor:** modal in Settings sheet for editing company info (4 fields) + 5 Uwagi templates with `{tokens}` substitution. Persists to `localStorage` (`quote-gen-pdf-texts`).
 - [x] **Tauri PDF Export:** `html2canvas-pro` (CSS Color 4 / oklch support on WKWebView) + `jsPDF` + Tauri `writeFile` to `$DOWNLOAD/`. Multi-page A4 paging. Web fallback uses `react-to-print`.
 - [x] **PDF Layout:** 6-category summary, detailed breakdown, legal clauses, and branding.
+- [x] **Portfolio Catalogue (Przykładowe realizacje):** app-level library of reusable video references managed under the cog (Settings → „Katalog realizacji", `components/portfolio-catalogue-modal.tsx`, persisted in `localStorage` `quote-gen-portfolio-catalogue`). In the PDF tab the portfolio section is now structured rows (`LocalPdfState.portfolioRows`): each row picks a link from the catalogue dropdown **or** accepts a manually typed URL, plus an optional description. Starts with 2 rows, „+ Dodaj realizację" adds more, trash removes. PDF prints visible URL + „— opis". Legacy `portfolioLinksText` drafts auto-migrate.
 
 ## PDF Internationalisation 🌍 (shipped Apr 2026)
 - [x] **Language toggle (PL / EN)** on the PDF preview tab. Affects only the PDF preview block + exported PDF; the calculator UI, editor labels, and settings sheet stay in Polish.

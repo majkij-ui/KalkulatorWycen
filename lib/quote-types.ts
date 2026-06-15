@@ -395,6 +395,12 @@ export interface PdfRowState {
   cenaNetto: number
 }
 
+/** A single "Przykładowe realizacje" entry on the PDF: a reference link + optional description. */
+export interface PortfolioRow {
+  url: string
+  description: string
+}
+
 export interface LocalPdfState {
   clientName: string
   projectName: string
@@ -415,7 +421,13 @@ export interface LocalPdfState {
 
   materialyKoncowe: string
   opcjeDodatkowe: string
-  portfolioLinksText: string
+  /**
+   * Structured portfolio rows (link + description) for the "Przykładowe realizacje"
+   * section. Links can be picked from the app-level catalogue or typed manually.
+   */
+  portfolioRows: PortfolioRow[]
+  /** @deprecated Legacy newline-separated links. Kept only to migrate old saved drafts into `portfolioRows`. */
+  portfolioLinksText?: string
 
   termsAndConditions: string[]
 }
