@@ -8,6 +8,30 @@ import { formatPdfAmount } from '@/lib/pdf-currency'
 
 const VAT_RATE = 0.23
 
+// ── Nonoise Media brand tokens (from the brand book) ─────────────────────────
+// Ink + white dominate; Ember is the accent (~8%); Mist/gradient used sparingly as detail.
+const BRAND = {
+  ink: '#09090B',
+  ember: '#EC5A29',
+  emberDeep: '#D8431F',
+}
+// Archivo for headings/text, JetBrains Mono for data/metrics/labels (with graceful fallbacks).
+const FONT_SANS = 'var(--font-archivo, var(--font-inter, Inter), sans-serif)'
+const FONT_MONO = 'var(--font-jetbrains-mono, ui-monospace, monospace)'
+const mono = { fontFamily: FONT_MONO }
+
+/** Brand section eyebrow: mono uppercase Ember label, optionally preceded by a short lead-rule. */
+function Eyebrow({ children, rule = false }: { children: React.ReactNode; rule?: boolean }) {
+  return (
+    <div className="mb-1 flex items-center gap-2">
+      {rule && <span className="h-px w-4 shrink-0" style={{ backgroundColor: BRAND.ember }} aria-hidden />}
+      <span className="text-[7pt] font-semibold uppercase tracking-[0.14em]" style={{ ...mono, color: BRAND.emberDeep }}>
+        {children}
+      </span>
+    </div>
+  )
+}
+
 const ROW_ORDER: PdfRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
 
 function rowTitleForLang(key: PdfRowKey, lang: PdfLang): string {
@@ -75,165 +99,178 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
 
   return (
     <div
-      className="printable-quote w-[210mm] bg-white px-8 pb-8 pt-4 text-[9.5pt] text-zinc-900 font-sans select-text print:m-0 print:px-8 print:pb-8 print:pt-4"
-      style={{ fontFamily: 'var(--font-inter, Inter)', userSelect: 'text' }}
+      className="printable-quote w-[210mm] bg-white px-8 pb-8 pt-4 text-[9.5pt] text-zinc-900 select-text print:m-0 print:px-8 print:pb-8 print:pt-4"
+      style={{ fontFamily: FONT_SANS, userSelect: 'text' }}
     >
-      {/* Black header bar */}
-      <div className="w-full bg-zinc-950 text-white flex items-center justify-between px-8 py-4">
+      {/* Ink header bar — orb logo, centered uppercase title (brand „czarny pasek nagłówka") */}
+      <div
+        className="w-full text-white flex items-center justify-between px-7 py-3.5 rounded-xl"
+        style={{ backgroundColor: BRAND.ink }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="NonoiseMedia" className="h-10 w-10 rounded-md object-cover" />
+        <img src="/logo.png" alt="NonoiseMedia" className="h-9 w-9 rounded-full object-cover" />
         <div className="flex-1 text-center">
-          <div className="text-[16px] font-bold tracking-widest">{documentTitle}</div>
+          <div className="text-[15px] font-bold tracking-[0.16em]">{documentTitle}</div>
         </div>
-        <div className="w-10" aria-hidden />
+        <div className="w-9" aria-hidden />
       </div>
 
-      {/* Metadata */}
-      <div className="mt-4 mb-4 grid grid-cols-2 gap-8 text-[9pt]">
-        {/* Wykonawca / Contractor: 3 lines */}
-        <div className="text-zinc-900 leading-tight min-w-0">
+      {/* Metadata — mono uppercase labels, values all in the base font / size */}
+      <div className="mt-3 mb-3 grid grid-cols-2 gap-8 text-[9pt] leading-snug">
+        {/* Wykonawca / Contractor */}
+        <div className="min-w-0 space-y-0.5">
           <div>
-            <span className="font-bold">{L.contractor}:</span> {companyName}
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.contractor}: </span>
+            <span className="font-semibold text-zinc-900">{companyName}</span>
           </div>
           <div>
-            <span className="font-bold">{L.producer}:</span> {producerName}
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.producer}: </span>
+            <span className="text-zinc-900">{producerName}</span>
           </div>
           <div>
-            <span className="font-bold">{L.email}:</span> {contactEmail}
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.email}: </span>
+            <span className="break-words" style={{ color: BRAND.emberDeep }}>{contactEmail}</span>
           </div>
         </div>
 
-        {/* Metadata right: 4 lines */}
-        <div className="text-right leading-tight text-zinc-900 min-w-0">
+        {/* Metadata right */}
+        <div className="min-w-0 space-y-0.5 text-right">
           <div>
-            <span className="font-bold">{L.client}:</span>{' '}
-            <span className="break-words">{clientName}</span>
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.client}: </span>
+            <span className="break-words font-semibold text-zinc-900">{clientName}</span>
           </div>
-          <div className="mt-1">
-            <span className="font-bold">{L.project}:</span>{' '}
-            <span className="break-words">{projectName}</span>
+          <div>
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.project}: </span>
+            <span className="break-words text-zinc-900">{projectName}</span>
           </div>
-          <div className="mt-1">
-            <span className="font-bold">{L.issueDate}:</span> {currentDate}{' '}
-            <span className="text-zinc-600">({L.validityNote})</span>
+          <div>
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.issueDate}: </span>
+            <span className="text-zinc-900">{currentDate}</span>{' '}
+            <span className="text-zinc-500">({L.validityNote})</span>
           </div>
-          <div className="mt-1">
-            <span className="font-bold">{L.shootingDate}:</span> {terminZdjec}
+          <div>
+            <span className="text-[7pt] uppercase tracking-[0.12em] text-zinc-500" style={mono}>{L.shootingDate}: </span>
+            <span className="text-zinc-900">{terminZdjec}</span>
           </div>
         </div>
       </div>
 
       <section>
-        <table className="w-full border-collapse text-[9pt]">
-          <thead>
-            <tr>
-              <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-left w-1/4">
-                {L.tableCategory}
-              </th>
-              <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-right w-1/6 whitespace-nowrap">
-                {L.tableEstimateNetto}
-              </th>
-              <th className="bg-zinc-100 text-zinc-500 uppercase tracking-tight text-[8pt] font-bold py-2 px-3 text-left w-7/12">
-                {L.tableDescription}
-              </th>
-            </tr>
-          </thead>
+        <div className="overflow-hidden rounded-lg border border-zinc-200">
+          <table className="w-full border-collapse text-[9pt]">
+            <thead>
+              <tr>
+                <th className="bg-zinc-50 text-zinc-500 uppercase text-[7pt] font-semibold tracking-[0.12em] py-1.5 px-3 text-left w-1/4" style={mono}>
+                  {L.tableCategory}
+                </th>
+                <th className="bg-zinc-50 text-zinc-500 uppercase text-[7pt] font-semibold tracking-[0.12em] py-1.5 px-3 text-right w-1/6 whitespace-nowrap" style={mono}>
+                  {L.tableEstimateNetto}
+                </th>
+                <th className="bg-zinc-50 text-zinc-500 uppercase text-[7pt] font-semibold tracking-[0.12em] py-1.5 px-3 text-left w-7/12" style={mono}>
+                  {L.tableDescription}
+                </th>
+              </tr>
+            </thead>
 
-          <tbody>
-            {ROW_ORDER.map((key) => {
-              const row = localPdfState.rows[key]
-              const nettoValue = row?.cenaNetto ?? 0
-              return (
-                <tr key={key} data-pdf-break="after" className="break-inside-avoid">
-                  <td className="border-b border-zinc-200 py-2 px-3 font-bold w-1/4 align-top">
-                    {rowTitleForLang(key, lang)}
-                  </td>
-                  <td className="border-b border-zinc-200 py-2 px-3 w-1/6 text-right align-top tabular-nums whitespace-nowrap">
-                    <div className="text-[9.5pt] font-bold">{fmt(nettoValue)}</div>
-                  </td>
-                  <td className="border-b border-zinc-200 py-2 px-3 w-7/12 text-zinc-600 leading-relaxed align-top whitespace-pre-wrap">
-                    {row?.opis?.trim() ? row.opis.trim() : L.emptyDash}
-                  </td>
-                </tr>
-              )
-            })}
+            <tbody>
+              {ROW_ORDER.map((key) => {
+                const row = localPdfState.rows[key]
+                const nettoValue = row?.cenaNetto ?? 0
+                return (
+                  <tr key={key} data-pdf-break="after" className="break-inside-avoid">
+                    <td className="border-t border-zinc-200 py-1.5 px-3 font-bold w-1/4 align-top">
+                      {rowTitleForLang(key, lang)}
+                    </td>
+                    <td className="border-t border-zinc-200 py-1.5 px-3 w-1/6 text-right align-top whitespace-nowrap">
+                      <div className="text-[9.5pt] font-bold" style={mono}>{fmt(nettoValue)}</div>
+                    </td>
+                    <td className="border-t border-zinc-200 py-1.5 px-3 w-7/12 text-zinc-600 leading-snug align-top whitespace-pre-wrap">
+                      {row?.opis?.trim() ? row.opis.trim() : L.emptyDash}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
 
-            <tr data-pdf-break="after" className="bg-zinc-900 text-white break-inside-avoid">
-              <td colSpan={3} className="p-3">
-                {showVat ? (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
-                      <span className="text-zinc-200">{L.sumNetto}</span>
-                      <span className="tabular-nums text-zinc-100">{fmt(totalNetto)}</span>
-                    </div>
-                    <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
-                      <span className="text-zinc-200">{L.vatRow}</span>
-                      <span className="tabular-nums text-zinc-100">{fmt(totalVat)}</span>
-                    </div>
-                    <div className="flex items-baseline justify-between text-[12pt] font-black tracking-tight">
-                      <span>{L.sumBrutto}</span>
-                      <span className="text-primary tabular-nums">{fmt(totalBrutto)}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-baseline justify-between text-[9pt] font-bold uppercase tracking-tight">
-                    <span>{L.totalProject}</span>
-                    <span className="text-primary tabular-nums text-[11pt] font-extrabold">{fmt(totalNetto)}</span>
-                  </div>
-                )}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        {/* Total bar — Ink, rounded, Ember amount */}
+        <div
+          data-pdf-break="after"
+          className="mt-2.5 rounded-xl px-5 py-2.5 text-white break-inside-avoid"
+          style={{ backgroundColor: BRAND.ink }}
+        >
+          {showVat ? (
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
+                <span className="text-zinc-300">{L.sumNetto}</span>
+                <span className="text-zinc-100" style={mono}>{fmt(totalNetto)}</span>
+              </div>
+              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
+                <span className="text-zinc-300">{L.vatRow}</span>
+                <span className="text-zinc-100" style={mono}>{fmt(totalVat)}</span>
+              </div>
+              <div className="mt-0.5 flex items-baseline justify-between text-[12pt] font-black tracking-tight">
+                <span>{L.sumBrutto}</span>
+                <span style={{ ...mono, color: BRAND.ember }}>{fmt(totalBrutto)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-baseline justify-between">
+              <span className="text-[9pt] font-bold uppercase tracking-[0.1em]">{L.totalProject}</span>
+              <span className="text-[12pt] font-black" style={{ ...mono, color: BRAND.ember }}>{fmt(totalNetto)}</span>
+            </div>
+          )}
+        </div>
 
-        <div className="mt-4 grid gap-4">
-          <div data-pdf-break="after" className="border border-zinc-200 rounded-md p-3 break-inside-avoid">
-            <div className="text-[8pt] font-bold text-zinc-700">{L.finalMaterials}</div>
-            <div className="mt-1.5 text-[9pt] text-zinc-600 whitespace-pre-wrap leading-relaxed">
+        <div className="mt-3 grid gap-2.5">
+          <div data-pdf-break="after" className="border border-zinc-200 rounded-lg p-2.5 break-inside-avoid">
+            <Eyebrow>{L.finalMaterials}</Eyebrow>
+            <div className="text-[9pt] text-zinc-700 whitespace-pre-wrap leading-snug">
               {localPdfState.materialyKoncowe?.trim() ? localPdfState.materialyKoncowe.trim() : L.emptyDash}
             </div>
           </div>
 
-          <div data-pdf-break="after" className="border border-zinc-200 rounded-md p-3 break-inside-avoid">
-            <div className="text-[8pt] font-bold text-zinc-700">{L.additionalOptions}</div>
-            <div className="mt-1.5 text-[9pt] text-zinc-600 whitespace-pre-wrap leading-relaxed">
+          <div data-pdf-break="after" className="border border-zinc-200 rounded-lg p-2.5 break-inside-avoid">
+            <Eyebrow>{L.additionalOptions}</Eyebrow>
+            <div className="text-[9pt] text-zinc-700 whitespace-pre-wrap leading-snug">
               {localPdfState.opcjeDodatkowe?.trim() ? localPdfState.opcjeDodatkowe.trim() : L.emptyDash}
             </div>
           </div>
 
           {/* Portfolio: right after additional options */}
-          <div data-pdf-break="after" className="border border-zinc-200 rounded-md p-3 break-inside-avoid">
-            <div className="text-[8pt] font-bold text-zinc-700">{L.portfolio}</div>
+          <div data-pdf-break="after" className="border border-zinc-200 rounded-lg p-2.5 break-inside-avoid">
+            <Eyebrow>{L.portfolio}</Eyebrow>
             {portfolioItems.length > 0 ? (
-              <ul className="mt-1.5 space-y-1 text-[8pt] text-zinc-700">
+              <ul className="space-y-0.5 text-[8pt] text-zinc-700">
                 {portfolioItems.map((it, i) => {
                   const href = it.url.startsWith('http') ? it.url : `https://${it.url}`
                   return (
                     <li key={`${i}-${it.url || it.description.slice(0, 16)}`} className="break-words">
                       {it.url && (
-                        <a href={href} className="text-primary">
+                        <a href={href} style={{ ...mono, color: BRAND.emberDeep }}>
                           {it.url}
                         </a>
                       )}
-                      {it.url && it.description && <span className="text-zinc-600"> — </span>}
+                      {it.url && it.description && <span className="text-zinc-500"> — </span>}
                       {it.description && <span className="text-zinc-600">{it.description}</span>}
                     </li>
                   )
                 })}
               </ul>
             ) : (
-              <div className="mt-1.5 text-[8pt] text-zinc-700">{L.emptyDash}</div>
+              <div className="text-[8pt] text-zinc-700">{L.emptyDash}</div>
             )}
           </div>
 
           {/* Uwagi / Notes at the bottom */}
           <div data-pdf-break="after" className="mt-0 break-inside-avoid">
-            <div className="text-[8pt] font-bold text-zinc-700 mb-1.5">{L.notes}</div>
+            <Eyebrow rule>{L.notes}</Eyebrow>
             {adjustedTerms?.length ? (
               <div className="columns-2 gap-6 text-[8pt] text-zinc-700 leading-relaxed">
                 {adjustedTerms.map((t, i) => (
                   <div key={`${i}-${t.slice(0, 20)}`} className="break-inside-avoid mb-1.5">
-                    {i + 1}. {t}
+                    <span className="font-semibold" style={{ color: BRAND.emberDeep }}>{i + 1}.</span> {t}
                   </div>
                 ))}
               </div>

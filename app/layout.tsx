@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Geist_Mono } from 'next/font/google'
+import { Inter, Archivo, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/react'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'], variable: '--font-inter' })
-const _geistMono = Geist_Mono({ subsets: ['latin'] })
+// Brand typefaces (Nonoise Media brand book): Archivo for headings/text, JetBrains Mono
+// for tables, metrics, labels and timecodes. Loaded app-wide as CSS variables but
+// currently only consumed by the printable PDF (components/pdf/printable-quote.tsx).
+const archivo = Archivo({ subsets: ['latin', 'latin-ext'], variable: '--font-archivo' })
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-jetbrains-mono' })
 
 export const metadata: Metadata = {
   title: 'Kalkulator Wyceny Wideo | Studio Produkcji',
@@ -23,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pl" className="dark">
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${archivo.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         {children}
         <Analytics />
       </body>
