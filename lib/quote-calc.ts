@@ -203,6 +203,8 @@ export function getBreakdownWithPricing(
   }
 
   // One-shot per-actor copyright transfer fee (independent of shooting days).
+  // Pass-through honorarium: the margin/rabat slider does NOT apply, so the
+  // amount on the quote always equals kwota × liczba aktorów as entered.
   // Lands in Produkcja phase so the PDF Cast bucket reflects it; the
   // percentage-based "Pełne przekazanie praw" surcharge below still stacks
   // on top (acts on the resulting subtotal).
@@ -216,7 +218,7 @@ export function getBreakdownWithPricing(
         value: `${liczbaAktorow} aktor(ów) × ${perActor.toLocaleString('pl-PL')} zł`,
         quantity: liczbaAktorow,
         unitPriceNet: perActor,
-        lineNetto: applyMargin(flat, marginMultiplier),
+        lineNetto: flat,
       })
     }
   }
@@ -288,14 +290,15 @@ export function getProductionEkipaCastSprzetNetto(
   const pro = pricing.produkcja
 
   // Per-actor flat copyright transfer fee (applies in both quick & detailed
-  // modes once user chooses "przekazanie" + fills the fields). Always added
-  // to the Cast bucket so PDF presentation matches Produkcja phase total.
+  // modes once user chooses "przekazanie" + fills the fields). Pass-through:
+  // no margin, mirroring getBreakdownWithPricing. Always added to the Cast
+  // bucket so PDF presentation matches Produkcja phase total.
   const actorRightsBucket = (() => {
     if (data.copyrightType !== 'przekazanie') return 0
     const liczba = safeNum(data.liczbaAktorow, 0, 0)
     const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
     if (liczba <= 0 || perActor <= 0) return 0
-    return applyMargin(perActor * liczba, marginMultiplier)
+    return perActor * liczba
   })()
 
   if (!data.isDetailedProdukcja) {

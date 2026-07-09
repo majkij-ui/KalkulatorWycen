@@ -13,6 +13,14 @@ import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type P
 import { safeNum, safeArray } from './safe-numbers'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
 import { buildPersistedSnapshot } from './storage'
+import {
+  listSavedQuotes,
+  upsertSavedQuote,
+  deleteSavedQuote,
+  createQuoteId,
+  type QuoteSnapshot,
+  type SavedQuoteRecord,
+} from './quote-library'
 
 interface QuoteContextValue {
   data: QuoteData
@@ -81,6 +89,19 @@ interface QuoteContextValue {
   /** Keep the latest PDF draft in context so save/load works when the PDF tab is unmounted. */
   syncPdfDraftSnapshot: (snapshot: unknown) => void
   getPdfDraftSnapshot: () => unknown
+  // Biblioteka wycen (AppData) — "save game / load game"
+  savedQuotes: SavedQuoteRecord[]
+  /** Aktualnie otwarta wycena z biblioteki (null = niezapisana / robocza). */
+  activeQuoteId: string | null
+  activeQuoteName: string | null
+  /** Builds the full snapshot of the current state (also used by JSON export). */
+  buildQuoteSnapshot: () => QuoteSnapshot
+  /** Save current state under a name; overwrites when `id` given. Returns the record id. */
+  saveQuoteToLibrary: (name: string, id?: string) => Promise<string>
+  loadQuoteFromLibrary: (id: string) => void
+  deleteQuoteFromLibrary: (id: string) => Promise<void>
+  /** Detach from the active library quote (start a fresh unsaved draft). */
+  startNewQuote: () => void
 }
 
 export interface PdfDraftBridge {
@@ -119,8 +140,10 @@ function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
   const merged: QuoteData = { ...defaultQuoteData, ...partial }
   merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
   merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
-  if (merged.dniMontazu != null && merged.crudeEditCount === undefined) {
-    merged.crudeEditCount = merged.dniMontazu
+  // Legacy snapshots (pre-crudeEditCount) only carried dniMontazu; the check must
+  // look at the raw partial — after the spread, crudeEditCount is never undefined.
+  if (partial.crudeEditCount === undefined && typeof partial.dniMontazu === 'number' && partial.dniMontazu > 0) {
+    merged.crudeEditCount = partial.dniMontazu
   }
   return merged
 }
@@ -136,6 +159,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   )
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [restorationComplete, setRestorationComplete] = useState(false)
+  const [savedQuotes, setSavedQuotes] = useState<SavedQuoteRecord[]>([])
+  const [activeQuoteId, setActiveQuoteId] = useState<string | null>(null)
+  const [activeQuoteName, setActiveQuoteName] = useState<string | null>(null)
 
   const applyPersistedSettings = useCallback((saved: PersistedAppSettings) => {
     if (saved.data) {
@@ -501,6 +527,70 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // ── Biblioteka wycen (AppData / localStorage) ────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    void listSavedQuotes()
+      .then((quotes) => {
+        if (!cancelled) setSavedQuotes(quotes)
+      })
+      .catch(() => {
+        /* brak pliku / brak uprawnień — pusta biblioteka */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const buildQuoteSnapshot = useCallback((): QuoteSnapshot => ({
+    version: 2,
+    savedAt: new Date().toISOString(),
+    data,
+    pricingConfig,
+    marginMultiplier,
+    pdfDraft: getPdfDraftSnapshot(),
+  }), [data, pricingConfig, marginMultiplier, getPdfDraftSnapshot])
+
+  const saveQuoteToLibrary = useCallback(async (name: string, id?: string): Promise<string> => {
+    const trimmed = name.trim() || 'Bez nazwy'
+    const now = new Date().toISOString()
+    const existing = id ? savedQuotes.find((q) => q.id === id) : undefined
+    const record: SavedQuoteRecord = {
+      id: existing?.id ?? createQuoteId(),
+      name: trimmed,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      snapshot: buildQuoteSnapshot(),
+    }
+    const next = await upsertSavedQuote(record)
+    setSavedQuotes(next)
+    setActiveQuoteId(record.id)
+    setActiveQuoteName(record.name)
+    return record.id
+  }, [savedQuotes, buildQuoteSnapshot])
+
+  const loadQuoteFromLibrary = useCallback((id: string) => {
+    const record = savedQuotes.find((q) => q.id === id)
+    if (!record) return
+    loadQuoteSnapshot(record.snapshot)
+    setActiveQuoteId(record.id)
+    setActiveQuoteName(record.name)
+  }, [savedQuotes, loadQuoteSnapshot])
+
+  const deleteQuoteFromLibrary = useCallback(async (id: string) => {
+    const next = await deleteSavedQuote(id)
+    setSavedQuotes(next)
+    if (activeQuoteId === id) {
+      setActiveQuoteId(null)
+      setActiveQuoteName(null)
+    }
+  }, [activeQuoteId])
+
+  const startNewQuote = useCallback(() => {
+    setActiveQuoteId(null)
+    setActiveQuoteName(null)
+  }, [])
+
   const saveTemplate = useCallback((name: string) => {
     const template: SavedTemplate = {
       id: `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -632,6 +722,14 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     registerPdfDraftBridge,
     syncPdfDraftSnapshot,
     getPdfDraftSnapshot,
+    savedQuotes,
+    activeQuoteId,
+    activeQuoteName,
+    buildQuoteSnapshot,
+    saveQuoteToLibrary,
+    loadQuoteFromLibrary,
+    deleteQuoteFromLibrary,
+    startNewQuote,
   }
 
   return (

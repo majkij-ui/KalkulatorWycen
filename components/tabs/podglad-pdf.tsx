@@ -337,9 +337,12 @@ function getOpisInitial({
     return `${L.opisDetailedPostpro}: ${safeArray(data.detailedDeliverables).length} ${L.opisItems}.`
   }
 
+  // Legacy lektor/licencjaMuzyczna fields are no longer priced anywhere
+  // (voiceover & music live in per-deliverable postpro now), so the PDF
+  // description only mentions the copyright arrangement.
   if (key === 'inne') {
     const prawa = data.copyrightType === 'przekazanie' ? L.copyrightTransfer : L.copyrightLicense
-    return `${L.opisVoiceover}: ${yn(data.lektor)}.\n${L.opisMusicLicense}: ${data.licencjaMuzyczna}.\n${L.opisCopyright}: ${prawa}.`
+    return `${L.opisCopyright}: ${prawa}.`
   }
 
   return ''

@@ -72,6 +72,7 @@ export function DodatkoweTab() {
   const travelNetto = dodPhase?.items.find(i => i.label === 'Koszty dojazdu')?.lineNetto ?? 0
   const cateringNetto = dodPhase?.items.find(i => i.label === 'Catering')?.lineNetto ?? 0
   const lodgingNetto = dodPhase?.items.find(i => i.label === 'Noclegi')?.lineNetto ?? 0
+  const surchargeNetto = dodPhase?.items.find(i => i.label === 'Pełne przekazanie praw')?.lineNetto ?? 0
 
   return (
     <motion.div
@@ -398,8 +399,14 @@ export function DodatkoweTab() {
                     step={1}
                     min={0}
                   />
-                  <span>od sumy netto</span>
+                  <span>od sumy netto (bez logistyki: dojazd, catering, noclegi)</span>
                 </div>
+                {surchargeNetto > 0 && (
+                  <div className="mt-1 flex items-center justify-end gap-1 text-xs">
+                    <span className="text-zinc-500">Łącznie:</span>
+                    <span className="text-amber-400/80 tabular-nums font-medium">{formatCurrency(surchargeNetto)}</span>
+                  </div>
+                )}
 
                 <Separator className="my-4 bg-white/5" />
 
@@ -488,7 +495,7 @@ export function DodatkoweTab() {
                         })}{' '}
                         zł
                       </span>{' '}
-                      (doliczone do Produkcji)
+                      (doliczone do Produkcji, bez marży)
                     </div>
                   )}
                 </div>
