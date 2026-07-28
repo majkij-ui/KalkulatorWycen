@@ -105,7 +105,8 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
     category: 'dodatkowe',
     title: 'DODATKOWE',
     rows: [
-      { key: 'kosztDojazduKm', label: 'Koszty dojazdu (za km)', isKeyMetric: true },
+      // kosztDojazduKm usunięty z UI — dojazd liczony jest równaniem paliwowym
+      // (cena paliwa × spalanie), edytowanym w zakładkach Dodatkowe/Profit.
       { key: 'pelnePrzekazaniePrawProcent', label: 'Pełne przekazanie praw (% dopłaty)', step: 1 },
     ],
   },
@@ -186,6 +187,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        aria-describedby={undefined}
         className="max-h-[90vh] flex flex-col overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-lg"
         showCloseButton={true}
       >
@@ -240,7 +242,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                             <Input
                               type="number"
                               min={0}
-                              step={row.step ?? (row.key === 'kosztDojazduKm' ? 0.1 : 50)}
+                              step={row.step ?? 50}
                               value={Math.max(0, Number(itemVal) || 0)}
                               onChange={(e) =>
                                 update(category, row.key, Math.max(0, Number(e.target.value) || 0))

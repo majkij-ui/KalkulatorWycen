@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -22,7 +22,7 @@ import { useQuote } from '@/lib/quote-context'
 import { SettingsModal } from '@/components/settings-modal'
 import { PdfTextsModal } from '@/components/pdf-texts-modal'
 import { PortfolioCatalogueModal } from '@/components/portfolio-catalogue-modal'
-import { BookmarkPlus, FileText, Film, Trash2 } from 'lucide-react'
+import { BookmarkPlus, FileText, Film, Trash2, Save, Check } from 'lucide-react'
 
 interface SettingsSheetProps {
   open: boolean
@@ -35,12 +35,15 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
     saveTemplate,
     deleteTemplate,
     loadTemplate,
+    saveAsDefaults,
   } = useQuote()
   const [priceEditorOpen, setPriceEditorOpen] = useState(false)
   const [pdfTextsOpen, setPdfTextsOpen] = useState(false)
   const [portfolioOpen, setPortfolioOpen] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState('')
+  const [defaultsSaved, setDefaultsSaved] = useState(false)
+  const defaultsSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSaveTemplate = () => {
     saveTemplate(saveTemplateName)
@@ -48,11 +51,19 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
     setSaveTemplateOpen(false)
   }
 
+  const handleSaveDefaults = () => {
+    saveAsDefaults()
+    if (defaultsSavedTimerRef.current) clearTimeout(defaultsSavedTimerRef.current)
+    setDefaultsSaved(true)
+    defaultsSavedTimerRef.current = setTimeout(() => setDefaultsSaved(false), 2000)
+  }
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          aria-describedby={undefined}
           className="border-l border-white/10 bg-zinc-950/70 text-white backdrop-blur-2xl sm:max-w-sm"
         >
           <SheetHeader className="pb-6">
@@ -72,6 +83,18 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
               }}
             >
               Edytuj stawki (cennik)
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`w-full border-white/10 bg-zinc-900/40 text-white hover:bg-white/10 ${
+                defaultsSaved ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : ''
+              }`}
+              onClick={handleSaveDefaults}
+              title="Zapisz obecny cennik jako moje domyślne stawki (przywracane przy twardym resecie)"
+            >
+              {defaultsSaved ? <Check className="size-4 mr-2" /> : <Save className="size-4 mr-2" />}
+              {defaultsSaved ? 'Zapisano stawki domyślne' : 'Zapisz stawki jako domyślne'}
             </Button>
             <Button
               type="button"
@@ -153,6 +176,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
 
       <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
         <DialogContent
+          aria-describedby={undefined}
           className="border-white/10 bg-slate-900/95 text-white backdrop-blur-xl"
           showCloseButton={true}
         >

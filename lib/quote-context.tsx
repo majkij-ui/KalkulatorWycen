@@ -140,6 +140,18 @@ function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
   const merged: QuoteData = { ...defaultQuoteData, ...partial }
   merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
   merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
+  merged.profitOverrides =
+    merged.profitOverrides != null && typeof merged.profitOverrides === 'object' && !Array.isArray(merged.profitOverrides)
+      ? merged.profitOverrides
+      : {}
+  merged.profitCustomItems = Array.isArray(merged.profitCustomItems) ? merged.profitCustomItems : []
+  if (!Number.isFinite(merged.profitTaxRatePercent)) merged.profitTaxRatePercent = defaultQuoteData.profitTaxRatePercent
+  merged.profitTransferAmount =
+    typeof merged.profitTransferAmount === 'number' && Number.isFinite(merged.profitTransferAmount)
+      ? merged.profitTransferAmount
+      : null
+  if (!Number.isFinite(merged.profitFuelPricePerLiter)) merged.profitFuelPricePerLiter = defaultQuoteData.profitFuelPricePerLiter
+  if (!Number.isFinite(merged.profitFuelConsumption)) merged.profitFuelConsumption = defaultQuoteData.profitFuelConsumption
   // Legacy snapshots (pre-crudeEditCount) only carried dniMontazu; the check must
   // look at the raw partial — after the spread, crudeEditCount is never undefined.
   if (partial.crudeEditCount === undefined && typeof partial.dniMontazu === 'number' && partial.dniMontazu > 0) {
@@ -248,8 +260,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       templates,
     })
     const t = window.setTimeout(() => {
-      void savePersistedSnapshot(snapshot).catch(() => {
-        /* Tauri / quota */
+      void savePersistedSnapshot(snapshot).catch((err) => {
+        // Keep the app usable, but never swallow persistence failures invisibly —
+        // a missing AppData dir made autosave fail silently for months.
+        console.error('Autozapis settings.json nie powiódł się:', err)
       })
     }, PERSIST_DEBOUNCE_MS)
     return () => window.clearTimeout(t)
@@ -465,7 +479,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       marginMultiplier: 1.0,
       pricingConfig: target,
       templates,
-    })).catch(() => { /* ignore */ })
+    })).catch((err) => {
+      console.error('Zapis snapshotu po twardym resecie nie powiódł się:', err)
+    })
   }, [templates])
 
   const pdfDraftBridgeRef = useRef<PdfDraftBridge | null>(null)

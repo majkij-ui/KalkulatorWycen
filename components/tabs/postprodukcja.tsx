@@ -406,6 +406,7 @@ function FormatManagerDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
+        aria-describedby={undefined}
         className="border border-white/10 bg-zinc-950/90 text-white backdrop-blur-xl sm:max-w-md"
         showCloseButton
       >

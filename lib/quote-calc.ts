@@ -3,6 +3,7 @@
 import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
+import { computeFuelRatePerKm } from './profit-calc'
 
 const VAT_RATE = 0.23
 
@@ -224,9 +225,12 @@ export function getBreakdownWithPricing(
   }
 
   const dod = pricing.dodatkowe
+  // Dojazd liczony równaniem paliwowym (km × spalanie/100 × cena paliwa) —
+  // identycznie jak koszt w zakładce Profit. Pass-through: bez marży, więc
+  // klient płaci dokładnie tyle, ile wynosi realny koszt paliwa.
   const km = safeNum(data.kosztDojazduKm, 0, 0)
-  const kmRate = dod.kosztDojazduKm
-  const travelNetto = applyMargin(kmRate * km, marginMultiplier)
+  const kmRate = computeFuelRatePerKm(data)
+  const travelNetto = kmRate * km
   dodatkoweItems.push({
     label: 'Koszty dojazdu',
     value: `${km} km`,

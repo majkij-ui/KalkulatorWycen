@@ -41,6 +41,7 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
   } = useQuote()
 
   const [newName, setNewName] = useState('')
+  const [libraryError, setLibraryError] = useState<string | null>(null)
   const [justSavedId, setJustSavedId] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,16 +60,31 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
     return parts.length ? parts.join(' — ') : `Wycena ${format(new Date(), 'dd.MM.yyyy')}`
   }
 
+  const describeError = (err: unknown): string =>
+    `Zapis nie powiódł się: ${err instanceof Error ? err.message : String(err)}`
+
   const handleSaveAsNew = async () => {
-    const id = await saveQuoteToLibrary(newName.trim() || suggestedName())
-    setNewName('')
-    flashSaved(id)
+    try {
+      setLibraryError(null)
+      const id = await saveQuoteToLibrary(newName.trim() || suggestedName())
+      setNewName('')
+      flashSaved(id)
+    } catch (err) {
+      console.error('Zapis wyceny do biblioteki nie powiódł się:', err)
+      setLibraryError(describeError(err))
+    }
   }
 
   const handleOverwriteActive = async () => {
     if (!activeQuoteId) return
-    const id = await saveQuoteToLibrary(activeQuoteName ?? suggestedName(), activeQuoteId)
-    flashSaved(id)
+    try {
+      setLibraryError(null)
+      const id = await saveQuoteToLibrary(activeQuoteName ?? suggestedName(), activeQuoteId)
+      flashSaved(id)
+    } catch (err) {
+      console.error('Zapis wyceny do biblioteki nie powiódł się:', err)
+      setLibraryError(describeError(err))
+    }
   }
 
   const handleLoad = (id: string) => {
@@ -85,7 +101,10 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
     }
     if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
     setPendingDeleteId(null)
-    void deleteQuoteFromLibrary(id)
+    void deleteQuoteFromLibrary(id).catch((err) => {
+      console.error('Usunięcie wyceny z biblioteki nie powiodło się:', err)
+      setLibraryError(describeError(err))
+    })
   }
 
   // ── Kopia zapasowa: eksport / import pliku JSON ──────────────────────────────
@@ -143,6 +162,7 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
+        aria-describedby={undefined}
         className="flex flex-col border-l border-white/10 bg-zinc-950/70 text-white backdrop-blur-2xl sm:max-w-sm"
       >
         <SheetHeader className="pb-4">
@@ -199,6 +219,12 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
               Zapisz jako
             </Button>
           </div>
+
+          {libraryError && (
+            <p className="rounded-md border border-red-500/30 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+              {libraryError}
+            </p>
+          )}
         </div>
 
         <Separator className="my-4 bg-white/10" />

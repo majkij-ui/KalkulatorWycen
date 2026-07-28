@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { Settings, RotateCcw, FolderOpen, Save, Eraser } from 'lucide-react'
+import { Settings, RotateCcw, FolderOpen, Save, Eraser, FileText, PenLine, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuote } from '@/lib/quote-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
@@ -17,9 +17,10 @@ export function StickyHeader() {
     resetToZero,
     marginMultiplier,
     setMarginMultiplier,
-    saveAsDefaults,
     hardReset,
+    activeQuoteId,
     activeQuoteName,
+    saveQuoteToLibrary,
   } = useQuote()
 
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -32,9 +33,9 @@ export function StickyHeader() {
   const [hardResetPending, setHardResetPending] = useState(false)
   const hardResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Save defaults: brief success flash
-  const [defaultsSaved, setDefaultsSaved] = useState(false)
-  const defaultsSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Save quote: brief success flash
+  const [quoteSaved, setQuoteSaved] = useState(false)
+  const quoteSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Delta animation
   useEffect(() => {
@@ -65,12 +66,24 @@ export function StickyHeader() {
     }
   }
 
-  // ── Save Defaults ────────────────────────────────────────────────────────────
-  const handleSaveDefaults = () => {
-    saveAsDefaults()
-    if (defaultsSavedTimerRef.current) clearTimeout(defaultsSavedTimerRef.current)
-    setDefaultsSaved(true)
-    defaultsSavedTimerRef.current = setTimeout(() => setDefaultsSaved(false), 2000)
+  // ── Save Quote ───────────────────────────────────────────────────────────────
+  // Zapisuje zmiany w otwartej wycenie jednym kliknięciem. Gdy pracujemy na
+  // niezapisanej kopii roboczej (brak activeQuoteId), otwieramy bibliotekę,
+  // aby nadać nazwę zamiast tworzyć anonimowy wpis.
+  const handleSaveQuote = () => {
+    if (!activeQuoteId) {
+      setLibraryOpen(true)
+      return
+    }
+    void saveQuoteToLibrary(activeQuoteName ?? 'Bez nazwy', activeQuoteId)
+      .then(() => {
+        if (quoteSavedTimerRef.current) clearTimeout(quoteSavedTimerRef.current)
+        setQuoteSaved(true)
+        quoteSavedTimerRef.current = setTimeout(() => setQuoteSaved(false), 2000)
+      })
+      .catch((err) => {
+        console.error('Zapis wyceny nie powiódł się:', err)
+      })
   }
 
   return (
@@ -82,9 +95,40 @@ export function StickyHeader() {
             <div className="relative size-10 shrink-0 overflow-hidden rounded-lg sm:size-11">
               <Image src="/logo.png" alt="" width={44} height={44} className="object-cover" />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col items-start">
               <span className="text-xl font-bold tracking-tight text-white">NonoiseMedia</span>
               <span className="text-sm text-zinc-400">Kalkulator wycen</span>
+
+              {/* Otwarta wycena — dokument, nad którym pracujesz */}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={activeQuoteName ?? '__draft__'}
+                  initial={{ opacity: 0, y: -3 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 3 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="mt-1.5"
+                >
+                  {activeQuoteName ? (
+                    <span
+                      title={activeQuoteName}
+                      className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-0.5 sm:max-w-[260px]"
+                    >
+                      <FileText className="size-3 shrink-0 text-amber-400/80" />
+                      <span className="truncate text-xs font-medium text-amber-100/90">
+                        {activeQuoteName}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/5 px-2.5 py-0.5">
+                      <PenLine className="size-3 shrink-0 text-zinc-500" />
+                      <span className="text-xs font-medium italic text-zinc-500">
+                        Wersja robocza
+                      </span>
+                    </span>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
 
@@ -150,13 +194,17 @@ export function StickyHeader() {
                 <div className="w-px h-4 bg-white/10" />
 
                 <ActionButton
-                  onClick={handleSaveDefaults}
-                  title="Zapisz stawki jako moje domyślne (przywracane przy twardym resecie)"
-                  aria-label="Zapisz stawki jako domyślne"
-                  active={defaultsSaved}
-                  activeClass="text-amber-400 border-amber-400/40 bg-amber-400/10"
+                  onClick={handleSaveQuote}
+                  title={
+                    activeQuoteId
+                      ? `Zapisz zmiany w wycenie „${activeQuoteName}”`
+                      : 'Zapisz wycenę — nadaj nazwę w bibliotece'
+                  }
+                  aria-label="Zapisz wycenę"
+                  active={quoteSaved}
+                  activeClass="text-emerald-400 border-emerald-400/40 bg-emerald-400/10"
                 >
-                  <Save className="size-4" />
+                  {quoteSaved ? <Check className="size-4" /> : <Save className="size-4" />}
                 </ActionButton>
 
                 {/* Divider */}

@@ -60,6 +60,7 @@ export function PortfolioCatalogueModal({ open, onOpenChange }: PortfolioCatalog
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        aria-describedby={undefined}
         className="max-h-[90vh] flex flex-col overflow-hidden border-white/10 bg-slate-900/95 text-foreground backdrop-blur-xl sm:max-w-2xl"
         showCloseButton={true}
       >

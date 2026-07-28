@@ -14,6 +14,7 @@ import { GlassCard } from '@/components/glass-card'
 import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
+import { computeFuelRatePerKm } from '@/lib/profit-calc'
 import type { QuoteData } from '@/lib/quote-types'
 
 const DP = DEFAULT_PRICING
@@ -98,8 +99,8 @@ export function DodatkoweTab() {
                 <Input
                   type="number"
                   min={0}
-                  max={1000}
-                  value={Math.max(0, Math.min(1000, Number(data.kosztDojazduKm) || 0))}
+                  max={9999}
+                  value={Math.max(0, Math.min(9999, Number(data.kosztDojazduKm) || 0))}
                   onChange={(e) => {
                     const raw = e.target.value
                     if (raw === '') {
@@ -107,7 +108,7 @@ export function DodatkoweTab() {
                       return
                     }
                     const n = Number(raw)
-                    updateField('kosztDojazduKm', Number.isFinite(n) ? Math.max(0, Math.min(1000, n)) : 0)
+                    updateField('kosztDojazduKm', Number.isFinite(n) ? Math.max(0, Math.min(9999, n)) : 0)
                   }}
                   className="w-20 h-8 text-right bg-black/40 border-white/10 text-sm rounded-md tabular-nums text-white"
                 />
@@ -121,17 +122,46 @@ export function DodatkoweTab() {
                 step={10}
                 className="flex-1 py-1"
               />
-              <div className="flex items-center justify-end gap-1 text-xs text-zinc-500">
-                <span>Stawka:</span>
-                <InlinePrice
-                  value={pc.kosztDojazduKm}
-                  onChange={(v) => updatePricingValue('dodatkowe', 'kosztDojazduKm', v)}
-                  isModified={pc.kosztDojazduKm !== DP.dodatkowe.kosztDojazduKm}
-                  suffix="zł/km"
-                  step={0.1}
-                  decimals={2}
-                  min={0}
-                />
+              <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs text-zinc-500">
+                <span>Paliwo:</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={Math.max(0, Number(data.profitFuelPricePerLiter) || 0)}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const n = Number(raw)
+                      updateField('profitFuelPricePerLiter', raw === '' ? 0 : Number.isFinite(n) ? Math.max(0, n) : 0)
+                    }}
+                    className="w-[70px] h-7 text-right bg-black/40 border-white/10 text-xs rounded-md tabular-nums text-white"
+                    aria-label="Cena paliwa (zł/l)"
+                  />
+                  <span>zł/l</span>
+                </div>
+                <span className="text-zinc-600">×</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={Math.max(0, Number(data.profitFuelConsumption) || 0)}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const n = Number(raw)
+                      updateField('profitFuelConsumption', raw === '' ? 0 : Number.isFinite(n) ? Math.max(0, n) : 0)
+                    }}
+                    className="w-16 h-7 text-right bg-black/40 border-white/10 text-xs rounded-md tabular-nums text-white"
+                    aria-label="Średnie spalanie (l/100 km)"
+                  />
+                  <span>l/100km</span>
+                </div>
+                <span className="text-zinc-600">=</span>
+                <span className="tabular-nums text-zinc-400">
+                  {computeFuelRatePerKm(data).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                  zł/km
+                </span>
               </div>
               {travelNetto > 0 && (
                 <div className="flex items-center justify-end gap-1 text-xs">

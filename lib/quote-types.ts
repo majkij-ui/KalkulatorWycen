@@ -107,6 +107,47 @@ export function cloneShootingDay(source: ShootingDay): ShootingDay {
   }
 }
 
+// =========================
+// Profit (zakładka "Profit")
+// =========================
+
+export type ProfitSectionKey = 'preprodukcja' | 'produkcja' | 'postprodukcja' | 'logistyka'
+
+/**
+ * Ręczne nadpisanie pojedynczej pozycji kosztowej w zakładce Profit.
+ * Klucz pozycji jest stabilny (np. `pro:<dayId>:dzwiekowiec`), więc nadpisania
+ * przeżywają zmiany w pozostałych zakładkach (auto-sync + własne edycje).
+ */
+export interface ProfitLineOverride {
+  /** Czy pozycja jest realnym kosztem (odznaczone = robię sam, koszt 0). */
+  isCost?: boolean
+  /** Nadpisana stawka jednostkowa kosztu (netto PLN). */
+  unitCost?: number
+  /** Nadpisana ilość (dni / osoby / sztuki / km / osobodni). */
+  quantity?: number
+}
+
+/** Własna pozycja kosztowa dodana ręcznie w zakładce Profit. */
+export interface ProfitCustomItem {
+  id: string
+  section: ProfitSectionKey
+  label: string
+  quantity: number
+  unitCost: number
+  isCost: boolean
+}
+
+export function createProfitCustomItem(section: ProfitSectionKey): ProfitCustomItem {
+  return {
+    id: `pci-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    section,
+    label: '',
+    quantity: 1,
+    unitCost: 0,
+    isCost: true,
+  }
+}
+
 export interface QuoteData {
   /** Nazwa klienta (edytowalna w zakładce "Podgląd i PDF") */
   clientName: string
@@ -173,6 +214,23 @@ export interface QuoteData {
   lodgingRate: number
   lodgingOverride: boolean
   lodgingCustomDays: number
+
+  // Profit (zysk netto po kosztach)
+  /** Nadpisania pozycji kosztowych, klucz = stabilny identyfikator pozycji. */
+  profitOverrides: Record<string, ProfitLineOverride>
+  /** Własne pozycje kosztowe dodane ręcznie w zakładce Profit. */
+  profitCustomItems: ProfitCustomItem[]
+  /** Stawka ryczałtu (%) liczona od sumy netto wyceny. */
+  profitTaxRatePercent: number
+  /**
+   * Kwota przelewu (netto), od której liczony jest zysk w zakładce Profit.
+   * `null` = śledź automatycznie sumę netto z kalkulatora; liczba = ręczne nadpisanie.
+   */
+  profitTransferAmount: number | null
+  /** Cena paliwa (zł/l) do wyliczenia realnego kosztu dojazdu. */
+  profitFuelPricePerLiter: number
+  /** Średnie spalanie (l/100 km) do wyliczenia realnego kosztu dojazdu. */
+  profitFuelConsumption: number
 }
 
 export const defaultQuoteData: QuoteData = {
@@ -218,6 +276,12 @@ export const defaultQuoteData: QuoteData = {
   lodgingRate: 300,
   lodgingOverride: false,
   lodgingCustomDays: 1,
+  profitOverrides: {},
+  profitCustomItems: [],
+  profitTaxRatePercent: 8.5,
+  profitTransferAmount: null,
+  profitFuelPricePerLiter: 6.5,
+  profitFuelConsumption: 8,
 }
 
 /** User-saved quote template (persisted in localStorage) */
