@@ -7,6 +7,8 @@
     "build": "NEXT_PUBLIC_GIT_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "node --import ./scripts/register-ts.mjs --test lib/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

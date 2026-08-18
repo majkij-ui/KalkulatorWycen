@@ -118,7 +118,7 @@ projektem o statusie `quote`".
 
 ## 4. Plan A→Z — fazy
 
-### Faza 0 — porządki w git + quick win (pół dnia)
+### Faza 0 — porządki w git + quick win ✅ ZROBIONE
 ```bash
 cd ~/Documents/VibeCoding/QuoteGen
 git checkout master
@@ -131,11 +131,22 @@ git push -u origin v3/project-hub
   netto = duża podświetlona kwota, brutto = mniejsza. Mały, samodzielny commit — może iść
   od razu na `master`, niezależnie od v3.
 
-### Faza 1 — fundament danych (1–2 dni)
-- Typy: `Project`, `ProjectStatus`, `EquipmentItem`, `EquipmentUsage`, `FixedCost` (+ Zod).
-- Repozytoria na wzór `quote-library.ts`: `project-library.ts`, `equipment-catalog.ts`, `finances-store.ts`.
-- Migrator: `quotes.json` → `projects.json` (status `quote`, backup przed zapisem).
-- Testy czystych funkcji (agregacje miesięczne/kwartalne — szkielet).
+### Faza 1 — fundament danych ✅ ZROBIONE
+- **Typy + schematy Zod** — `project-types.ts`: `Project`, `ProjectStatus`, `EquipmentItem`,
+  `ProjectEquipmentUsage`, `FixedCost`, `ProjectFinancials`. Parsowanie defensywne
+  (`.catch()`), uszkodzony rekord nie kasuje kolekcji.
+- **Repozytoria** — wspólny `v3-store.ts` (dualność Tauri/localStorage wyjęta z `quote-library.ts`)
+  + `project-library.ts`, `equipment-catalog.ts`, `finances-store.ts`.
+- **Migrator** — `project-migration.ts` (I/O) + `project-migration-core.ts` (czyste mapowanie).
+  Kopia zapasowa przed zapisem; brak kopii = migracja PRZERWANA; idempotencja przez
+  `migratedFromQuoteId`; stara biblioteka wycen nietknięta.
+- **Czysta warstwa licząca** — `finance-calc.ts` (okresy, agregacje, trendy) i
+  `equipment-roi.ts` (ROI sprzętu, lista pakowania).
+- **Testy** — 54 testy na wbudowanym runnerze Node (`npm test`), bez nowych zależności;
+  resolver rozszerzeń w `scripts/`. Suita zweryfikowana mutacjami.
+
+**Decyzja projektowa:** `Project.financials` to ZAMROŻONA migawka, nie wyliczenie w locie —
+inaczej zmiana cennika zmieniałaby wstecznie wyniki zeszłych lat.
 
 ### Faza 2 — shell nawigacji i lista projektów **[A, B]** (2–3 dni)
 - Sidebar + routing sekcji (Projekty / Finanse / Sprzęt / Ustawienia).
