@@ -148,12 +148,27 @@ git push -u origin v3/project-hub
 **Decyzja projektowa:** `Project.financials` to ZAMROŻONA migawka, nie wyliczenie w locie —
 inaczej zmiana cennika zmieniałaby wstecznie wyniki zeszłych lat.
 
-### Faza 2 — shell nawigacji i lista projektów **[A, B]** (2–3 dni)
-- Sidebar + routing sekcji (Projekty / Finanse / Sprzęt / Ustawienia).
-- Lista projektów: chronologia, kolorowe statusy (wycena / zrealizowany), filtry
-  (tylko projekty / +wyceny / tylko wyceny), szybkie przełączanie (dzisiejszy load/save jako fundament).
-- Widok projektu = dzisiejszy kreator w tabie "Wycena" + tab Profit.
-- Zmiana statusu wyceny na "projekt" jednym kliknięciem.
+### Faza 2 — shell nawigacji i lista projektów **[A, B]** ✅ ZROBIONE
+- **Shell** — `app-shell.tsx` z sidebarem (Projekty / Finanse / Sprzęt / Ustawienia).
+  Świadomie BEZ routingu Next: apka to `output: 'export'` do Tauri, więc sekcje trzymamy
+  w stanie klienta. Sekcje faz 3–4 mówią wprost, co powstanie, zamiast udawać.
+- **Lista projektów** — chronologicznie, kolorowe statusy, trzy filtry z notatek,
+  wyszukiwarka, tworzenie projektu z bieżącego stanu kalkulatora, usuwanie z potwierdzeniem.
+- **Pasek projektu** — nazwa, data księgowa, przełącznik statusu (wycena → projekt jednym
+  kliknięciem), zapis. Celowo NIE sticky: przyklejony zostaje nagłówek z sumą netto.
+- **Migracja w UI** — baner z liczbą znalezionych wycen; uruchamiana RĘCZNIE, bo to ruch na
+  realnych danych. Pokazuje lokalizację kopii zapasowej.
+- **Most do kalkulatora** — `project-hub-context.tsx` siedzi pod `QuoteProvider` i spina
+  wszystko dwoma wywołaniami: `loadQuoteSnapshot` przy otwarciu, `buildQuoteSnapshot`
+  + policzone finanse przy zapisie. Kalkulator nie wie o istnieniu projektów.
+
+**Zweryfikowane w przeglądarce** (skrypty CDP): nawigacja, tworzenie, zmiana statusu, filtry,
+trwałość po przeładowaniu, migracja z kopią zapasową, nienaruszalność starej biblioteki,
+daty księgowe z dat zapisania wycen, idempotencja. Zero błędów konsoli.
+
+**Dług do fazy 4:** zmigrowane projekty nie mają policzonych finansów (lista pokazuje
+„nie policzono"). Liczą się przy pierwszym zapisie projektu; masowy backfill zrobimy przy
+dashboardzie finansowym, gdzie jest do tego naturalne miejsce.
 
 ### Faza 3 — katalog sprzętu **[D, E, F]** (2–3 dni)
 - Sekcja Sprzęt: CRUD pozycji (nazwa, kategoria, cena zakupu, śr. cena rentalu).

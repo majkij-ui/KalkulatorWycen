@@ -1,19 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ClipboardList, Clapperboard, Scissors, PlusCircle, PiggyBank, FileDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StickyHeader } from '@/components/sticky-header'
 import { CalculatingOverlay } from '@/components/calculating-overlay'
-import { AmbientGlow } from '@/components/ambient-glow'
 import { PreprodukcjaTab } from '@/components/tabs/preprodukcja'
 import { ProdukcjaTab } from '@/components/tabs/produkcja'
 import { PostprodukcjaTab } from '@/components/tabs/postprodukcja'
 import { DodatkoweTab } from '@/components/tabs/dodatkowe'
 import { ProfitTab } from '@/components/tabs/profit'
 import { PodgladPdfTab } from '@/components/tabs/podglad-pdf'
-import { QuoteProvider, useQuote } from '@/lib/quote-context'
+import { useQuote } from '@/lib/quote-context'
 import { resolveProfitSections, computeProfitSummary } from '@/lib/profit-calc'
 
 const tabs = [
@@ -32,7 +31,11 @@ const CATEGORY_TO_TAB: Record<string, string> = {
   Dodatkowe: 'dodatkowe',
 }
 
-function QuoteCalculatorInner() {
+/**
+ * Widok kalkulatora bez własnego opakowania strony — tło i poświatę dostarcza
+ * `AppShell`, dzięki czemu ten sam komponent renderuje się wewnątrz projektu.
+ */
+export function QuoteCalculatorView() {
   const [activeTab, setActiveTab] = useState('preprodukcja')
   const { isCalculating, breakdown, totals, data, pricingConfig, calculateTotalCrewDays } = useQuote()
 
@@ -47,9 +50,7 @@ function QuoteCalculatorInner() {
   const profitSummary = computeProfitSummary(profitTransferAmount, data.profitTaxRatePercent, totalCost)
 
   return (
-    <div className="relative min-h-screen bg-[#050505]">
-      <AmbientGlow />
-
+    <>
       <StickyHeader />
 
       <main className="relative mx-auto max-w-4xl px-4 py-6">
@@ -140,25 +141,6 @@ function QuoteCalculatorInner() {
           )}
         </footer>
       </main>
-    </div>
-  )
-}
-
-export function QuoteCalculator() {
-  const [mounted, setMounted] = useState(false)
-
-  // Ensures we only render after hydration to prevent ID mismatches.
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return <div className="min-h-screen bg-zinc-950" />
-  }
-
-  return (
-    <QuoteProvider>
-      <QuoteCalculatorInner />
-    </QuoteProvider>
+    </>
   )
 }

@@ -1,5 +1,5 @@
-import { QuoteCalculator } from '@/components/quote-calculator'
+import { AppRoot } from '@/components/app-root'
 
 export default function Home() {
-  return <QuoteCalculator />
+  return <AppRoot />
 }
