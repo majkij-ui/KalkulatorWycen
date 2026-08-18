@@ -12,3 +12,5 @@ out
 build
 .DS_Store
 *.local
+# TypeScript incremental build artifact
+tsconfig.tsbuildinfo

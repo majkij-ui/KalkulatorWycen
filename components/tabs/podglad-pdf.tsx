@@ -1078,15 +1078,10 @@ export function PodgladPdfTab() {
                             <span className="text-zinc-400">|</span> {L.project}: {localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : L.emptyDash}
                           </div>
                           <div className="mt-1 text-[11px] font-bold text-zinc-900">
-                            {localPdfState.pdfLanguage === 'en'
-                              ? localPdfState.showVat ? 'Total (gross)' : 'Total (net)'
-                              : `Całkowity koszt ${localPdfState.showVat ? 'brutto' : 'netto'}`}
+                            {localPdfState.pdfLanguage === 'en' ? 'Total (net)' : 'Całkowity koszt netto'}
                           </div>
                           <div className="text-[18px] font-black text-primary tabular-nums">
-                            {formatPdfAmount(
-                              localPdfState.showVat ? totalNetto * (1 + VAT_RATE) : totalNetto,
-                              localPdfState.currency
-                            )}
+                            {formatPdfAmount(totalNetto, localPdfState.currency)}
                           </div>
                         </div>
                       </div>
@@ -1177,17 +1172,17 @@ export function PodgladPdfTab() {
                       <div className="mt-4 rounded-lg bg-zinc-950 p-4 text-white">
                         {localPdfState.showVat ? (
                           <div className="flex flex-col gap-1">
-                            <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
-                              <span className="text-zinc-300">{L.sumNetto}</span>
-                              <span className="tabular-nums text-white">{fmt(totalNetto)}</span>
+                            <div className="flex items-baseline justify-between text-[18px] font-black uppercase tracking-tight">
+                              <span>{L.sumNetto}</span>
+                              <span className="text-primary tabular-nums">{fmt(totalNetto)}</span>
                             </div>
                             <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
                               <span className="text-zinc-300">{L.vatRow}</span>
                               <span className="tabular-nums text-white">{fmt(totalNetto * VAT_RATE)}</span>
                             </div>
-                            <div className="flex items-baseline justify-between text-[18px] font-black tracking-tight">
-                              <span>{L.sumBrutto}</span>
-                              <span className="text-primary tabular-nums">{fmt(totalNetto * (1 + VAT_RATE))}</span>
+                            <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
+                              <span className="text-zinc-300">{L.sumBrutto}</span>
+                              <span className="tabular-nums text-white">{fmt(totalNetto * (1 + VAT_RATE))}</span>
                             </div>
                           </div>
                         ) : (

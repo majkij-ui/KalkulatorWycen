@@ -20,9 +20,12 @@ export type PdfCurrency = 'PLN' | 'EUR'
 
 export function formatPdfAmount(amount: number, currency: PdfCurrency): string {
   const safe = Number.isFinite(amount) ? amount : 0
+  // 'always' — pl-PL defaults to min2 grouping, which would print "7291 zł"
+  // next to "31 700 zł" in the same totals block.
   const formatted = safe.toLocaleString('pl-PL', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
+    useGrouping: 'always',
   })
   return currency === 'EUR' ? `${formatted} €` : `${formatted} zł`
 }

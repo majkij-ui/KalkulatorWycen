@@ -202,17 +202,17 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
         >
           {showVat ? (
             <div className="flex flex-col gap-0.5">
-              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
-                <span className="text-zinc-300">{L.sumNetto}</span>
-                <span className="text-zinc-100" style={mono}>{fmt(totalNetto)}</span>
+              <div className="flex items-baseline justify-between text-[12pt] font-black uppercase tracking-tight">
+                <span>{L.sumNetto}</span>
+                <span style={{ ...mono, color: BRAND.ember }}>{fmt(totalNetto)}</span>
               </div>
-              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
+              <div className="mt-0.5 flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
                 <span className="text-zinc-300">{L.vatRow}</span>
                 <span className="text-zinc-100" style={mono}>{fmt(totalVat)}</span>
               </div>
-              <div className="mt-0.5 flex items-baseline justify-between text-[12pt] font-black tracking-tight">
-                <span>{L.sumBrutto}</span>
-                <span style={{ ...mono, color: BRAND.ember }}>{fmt(totalBrutto)}</span>
+              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
+                <span className="text-zinc-300">{L.sumBrutto}</span>
+                <span className="text-zinc-100" style={mono}>{fmt(totalBrutto)}</span>
               </div>
             </div>
           ) : (
