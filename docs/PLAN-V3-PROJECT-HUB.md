@@ -170,11 +170,22 @@ daty księgowe z dat zapisania wycen, idempotencja. Zero błędów konsoli.
 „nie policzono"). Liczą się przy pierwszym zapisie projektu; masowy backfill zrobimy przy
 dashboardzie finansowym, gdzie jest do tego naturalne miejsce.
 
-### Faza 3 — katalog sprzętu **[D, E, F]** (2–3 dni)
-- Sekcja Sprzęt: CRUD pozycji (nazwa, kategoria, cena zakupu, śr. cena rentalu).
-- W tabie Produkcja przełącznik: **tryb szybki** (jak dziś) / **tryb katalogowy**
-  (checkboxy z katalogu, bez wpływu na kwoty wyceny).
-- Z zaznaczeń → prosta packing lista w widoku projektu (do wydruku; w fazie 5 zepnie się z call sheet).
+### Faza 3 — katalog sprzętu **[D, E, F]** ✅ ZROBIONE
+- **Sekcja Sprzęt** — `equipment-section.tsx`: CRUD pozycji (nazwa, kategoria, cena zakupu,
+  średnia stawka rentalowa) + ROI per pozycja i sumy katalogu (zainwestowane, odpracowane,
+  zwrot, spłacone) z paskiem postępu spłaty.
+- **Sprzęt w projekcie** — nowa zakładka projektu obok „Wyceny". Checkboxy z katalogu,
+  liczba dni per pozycja, „zastąpiony rental" dla projektu. Zaznaczenia trafiają do
+  `Project.equipment` i NIGDY nie dotykają `QuoteData` — zweryfikowane w przeglądarce.
+- **Lista pakowania** — podgląd na ekranie + wydruk A4 z kratkami do odhaczania, przez
+  `react-to-print` (ten sam idiom co eksport oferty, bez globalnych reguł `@media print`).
+  Kategorie w kolejności katalogu, nie alfabetycznej — tak się realnie pakuje wóz.
+- **Odmiana liczby mnogiej** — `pl-plural.ts` (1 pozycja / 3 pozycje / 7 pozycji), bo polski
+  ma trzy formy, a apka pokazywała „2 pozycji" i „1 dni".
+
+**Decyzja:** katalog dostał WŁASNĄ zakładkę projektu zamiast wejść w tab Produkcja.
+Użycie sprzętu jest danymi PROJEKTU, nie wyceny — trzymanie tego w kalkulatorze mieszałoby
+warstwy i zmuszało go do wiedzy o projektach.
 
 ### Faza 4 — finanse firmy **[C]** (2–3 dni)
 - Dashboard: rok / półrocze / kwartał (od 2026), przychody+profit z projektów o statusie ≥ won.

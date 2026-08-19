@@ -14,6 +14,7 @@ import { useProjectHub } from '@/lib/project-hub-context'
 import { useQuote } from '@/lib/quote-context'
 import { PROJECT_FILTERS, type Project, type ProjectFilter } from '@/lib/project-types'
 import { ProjectStatusBadge } from './project-status-badge'
+import { itemLabel } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -214,7 +215,7 @@ export function ProjectList() {
         <p className="mt-1 text-sm text-zinc-500">
           {projects.length === 0
             ? 'Nic tu jeszcze nie ma.'
-            : `${projects.length} ${projects.length === 1 ? 'pozycja' : 'pozycji'} w archiwum`}
+            : `${projects.length} ${itemLabel(projects.length)} w archiwum`}
         </p>
       </header>
 

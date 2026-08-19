@@ -11,7 +11,7 @@
  */
 
 import type { EquipmentItem, Project } from './project-types'
-import { countsTowardRevenue } from './project-types'
+import { countsTowardRevenue, EQUIPMENT_CATEGORIES } from './project-types'
 
 export interface EquipmentRoi {
   item: EquipmentItem
@@ -105,7 +105,7 @@ export function computeCatalogTotals(roi: EquipmentRoi[]): CatalogRoiTotals {
 
 /**
  * Lista rzeczy do spakowania na projekt — sprzęt z niezerową liczbą dni,
- * pogrupowany po kategorii i posortowany alfabetycznie.
+ * pogrupowany po kategorii w kolejności katalogu, nazwy alfabetycznie.
  */
 export function buildPackingList(
   project: Project,
@@ -122,10 +122,17 @@ export function buildPackingList(
     groups.set(item.category, bucket)
   })
 
+  // Kolejność kategorii jak w katalogu (kamery → światło → dźwięk → inne),
+  // a nie alfabetycznie: tak się realnie pakuje wóz.
+  const order = new Map<string, number>(EQUIPMENT_CATEGORIES.map((c, i) => [c, i]))
   return [...groups.entries()]
     .map(([category, items]) => ({
       category,
       items: items.sort((a, b) => a.item.name.localeCompare(b.item.name, 'pl')),
     }))
-    .sort((a, b) => a.category.localeCompare(b.category, 'pl'))
+    .sort(
+      (a, b) =>
+        (order.get(a.category) ?? EQUIPMENT_CATEGORIES.length) -
+        (order.get(b.category) ?? EQUIPMENT_CATEGORIES.length)
+    )
 }

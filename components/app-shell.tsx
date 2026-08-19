@@ -8,13 +8,16 @@
  * konfiguracji builda, identyczne zachowanie w przeglądarce i w desktopie.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, FolderKanban, Package, Settings2 } from 'lucide-react'
+import { BarChart3, Calculator, FolderKanban, Package, Settings2 } from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
+import { EquipmentProvider } from '@/lib/equipment-context'
 import { QuoteCalculatorView } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectBar } from '@/components/projects/project-bar'
+import { EquipmentSection } from '@/components/equipment/equipment-section'
+import { ProjectEquipment } from '@/components/equipment/project-equipment'
 import { AmbientGlow } from '@/components/ambient-glow'
 
 type Section = 'projekty' | 'finanse' | 'sprzet' | 'ustawienia'
@@ -81,6 +84,65 @@ function Sidebar({
   )
 }
 
+type ProjectTab = 'wycena' | 'sprzet'
+
+const PROJECT_TABS: { value: ProjectTab; label: string; icon: typeof Calculator }[] = [
+  { value: 'wycena', label: 'Wycena', icon: Calculator },
+  { value: 'sprzet', label: 'Sprzęt', icon: Package },
+]
+
+/**
+ * Otwarty projekt. Kalkulator zostaje nietknięty w zakładce „Wycena";
+ * „Sprzęt" to warstwa projektowa, która nie dotyka kwot oferty.
+ */
+function ProjectView() {
+  const { activeProject } = useProjectHub()
+  const [tab, setTab] = useState<ProjectTab>('wycena')
+
+  // Zmiana projektu wraca na wycenę — inaczej otwarcie kolejnego projektu
+  // lądowałoby w zakładce sprzętu poprzedniego.
+  useEffect(() => {
+    setTab('wycena')
+  }, [activeProject?.id])
+
+  return (
+    <>
+      <ProjectBar />
+      <div className="border-b border-white/5 bg-black/20">
+        <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist">
+          {PROJECT_TABS.map(({ value, label, icon: Icon }) => {
+            const active = value === tab
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(value)}
+                className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  active ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="project-tab-active"
+                    className="absolute inset-0 rounded-lg bg-zinc-800/80"
+                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                  />
+                )}
+                <Icon className="relative size-3.5" />
+                <span className="relative">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {tab === 'wycena' ? <QuoteCalculatorView /> : <ProjectEquipment />}
+    </>
+  )
+}
+
 function ShellContent() {
   const [section, setSection] = useState<Section>('projekty')
   const { activeProject } = useProjectHub()
@@ -91,15 +153,7 @@ function ShellContent() {
       <Sidebar section={section} onChange={setSection} />
 
       <div className="relative min-w-0 flex-1">
-        {section === 'projekty' &&
-          (activeProject ? (
-            <>
-              <ProjectBar />
-              <QuoteCalculatorView />
-            </>
-          ) : (
-            <ProjectList />
-          ))}
+        {section === 'projekty' && (activeProject ? <ProjectView /> : <ProjectList />)}
 
         {section === 'finanse' && (
           <ComingSoon
@@ -108,12 +162,7 @@ function ShellContent() {
           />
         )}
 
-        {section === 'sprzet' && (
-          <ComingSoon
-            title="Sprzęt"
-            description="Katalog sprzętu z ceną zakupu i średnią stawką rentalową, lista pakowania i zwrot z inwestycji. Ekran powstaje w fazie 3."
-          />
-        )}
+        {section === 'sprzet' && <EquipmentSection />}
 
         {section === 'ustawienia' && (
           <ComingSoon
@@ -129,7 +178,9 @@ function ShellContent() {
 export function AppShell() {
   return (
     <ProjectHubProvider>
-      <ShellContent />
+      <EquipmentProvider>
+        <ShellContent />
+      </EquipmentProvider>
     </ProjectHubProvider>
   )
 }

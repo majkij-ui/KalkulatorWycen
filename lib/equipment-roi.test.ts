@@ -144,3 +144,23 @@ test('lista pakowania grupuje po kategorii i pomija sprzęt spoza katalogu', () 
   )
   assert.equal(list.length, 2, 'pozycja spoza katalogu nie tworzy grupy')
 })
+
+test('lista pakowania trzyma kolejność katalogu, nie alfabetyczną', () => {
+  const catalog = [
+    item('d1', 'Rode NTG5', 0, 0, 'dzwiek'),
+    item('i1', 'Statyw', 0, 0, 'inne'),
+    item('c1', 'FX3', 0, 0, 'kamery'),
+    item('s1', 'Aputure', 0, 0, 'swiatlo'),
+  ]
+  const p = project('p1', 'won', [
+    { itemId: 'd1', days: 1 },
+    { itemId: 'i1', days: 1 },
+    { itemId: 'c1', days: 1 },
+    { itemId: 's1', days: 1 },
+  ])
+  assert.deepEqual(
+    buildPackingList(p, catalog).map((g) => g.category),
+    ['kamery', 'swiatlo', 'dzwiek', 'inne'],
+    'alfabetycznie byłoby dzwiek, inne, kamery, swiatlo'
+  )
+})
