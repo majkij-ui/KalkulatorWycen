@@ -14,7 +14,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight, FolderPlus, Loader2, PackageOpen, Search, Trash2 } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useQuote } from '@/lib/quote-context'
-import { PROJECT_FILTERS, type Project, type ProjectFilter } from '@/lib/project-types'
+import { PROJECT_FILTERS, leadSourceLabel, type Project, type ProjectFilter } from '@/lib/project-types'
 import { ProjectStatusBadge } from './project-status-badge'
 import { itemLabel } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
@@ -117,6 +117,12 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
               <>
                 <span aria-hidden>·</span>
                 <span className="truncate">{project.client}</span>
+              </>
+            )}
+            {project.leadSource && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="shrink-0 text-zinc-400">{leadSourceLabel(project.leadSource)}</span>
               </>
             )}
           </div>

@@ -15,6 +15,7 @@ import {
   projectSchema,
   toDateKey,
   type Project,
+  type ProjectContact,
   type ProjectFilter,
   type ProjectStatus,
 } from './project-types'
@@ -65,6 +66,9 @@ export function createProject(params: {
   client?: string
   status?: ProjectStatus
   date?: string
+  /** Pochodzenie klienta (np. projekt założony z leada kampanii). */
+  leadSource?: string
+  contact?: ProjectContact
   existing?: Pick<Project, 'id' | 'colorKey'>[]
 }): Project {
   const now = new Date()
@@ -76,6 +80,8 @@ export function createProject(params: {
     client: params.client ?? '',
     status: params.status ?? 'quote',
     colorKey: nextProjectColor((params.existing ?? []).map(projectColorFor)),
+    ...(params.leadSource ? { leadSource: params.leadSource } : {}),
+    ...(params.contact ? { contact: params.contact } : {}),
     date: params.date ?? toDateKey(now),
     createdAt: nowIso,
     updatedAt: nowIso,

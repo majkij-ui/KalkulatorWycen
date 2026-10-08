@@ -357,11 +357,58 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
+| **T7a Marketing tab** ✅ (to install) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
 
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
+
+## 6a. Marketing tab *(built 2026-10-08)*
+
+**Asked for:** campaign start and daily budget from Google Ads; leads rated fake / good / very good;
+cost per lead and the rest of the search-ads arithmetic; leads linked to projects; client origin
+(repeat client, word of mouth, face-to-face networking, Google Ads) visible on every project.
+
+**Where each fact lives** (no new copy of anything; `lib/marketing-types.ts`):
+
+| Fact | Stored as | Also read by |
+|---|---|---|
+| Campaign: name, platform, start/end, daily budget with changes | `campaigns.json` (`campaignSchema`, passthrough) | — |
+| Monthly spend, clicks, impressions from the ad panel | `finances.json`: a `marketing` fixed cost with `campaignId`, `clicks`, `impressions` | Finance (same złoty, no bridge, nothing counted twice) |
+| A lead | `lead_in` event; `data.quality`, `data.campaignId`, `data.origin` (outside a campaign), contact fields | Calendar, project thread |
+| Client origin | `Project.leadSource` (`LEAD_SOURCES`: `powracajacy`, `polecenie`, `networking`, `google_ads`, `inne`) | project bar dropdown, project list, origins table |
+
+- `lead_in` is now `scope: 'either'`: a fake lead (job seeker) is a lead without a project.
+- Starting a project from a lead creates a quote-less project with client, date, contact and origin
+  (from a campaign → `google_ads`). Linking a lead to an existing project fills its origin only if empty.
+- Month without a panel reading → spend estimated from the daily budget and marked "~" / "szac.";
+  Google's monthly cap is daily × 30.4.
+- `lib/marketing-calc.ts` (pure, 13 tests): window, budget per day, months, CTR, CPC, click→lead,
+  cost per inquiry / real lead / very good lead, fake share, funnel (inquiries → real → quoted → won),
+  revenue, profit after ads, ROAS, ROI, "one job pays N months of ads", origin breakdown.
+  `lib/marketing-leads.ts` (pure, 8 tests): lead ⇄ event, edits keep unknown keys. 9/9 mutations caught.
+- Screen: `components/marketing/`. KPI tiles, funnel, traffic + derived hints, editable months table,
+  leads list with one-click rating, origins table with inline "set origin" for projects missing one.
+
+**`npm run data -- apply <patch.json> [--dir] [--dry-run]`** (`scripts/data.mts`): writes to the hub
+folder through the app's Zod schemas, refuses records a schema would silently "fix", upserts by id
+(re-running is a no-op), backs up every touched file to `backups/` first. Don't run it while the hub
+app is open: projects are held in memory and the next save would overwrite the patch.
+
+**First import** (staged in `imports/2026-10-08-google-ads-kwi-lip-2026.json` in the hub folder): the
+Apr 9–Jul 7 Google Ads campaign, monthly spend/clicks/impressions split from the report totals by days
+(6,798 zł, 438 clicks, ~5,959 impressions), 22 leads from the spreadsheet + 2 job applications (fake)
++ the S-AI lead (phone, ~29.04, not in the sheet), and `leadSource: google_ads` on Morris & Lloyd,
+JHJ and S-AI.
+
+**Known limits / next:**
+- "Quoted" counts only leads with a project; leads that got a quote outside the hub (most of the
+  spring campaign) aren't in that step. Start projects for them if the funnel should show it.
+- Campaign start/end are not projected onto the calendar yet (the `marketing` event kind still exists
+  for one-off spend; consider projecting campaigns like gear purchases).
+- An older build strips `campaignId`/`clicks`/`impressions` from fixed costs when it saves
+  `finances.json`; re-running the import restores them.
 
 ---
 

@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, Calculator, CalendarDays, FolderKanban, Package, Settings2 } from 'lucide-react'
+import { BarChart3, Calculator, CalendarDays, FolderKanban, Megaphone, Package, Settings2 } from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
 import { EquipmentProvider } from '@/lib/equipment-context'
 import { EventsProvider } from '@/lib/events-context'
@@ -21,14 +21,16 @@ import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { ProjectEquipment } from '@/components/equipment/project-equipment'
 import { FinanceSection } from '@/components/finance/finance-section'
 import { CalendarSection } from '@/components/calendar/calendar-section'
+import { MarketingSection } from '@/components/marketing/marketing-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
-type Section = 'kalendarz' | 'projekty' | 'finanse' | 'sprzet' | 'ustawienia'
+type Section = 'kalendarz' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ustawienia'
 
 const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'kalendarz', label: 'Kalendarz', icon: CalendarDays },
   { value: 'projekty', label: 'Projekty', icon: FolderKanban },
   { value: 'finanse', label: 'Finanse', icon: BarChart3 },
+  { value: 'marketing', label: 'Marketing', icon: Megaphone },
   { value: 'sprzet', label: 'Sprzęt', icon: Package },
   { value: 'ustawienia', label: 'Ustawienia', icon: Settings2 },
 ]
@@ -179,6 +181,8 @@ function ShellContent() {
         {section === 'projekty' && (activeProject ? <ProjectView /> : <ProjectList />)}
 
         {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
+
+        {section === 'marketing' && <MarketingSection onOpenProject={goToProject} />}
 
         {section === 'sprzet' && <EquipmentSection />}
 

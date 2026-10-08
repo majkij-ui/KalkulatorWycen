@@ -8,9 +8,13 @@
  * księgową i powrót do listy.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Save } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
+import { useEvents } from '@/lib/events-context'
+import { leadsFromEvents } from '@/lib/marketing-leads'
+import { LEAD_QUALITY_LABELS } from '@/lib/marketing-types'
+import { LEAD_SOURCES, LEAD_SOURCE_LABELS, leadSourceLabel } from '@/lib/project-types'
 import { ProjectStatusPicker } from './project-status-badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,9 +30,17 @@ export function ProjectBar() {
   const { activeProject, closeProject, saveActiveProject, updateActiveProject, setStatus } =
     useProjectHub()
 
+  const { events } = useEvents()
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+
+  // Pierwszy lead w wątku projektu — skąd i kiedy przyszło zapytanie.
+  const firstLead = useMemo(() => {
+    if (!activeProject) return null
+    const own = leadsFromEvents(events).filter((l) => l.projectId === activeProject.id)
+    return own.at(-1) ?? null
+  }, [events, activeProject])
 
   // Nazwa jest polem kontrolowanym; synchronizujemy przy zmianie projektu.
   useEffect(() => {
@@ -107,6 +119,36 @@ export function ProjectBar() {
           aria-label="Data księgowa projektu"
           className="h-8 w-[140px] shrink-0 border-white/10 bg-black/40 px-2 text-xs tabular-nums text-zinc-300"
         />
+
+        <select
+          value={activeProject.leadSource ?? ''}
+          onChange={(e) => updateActiveProject({ leadSource: e.target.value || undefined })}
+          aria-label="Pochodzenie klienta"
+          title={
+            firstLead
+              ? `Lead z ${firstLead.date.split('-').reverse().join('.')}${firstLead.quality ? ` · ${LEAD_QUALITY_LABELS[firstLead.quality]}` : ''}`
+              : 'Skąd przyszedł klient'
+          }
+          className={`h-8 w-[170px] shrink-0 rounded-md border border-white/10 bg-black/40 px-2 text-xs [color-scheme:dark] ${
+            activeProject.leadSource ? 'text-zinc-300' : 'text-zinc-500'
+          }`}
+        >
+          <option value="">Pochodzenie klienta…</option>
+          {LEAD_SOURCES.map((s) => (
+            <option key={s} value={s}>
+              {LEAD_SOURCE_LABELS[s]}
+            </option>
+          ))}
+          {activeProject.leadSource && !(LEAD_SOURCES as readonly string[]).includes(activeProject.leadSource) && (
+            <option value={activeProject.leadSource}>{leadSourceLabel(activeProject.leadSource)}</option>
+          )}
+        </select>
+        {firstLead && (
+          <span className="shrink-0 text-[11px] text-zinc-500" title={firstLead.summary || undefined}>
+            lead {firstLead.date.slice(8, 10)}.{firstLead.date.slice(5, 7)}
+            {firstLead.quality ? ` · ${LEAD_QUALITY_LABELS[firstLead.quality].toLowerCase()}` : ''}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <ProjectStatusPicker

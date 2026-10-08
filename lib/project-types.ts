@@ -68,22 +68,30 @@ export function matchesFilter(
   return status === 'quote' || status === 'lost'
 }
 
-// ── Źródło leada ─────────────────────────────────────────────────────────────
+// ── Pochodzenie klienta ──────────────────────────────────────────────────────
 
 /**
- * Skąd klient o nas wiedział (do statystyk „konwersja wg źródła"). To cecha
- * PROJEKTU; kanał konkretnej wiadomości (mail, telefon) żyje w wydarzeniu.
- * Pole w schemacie jest wolnym stringiem — lista to podpowiedzi formularza.
+ * Skąd przyszedł klient projektu (rozwijana lista w pasku projektu, zestawienie
+ * w zakładce Marketing). To cecha PROJEKTU; kanał konkretnej wiadomości (mail,
+ * telefon) żyje w wydarzeniu `lead_in`. Pole `leadSource` jest wolnym stringiem
+ * — klucze z listy są na zawsze, etykiety można zmieniać, nieznany klucz
+ * pokazuje się dosłownie.
  */
-export const LEAD_SOURCES = ['google_ads', 'instagram', 'polecenie', 'powracajacy', 'strona', 'inne'] as const
+export const LEAD_SOURCES = ['powracajacy', 'polecenie', 'networking', 'google_ads', 'inne'] as const
+export type LeadSource = (typeof LEAD_SOURCES)[number]
 
-export const LEAD_SOURCE_LABELS: Record<(typeof LEAD_SOURCES)[number], string> = {
-  google_ads: 'Google Ads',
-  instagram: 'Instagram',
-  polecenie: 'Polecenie',
+export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   powracajacy: 'Powracający klient',
-  strona: 'Strona www',
+  polecenie: 'Polecenie (z ust do ust)',
+  networking: 'Networking na żywo',
+  google_ads: 'Google Ads',
   inne: 'Inne',
+}
+
+/** Etykieta pochodzenia; pusty string = nieustalone. */
+export function leadSourceLabel(source: string | undefined | null): string {
+  if (!source) return ''
+  return LEAD_SOURCE_LABELS[source as LeadSource] ?? source
 }
 
 // ── Sprzęt ───────────────────────────────────────────────────────────────────
@@ -131,19 +139,31 @@ export const FIXED_COST_TYPE_LABELS: Record<FixedCostType, string> = {
   other: 'Inne',
 }
 
-export const fixedCostSchema = z.object({
-  id: z.string().min(1),
-  /** Miesiąc rozliczeniowy w formacie YYYY-MM. */
-  month: z.string().regex(/^\d{4}-\d{2}$/, 'oczekiwano YYYY-MM'),
-  type: z.enum(FIXED_COST_TYPES).catch('other'),
-  label: z.string().catch(''),
-  amount: z.number().finite().catch(0),
-  /**
-   * Skąd pochodzi pozycja. `ksef` zarezerwowane pod przyszłą integrację z
-   * KSeF — dzięki temu import faktur nie będzie wymagał migracji schematu.
-   */
-  source: z.enum(['manual', 'ksef']).catch('manual'),
-})
+const optionalCount = z.number().finite().nonnegative().optional().catch(undefined)
+
+export const fixedCostSchema = z
+  .object({
+    id: z.string().min(1),
+    /** Miesiąc rozliczeniowy w formacie YYYY-MM. */
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'oczekiwano YYYY-MM'),
+    type: z.enum(FIXED_COST_TYPES).catch('other'),
+    label: z.string().catch(''),
+    amount: z.number().finite().catch(0),
+    /**
+     * Skąd pochodzi pozycja. `ksef` zarezerwowane pod przyszłą integrację z
+     * KSeF — dzięki temu import faktur nie będzie wymagał migracji schematu.
+     */
+    source: z.enum(['manual', 'ksef']).catch('manual'),
+    /**
+     * Wydatek kampanii z panelu reklamowego (zakładka Marketing). Ta sama
+     * pozycja liczy się w Finansach jako koszt marketingu — jedno miejsce na
+     * złotówki. Kliknięcia i wyświetlenia to odczyt z panelu za ten miesiąc.
+     */
+    campaignId: z.string().min(1).optional().catch(undefined),
+    clicks: optionalCount,
+    impressions: optionalCount,
+  })
+  .passthrough()
 export type FixedCost = z.infer<typeof fixedCostSchema>
 
 // ── Wynik finansowy projektu ─────────────────────────────────────────────────

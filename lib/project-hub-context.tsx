@@ -55,11 +55,19 @@ interface ProjectHubValue {
   closeProject: () => void
   /** Tworzy nowy projekt z BIEŻĄCEGO stanu kalkulatora. */
   createFromCurrentQuote: (name: string) => Promise<Project | null>
-  /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu). Nie otwiera go. */
-  createProjectWithoutQuote: (params: { name: string; client?: string }) => Promise<Project | null>
+  /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu albo leada). Nie otwiera go. */
+  createProjectWithoutQuote: (params: {
+    name: string
+    client?: string
+    date?: string
+    leadSource?: string
+    contact?: Project['contact']
+  }) => Promise<Project | null>
   /** Zapisuje stan kalkulatora do otwartego projektu (wraz z finansami). */
   saveActiveProject: (options?: { replaceFinancials?: boolean }) => Promise<SaveActiveProjectResult>
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
+  /** Zmiana pól dowolnego projektu (nie dotyka wyceny w kalkulatorze). */
+  updateProject: (id: string, patch: Partial<Project>) => Promise<void>
   setStatus: (id: string, status: ProjectStatus) => Promise<void>
   removeProject: (id: string) => Promise<void>
 
@@ -180,11 +188,18 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [buildQuoteSnapshot, data.clientName, computeFinancials, projects]
   )
 
-  const createProjectWithoutQuote = useCallback(
-    async ({ name, client }: { name: string; client?: string }) => {
+  const createProjectWithoutQuote = useCallback<ProjectHubValue['createProjectWithoutQuote']>(
+    async ({ name, client, date, leadSource, contact }) => {
       const trimmed = name.trim()
       if (!trimmed) return null
-      const project = createProject({ name: trimmed, client: client?.trim() ?? '', existing: projects })
+      const project = createProject({
+        name: trimmed,
+        client: client?.trim() ?? '',
+        date,
+        leadSource,
+        contact,
+        existing: projects,
+      })
       setProjects(await upsertProject(project))
       return project
     },
@@ -222,6 +237,15 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       const project = projects.find((p) => p.id === id)
       if (!project) return
       setProjects(await upsertProject({ ...project, status, updatedAt: new Date().toISOString() }))
+    },
+    [projects]
+  )
+
+  const updateProject = useCallback(
+    async (id: string, patch: Partial<Project>) => {
+      const project = projects.find((p) => p.id === id)
+      if (!project) return
+      setProjects(await upsertProject({ ...project, ...patch, id, updatedAt: new Date().toISOString() }))
     },
     [projects]
   )
@@ -276,6 +300,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     createProjectWithoutQuote,
     saveActiveProject,
     updateActiveProject,
+    updateProject,
     setStatus,
     removeProject,
     pendingQuoteCount,

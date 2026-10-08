@@ -14,6 +14,7 @@
 import { z } from 'zod'
 import type { EventGroup } from './calendar-palette'
 import type { ProjectStatus } from './project-types'
+import { LEAD_QUALITIES } from './marketing-types'
 
 /** Pole formularza dla `event.data[key]`. */
 export interface EventField {
@@ -68,11 +69,28 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'lead',
     group: 'sprzedaz',
     range: false,
-    scope: 'project',
+    // Lead nie musi mieć projektu: fałszywy (ktoś szuka pracy) albo
+    // nierozwinięty zostaje samym wpisem w zakładce Marketing.
+    scope: 'either',
     timed: true,
-    // Kanał TEJ wiadomości (mail, telefon, formularz). Źródło leada i osoba
-    // kontaktowa to cechy projektu (`leadSource`, `contact`) — jedno miejsce.
-    data: z.object({ channel: text, summary: text }).passthrough(),
+    // Kanał TEJ wiadomości (mail, telefon, formularz) i to, kto napisał.
+    // Gdy z leada powstaje projekt, kanoniczne pochodzenie klienta i kontakt
+    // trzyma projekt (`leadSource`, `contact`); lead pamięta samo zapytanie.
+    // `quality`, `campaignId`, `origin` — zakładka Marketing (marketing-types.ts).
+    data: z
+      .object({
+        channel: text,
+        summary: text,
+        quality: z.enum(LEAD_QUALITIES).optional().catch(undefined),
+        /** Kampania, z której przyszedł lead; brak = spoza kampanii. */
+        campaignId: text,
+        /** Pochodzenie leada spoza kampanii (klucz `LEAD_SOURCES`). */
+        origin: text,
+        contactName: text,
+        email: text,
+        phone: text,
+      })
+      .passthrough(),
     fields: [
       { key: 'channel', label: 'Kanał', type: 'text', suggestions: ['mail', 'telefon', 'formularz', 'Instagram DM'] },
       { key: 'summary', label: 'O co pyta klient', type: 'text' },
