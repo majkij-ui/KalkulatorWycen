@@ -18,11 +18,12 @@ import {
   deleteProject as deleteProjectRecord,
   filterProjects,
   listProjects,
+  replaceAllProjects,
   upsertProject,
 } from './project-library'
 import { listSavedQuotes } from './quote-library'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
-import { computeProfitSummary, resolveProfitSections } from './profit-calc'
+import { backfillMissingFinancials, computeSnapshotFinancials } from './quote-financials'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
 
 interface ProjectHubValue {
@@ -49,19 +50,17 @@ interface ProjectHubValue {
   /** Ile starych wycen czeka na przeniesienie (0 = nic do zrobienia). */
   pendingQuoteCount: number
   runMigration: () => Promise<MigrationResult>
+
+  /** Projekty bez policzonych finansów (np. świeżo zmigrowane). */
+  missingFinancialsCount: number
+  /** Liczy brakujące finanse z migawek wycen; istniejących nie rusza. */
+  backfillFinancials: () => Promise<{ filledCount: number; skippedCount: number }>
 }
 
 const ProjectHubContext = createContext<ProjectHubValue | null>(null)
 
 export function ProjectHubProvider({ children }: { children: React.ReactNode }) {
-  const {
-    data,
-    pricingConfig,
-    totals,
-    calculateTotalCrewDays,
-    buildQuoteSnapshot,
-    loadQuoteSnapshot,
-  } = useQuote()
+  const { data, buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [filter, setFilter] = useState<ProjectFilter>('all')
@@ -96,20 +95,15 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
 
   const visibleProjects = useMemo(() => filterProjects(projects, filter), [projects, filter])
 
-  /** Migawka finansowa liczona tak samo jak w zakładce Profit. */
-  const computeFinancials = useCallback(() => {
-    const { totalCost } = resolveProfitSections(data, pricingConfig, calculateTotalCrewDays())
-    const transferAmount = data.profitTransferAmount ?? totals.sumaNetto
-    const summary = computeProfitSummary(transferAmount, data.profitTaxRatePercent, totalCost)
-    return {
-      sumaNetto: summary.sumaNetto,
-      koszty: summary.koszty,
-      podatek: summary.podatek,
-      zysk: summary.zysk,
-      marzaPct: summary.marzaPct,
-      computedAt: new Date().toISOString(),
-    }
-  }, [data, pricingConfig, totals.sumaNetto, calculateTotalCrewDays])
+  /**
+   * Migawka finansowa liczona tak samo jak w zakładce Profit — tą samą czystą
+   * funkcją co backfill, więc projekt zapisany z kalkulatora i projekt
+   * uzupełniony hurtowo dają identyczne liczby.
+   */
+  const computeFinancials = useCallback(
+    () => computeSnapshotFinancials(buildQuoteSnapshot()),
+    [buildQuoteSnapshot]
+  )
 
   const openProject = useCallback(
     async (id: string) => {
@@ -191,6 +185,22 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     return result
   }, [])
 
+  const missingFinancialsCount = useMemo(
+    () => projects.filter((p) => !p.financials).length,
+    [projects]
+  )
+
+  const backfillFinancials = useCallback(async () => {
+    const current = await listProjects()
+    const result = backfillMissingFinancials(current)
+    if (result.filledCount > 0) {
+      setProjects(await replaceAllProjects(result.projects))
+    } else {
+      setProjects(current)
+    }
+    return { filledCount: result.filledCount, skippedCount: result.skippedCount }
+  }, [])
+
   const value: ProjectHubValue = {
     projects,
     visibleProjects,
@@ -207,6 +217,8 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     removeProject,
     pendingQuoteCount,
     runMigration,
+    missingFinancialsCount,
+    backfillFinancials,
   }
 
   return <ProjectHubContext.Provider value={value}>{children}</ProjectHubContext.Provider>

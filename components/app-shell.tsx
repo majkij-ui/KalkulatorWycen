@@ -18,6 +18,7 @@ import { ProjectList } from '@/components/projects/project-list'
 import { ProjectBar } from '@/components/projects/project-bar'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { ProjectEquipment } from '@/components/equipment/project-equipment'
+import { FinanceSection } from '@/components/finance/finance-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
 type Section = 'projekty' | 'finanse' | 'sprzet' | 'ustawienia'
@@ -145,7 +146,7 @@ function ProjectView() {
 
 function ShellContent() {
   const [section, setSection] = useState<Section>('projekty')
-  const { activeProject } = useProjectHub()
+  const { activeProject, openProject } = useProjectHub()
 
   return (
     <div className="relative min-h-screen bg-[#050505] md:flex">
@@ -156,9 +157,12 @@ function ShellContent() {
         {section === 'projekty' && (activeProject ? <ProjectView /> : <ProjectList />)}
 
         {section === 'finanse' && (
-          <ComingSoon
-            title="Finanse"
-            description="Wyniki firmy w ujęciu kwartalnym i rocznym, koszty stałe (ZUS, marketing, inne). Warstwa licząca jest już gotowa i pokryta testami — ekran powstaje w fazie 4."
+          <FinanceSection
+            onOpenProject={(id) => {
+              void openProject(id)
+              setSection('projekty')
+              window.scrollTo({ top: 0 })
+            }}
           />
         )}
 

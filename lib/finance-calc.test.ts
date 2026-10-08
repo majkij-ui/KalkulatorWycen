@@ -6,7 +6,9 @@ import {
   fixedCostsByMonth,
   isInPeriod,
   monthlyTrend,
+  periodContaining,
   periodLabel,
+  periodMonths,
   quarterlyTrend,
   summarizeFixedCosts,
   summarizePeriod,
@@ -192,4 +194,24 @@ test('periodLabel formatuje etykiety okresów', () => {
   assert.equal(periodLabel({ kind: 'half', year: 2026, index: 2 }), 'H2 2026')
   assert.equal(periodLabel({ kind: 'quarter', year: 2026, index: 3 }), 'Q3 2026')
   assert.equal(periodLabel({ kind: 'month', year: 2026, index: 7 }), '07.2026')
+})
+
+test('periodMonths: miesiące roku, półrocza, kwartału i miesiąca', () => {
+  assert.equal(periodMonths({ kind: 'year', year: 2026 }).length, 12)
+  assert.deepEqual(periodMonths({ kind: 'half', year: 2026, index: 2 }), [
+    '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+  ])
+  assert.deepEqual(periodMonths({ kind: 'quarter', year: 2026, index: 4 }), ['2026-10', '2026-11', '2026-12'])
+  assert.deepEqual(periodMonths({ kind: 'month', year: 2026, index: 3 }), ['2026-03'])
+  // każdy zwrócony miesiąc rzeczywiście należy do okresu
+  const q2: Period = { kind: 'quarter', year: 2026, index: 2 }
+  periodMonths(q2).forEach((m) => assert.ok(isInPeriod(m, q2), m))
+})
+
+test('periodContaining: domyślny okres dla daty', () => {
+  const d = new Date(2026, 9, 8) // 8 października 2026
+  assert.deepEqual(periodContaining(d, 'year'), { kind: 'year', year: 2026 })
+  assert.deepEqual(periodContaining(d, 'half'), { kind: 'half', year: 2026, index: 2 })
+  assert.deepEqual(periodContaining(d, 'quarter'), { kind: 'quarter', year: 2026, index: 4 })
+  assert.deepEqual(periodContaining(d, 'month'), { kind: 'month', year: 2026, index: 10 })
 })

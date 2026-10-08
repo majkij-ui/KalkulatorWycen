@@ -210,3 +210,31 @@ export function fixedCostsByMonth(costs: FixedCost[]): Map<string, FixedCostBrea
   })
   return map
 }
+
+/** Miesiące (`YYYY-MM`) wchodzące w okres — rosnąco. Pod edycję kosztów stałych. */
+export function periodMonths(period: Period): string[] {
+  const { kind, year, index = 1 } = period
+  let first = 1
+  let count = 12
+  if (kind === 'half') {
+    first = index === 2 ? 7 : 1
+    count = 6
+  } else if (kind === 'quarter') {
+    first = (Math.min(4, Math.max(1, index)) - 1) * 3 + 1
+    count = 3
+  } else if (kind === 'month') {
+    first = index
+    count = 1
+  }
+  return Array.from({ length: count }, (_, i) => `${year}-${String(first + i).padStart(2, '0')}`)
+}
+
+/** Okres zawierający podaną datę — domyślny wybór na dashboardzie. */
+export function periodContaining(date: Date, kind: PeriodKind): Period {
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  if (kind === 'year') return { kind, year }
+  if (kind === 'half') return { kind, year, index: month <= 6 ? 1 : 2 }
+  if (kind === 'quarter') return { kind, year, index: Math.floor((month - 1) / 3) + 1 }
+  return { kind, year, index: month }
+}

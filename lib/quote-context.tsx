@@ -9,8 +9,9 @@ import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRe
 import type { PortfolioCatalogueEntry } from './portfolio-catalogue'
 import { getPortfolioCatalogue, savePortfolioCatalogue } from './portfolio-catalogue'
 import type { PdfLang } from './pdf-i18n'
-import { getTotals, getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
-import { safeNum, safeArray } from './safe-numbers'
+import { getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
+import { safeNum } from './safe-numbers'
+import { computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial } from './quote-financials'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
 import { buildPersistedSnapshot } from './storage'
 import {
@@ -134,30 +135,6 @@ function saveTemplatesToStorage(templates: SavedTemplate[]): void {
   } catch {
     // ignore
   }
-}
-
-function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
-  const merged: QuoteData = { ...defaultQuoteData, ...partial }
-  merged.detailedShootingDays = Array.isArray(merged.detailedShootingDays) ? merged.detailedShootingDays : []
-  merged.detailedDeliverables = Array.isArray(merged.detailedDeliverables) ? merged.detailedDeliverables : []
-  merged.profitOverrides =
-    merged.profitOverrides != null && typeof merged.profitOverrides === 'object' && !Array.isArray(merged.profitOverrides)
-      ? merged.profitOverrides
-      : {}
-  merged.profitCustomItems = Array.isArray(merged.profitCustomItems) ? merged.profitCustomItems : []
-  if (!Number.isFinite(merged.profitTaxRatePercent)) merged.profitTaxRatePercent = defaultQuoteData.profitTaxRatePercent
-  merged.profitTransferAmount =
-    typeof merged.profitTransferAmount === 'number' && Number.isFinite(merged.profitTransferAmount)
-      ? merged.profitTransferAmount
-      : null
-  if (!Number.isFinite(merged.profitFuelPricePerLiter)) merged.profitFuelPricePerLiter = defaultQuoteData.profitFuelPricePerLiter
-  if (!Number.isFinite(merged.profitFuelConsumption)) merged.profitFuelConsumption = defaultQuoteData.profitFuelConsumption
-  // Legacy snapshots (pre-crudeEditCount) only carried dniMontazu; the check must
-  // look at the raw partial — after the spread, crudeEditCount is never undefined.
-  if (partial.crudeEditCount === undefined && typeof partial.dniMontazu === 'number' && partial.dniMontazu > 0) {
-    merged.crudeEditCount = partial.dniMontazu
-  }
-  return merged
 }
 
 export function QuoteProvider({ children }: { children: React.ReactNode }) {
@@ -394,28 +371,9 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   const calculateTotalCrewDays = useMemo(() => {
     return function totalCrewDays(): number {
-      if (!data.isDetailedProdukcja) {
-        return safeNum(data.dniZdjeciowe, 0, 0) * safeNum(data.wielkoscEkipy, 1, 1)
-      }
-      return safeArray<ShootingDay>(data.detailedShootingDays).reduce((acc, day) => {
-        const crew =
-          day.rezOp +
-          day.asystent +
-          day.gafer +
-          day.dzwiekowiec +
-          day.mua +
-          day.aktor +
-          day.model +
-          day.statysta
-        return acc + crew
-      }, 0)
+      return computeTotalCrewDays(data)
     }
-  }, [
-    data.isDetailedProdukcja,
-    data.dniZdjeciowe,
-    data.wielkoscEkipy,
-    data.detailedShootingDays,
-  ])
+  }, [data])
 
   const getTermsAndConditions = useMemo(() => {
     return function terms(lang: PdfLang = 'pl'): string[] {
@@ -640,21 +598,8 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }, 500)
   }, [templates])
 
-  const baseTotals = getTotals(data, marginMultiplier, pricingConfig)
   const autoCrewDays = calculateTotalCrewDays()
-  const cateringCost = data.includeCatering
-    ? (data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays) * safeNum(data.cateringRate, 100, 0)
-    : 0
-  const lodgingCost = data.includeLodging
-    ? (data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays) * safeNum(data.lodgingRate, 300, 0)
-    : 0
-  const VAT_RATE = 0.23
-  const sumaNettoWithLogistics = baseTotals.sumaNetto + cateringCost + lodgingCost
-  const totals = {
-    sumaNetto: sumaNettoWithLogistics,
-    vat: sumaNettoWithLogistics * VAT_RATE,
-    sumaBrutto: sumaNettoWithLogistics * (1 + VAT_RATE),
-  }
+  const { cateringCost, lodgingCost, ...totals } = computeQuoteTotals(data, marginMultiplier, pricingConfig)
 
   const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricingConfig)
   const breakdown =

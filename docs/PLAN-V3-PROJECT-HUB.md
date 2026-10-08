@@ -187,10 +187,21 @@ dashboardzie finansowym, gdzie jest do tego naturalne miejsce.
 Użycie sprzętu jest danymi PROJEKTU, nie wyceny — trzymanie tego w kalkulatorze mieszałoby
 warstwy i zmuszało go do wiedzy o projektach.
 
-### Faza 4 — finanse firmy **[C]** (2–3 dni)
-- Dashboard: rok / półrocze / kwartał (od 2026), przychody+profit z projektów o statusie ≥ won.
-- Koszty stałe per miesiąc: ZUS, marketing, tabela "inne" (dowolne pozycje).
-- Wynik firmy = suma profitów projektów − koszty stałe okresu. Wykres trendu (recharts już jest w projekcie).
+### Faza 4 — finanse firmy **[C]** ✅ ZROBIONE (do testów)
+- **Sekcja Finanse** — `components/finance/finance-section.tsx`: wybór okresu rok / półrocze /
+  kwartał (od 2026; starsze lata tylko, gdy są w nich dane), kafle: przychód netto, zysk
+  z projektów, koszty stałe, **wynik firmy** (+ marża i wartość wycen w pipeline).
+- **Wykres** — 12 miesięcy roku (recharts): słupki zysk projektów / koszty stałe, linia wyniku,
+  jedna oś; miesiące spoza wybranego okresu przygaszone. Paleta sprawdzona walidatorem CVD.
+- **Projekty okresu** — zrealizowane (wliczone) + wyceny (niewliczone); klik otwiera projekt.
+- **Koszty stałe** — `fixed-costs-panel.tsx`: każdy miesiąc okresu widoczny (także pusty,
+  z plakietką „bez ZUS"), dodawanie ZUS / marketing / inne z opcją „powtarzaj co miesiąc do",
+  edycja kwoty w miejscu, usuwanie z potwierdzeniem.
+- **Spłata długu z fazy 2** — `lib/quote-financials.ts`: finanse liczone z SAMEJ migawki
+  wyceny (czysta funkcja, testy). Kalkulator i `project-hub-context` korzystają z tych samych
+  funkcji, więc zapis z kalkulatora i backfill dają identyczne liczby. Baner „Policz brakujące"
+  uzupełnia TYLKO `financials === null`, z cennika zapisanego w migawce; zamrożone migawki
+  nietknięte. Uruchamiany ręcznie, jak migracja.
 
 ### Faza 5 — wciągnięcie planera **[H, F]** (3–4 dni)
 - Kopiujemy z CallSheetWiz: `lib/time.ts`, `lib/editing-engine.ts`, `lib/schedule-types.ts`
