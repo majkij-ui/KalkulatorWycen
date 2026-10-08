@@ -21,9 +21,10 @@ import {
   type EventGroup,
 } from '@/lib/calendar-palette'
 import { EVENT_KINDS, eventKind } from '@/lib/event-kinds'
-import { addDays, daysBetween, dayKey, monthGrid } from '@/lib/calendar-layout'
+import { addDays, dayKey, monthGrid } from '@/lib/calendar-layout'
 import { toDateKey } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
+import { describeThreadStats, threadStats } from '@/lib/thread-stats'
 import { DEMO_EVENTS, type DemoEvent, type DemoProject } from './demo-data'
 import {
   MONTHS,
@@ -42,42 +43,6 @@ import { variantC } from './variant-c'
 import { variantD } from './variant-d'
 
 const VARIANTS: CalendarVariant[] = [variantA, variantB, variantC, variantD]
-
-// ── Wyliczenia wątku (w T1 trafią do lib/ jako czyste funkcje z testami) ─────
-
-function threadStats(events: DemoEvent[], today: string): string[] {
-  const first = (kind: string) => events.find((e) => e.kind === kind)
-  const days = (n: number) => `${n} ${plural(n, 'dniu', 'dniach', 'dniach')}`
-  const out: string[] = []
-
-  const lead = first('lead_in')
-  const reply = first('reply_sent')
-  if (lead && reply && timeOf(lead.start) && timeOf(reply.start)) {
-    const minutes = (new Date(reply.start).getTime() - new Date(lead.start).getTime()) / 60_000
-    const h = Math.floor(minutes / 60)
-    out.push(h < 24 ? `Odpowiedź po ${h} h ${Math.round(minutes % 60)} min` : `Odpowiedź po ${days(Math.round(h / 24))}`)
-  }
-  const quote = first('quote_sent')
-  if (lead && quote) out.push(`Wycena po ${days(daysBetween(lead.start, quote.start))} od leada`)
-  const decision = first('won') ?? first('lost')
-  if (quote && decision) out.push(`Decyzja klienta po ${days(daysBetween(quote.start, decision.start))}`)
-
-  const span = (kind: string) =>
-    events.filter((e) => e.kind === kind).reduce((sum, e) => sum + daysBetween(e.start, eventEnd(e)) + 1, 0)
-  const shoot = span('shoot_day')
-  if (shoot) out.push(`${shoot} ${plural(shoot, 'dzień zdjęciowy', 'dni zdjęciowe', 'dni zdjęciowych')}`)
-  const post = span('post_day')
-  if (post) out.push(`${post} ${plural(post, 'dzień', 'dni', 'dni')} postprodukcji`)
-
-  const sent = first('invoice_sent')
-  const paid = first('invoice_paid')
-  if (sent && paid) out.push(`Zapłacono po ${days(daysBetween(sent.start, paid.start))}`)
-  else if (sent && dayKey(sent.start) <= today) {
-    const waiting = daysBetween(sent.start, today)
-    out.push(`Faktura czeka na wpłatę od ${waiting} ${plural(waiting, 'dnia', 'dni', 'dni')}`)
-  }
-  return out
-}
 
 // ── Strona ───────────────────────────────────────────────────────────────────
 
@@ -486,7 +451,7 @@ function ThreadPanel({
   onClose: () => void
 }) {
   const tile = projectTile(project.color)
-  const stats = threadStats(events, today)
+  const stats = describeThreadStats(threadStats(events, today))
   return (
     <div>
       <div className="flex items-start justify-between gap-3">

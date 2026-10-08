@@ -344,7 +344,8 @@ every project colour: B clip text ≥ 4.5:1, C/D names on the page background �
 | Track | What | Depends on |
 |---|---|---|
 | **Design pass** | Palette: ~12 project hues + 5 type-group accents that stay distinct when combined, dark theme, small sizes. Month-view mockup. | — |
-| **T1 Timeline foundation** | `event-types.ts`, `event-kinds.ts` registry, `events.json` store, `clients.json`, Project additions (§3.5), derived-stat functions + tests. No UI. | Phase 4 merged (both touch `project-types.ts`) |
+| **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
+| **T1b Project additions** | §3.5: status `lead`, `colorKey`, optional quote, `contact`, `leadSource`; `ThreadStatus` in event-kinds collapses into `ProjectStatus`. | Phase 4 committed (touches `project-hub-context.tsx`) |
 | **T2 Calendar tab** | Month view, add/edit sheet, colours, layer filters, gear purchases projected, becomes landing tab. | T1, design |
 | **T3 Lead → thread** | "Nowy lead" flow, client picker + contact copy, project-list filters (jobs-only default), Oś czasu tab, status suggestions, quote prefill from lead. | T1 |
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
