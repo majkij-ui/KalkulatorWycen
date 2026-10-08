@@ -7,12 +7,23 @@
  *
  * Każdy typ ma schemat pola `data`. Schemat służy do ODCZYTU (`eventData`) —
  * nie zmienia tego, co leży w pliku, więc dodanie lub zmiana pola w
- * przyszłości nie wymaga migracji. Moduł czysty.
+ * przyszłości nie wymaga migracji. `fields` opisuje te same pola dla
+ * formularza w kalendarzu. Moduł czysty.
  */
 
 import { z } from 'zod'
 import type { EventGroup } from './calendar-palette'
 import type { ProjectStatus } from './project-types'
+
+/** Pole formularza dla `event.data[key]`. */
+export interface EventField {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'date'
+  placeholder?: string
+  /** Podpowiedzi (datalist) — wartość nadal jest dowolnym tekstem. */
+  suggestions?: readonly string[]
+}
 
 export interface EventKind {
   key: string
@@ -23,8 +34,16 @@ export interface EventKind {
   group: EventGroup
   /** Czy wydarzenie może trwać kilka dni (paski w siatce). */
   range: boolean
+  /**
+   * `project` — należy do wątku projektu (albo zakłada nowy lead),
+   * `business` — sprawa firmy, bez projektu, `either` — jedno i drugie.
+   */
+  scope: 'project' | 'business' | 'either'
+  /** Formularz pyta o godzinę (liczymy z niej czas odpowiedzi na lead). */
+  timed?: boolean
   /** Pola specyficzne dla typu (`event.data`). Wszystkie opcjonalne. */
   data: z.ZodTypeAny
+  fields?: EventField[]
   /** Status, który ten typ proponuje projektowi (zawsze do potwierdzenia). */
   suggestsStatus?: ProjectStatus
 }
@@ -49,28 +68,58 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'lead',
     group: 'sprzedaz',
     range: false,
+    scope: 'project',
+    timed: true,
     // Kanał TEJ wiadomości (mail, telefon, formularz). Źródło leada i osoba
     // kontaktowa to cechy projektu (`leadSource`, `contact`) — jedno miejsce.
     data: z.object({ channel: text, summary: text }).passthrough(),
+    fields: [
+      { key: 'channel', label: 'Kanał', type: 'text', suggestions: ['mail', 'telefon', 'formularz', 'Instagram DM'] },
+      { key: 'summary', label: 'O co pyta klient', type: 'text' },
+    ],
     suggestsStatus: 'lead',
   },
-  { key: 'reply_sent', label: 'Odpowiedź wysłana', short: 'odp.', group: 'sprzedaz', range: false, data: noData },
+  {
+    key: 'reply_sent',
+    label: 'Odpowiedź wysłana',
+    short: 'odp.',
+    group: 'sprzedaz',
+    range: false,
+    scope: 'project',
+    timed: true,
+    data: noData,
+  },
   {
     key: 'quote_sent',
     label: 'Wycena wysłana',
     short: 'wycena',
     group: 'sprzedaz',
     range: false,
+    scope: 'project',
     data: z.object({ amountNetto: amount, quoteVersion: text }).passthrough(),
+    fields: [
+      { key: 'amountNetto', label: 'Kwota netto (zł)', type: 'number' },
+      { key: 'quoteVersion', label: 'Wersja', type: 'text', placeholder: 'np. v2' },
+    ],
     suggestsStatus: 'quote',
   },
-  { key: 'follow_up', label: 'Follow-up', short: 'follow-up', group: 'sprzedaz', range: false, data: noData },
+  {
+    key: 'follow_up',
+    label: 'Follow-up',
+    short: 'follow-up',
+    group: 'sprzedaz',
+    range: false,
+    scope: 'project',
+    timed: true,
+    data: noData,
+  },
   {
     key: 'won',
     label: 'Zlecenie potwierdzone',
     short: 'wygrany',
     group: 'sprzedaz',
     range: false,
+    scope: 'project',
     data: noData,
     suggestsStatus: 'won',
   },
@@ -80,7 +129,16 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'przegrany',
     group: 'sprzedaz',
     range: false,
+    scope: 'project',
     data: z.object({ reason: text }).passthrough(),
+    fields: [
+      {
+        key: 'reason',
+        label: 'Powód',
+        type: 'text',
+        suggestions: ['budżet', 'termin', 'wybrali kogoś innego', 'brak odpowiedzi'],
+      },
+    ],
     suggestsStatus: 'lost',
   },
   {
@@ -89,7 +147,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'prep',
     group: 'produkcja',
     range: true,
+    scope: 'project',
     data: z.object({ location: text }).passthrough(),
+    fields: [{ key: 'location', label: 'Miejsce', type: 'text' }],
   },
   {
     key: 'shoot_day',
@@ -97,7 +157,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'zdjęcia',
     group: 'produkcja',
     range: true,
+    scope: 'project',
     data: z.object({ location: text, callSheetId: text }).passthrough(),
+    fields: [{ key: 'location', label: 'Miejsce', type: 'text' }],
   },
   {
     key: 'post_day',
@@ -105,7 +167,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'post',
     group: 'post',
     range: true,
+    scope: 'project',
     data: z.object({ hours: z.number().finite().nonnegative().optional().catch(undefined) }).passthrough(),
+    fields: [{ key: 'hours', label: 'Godziny pracy (łącznie)', type: 'number' }],
   },
   {
     key: 'deadline',
@@ -113,7 +177,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'deadline',
     group: 'post',
     range: false,
+    scope: 'project',
     data: z.object({ what: text }).passthrough(),
+    fields: [{ key: 'what', label: 'Co oddajemy', type: 'text', placeholder: 'np. wersja 1 do akceptacji' }],
   },
   {
     key: 'invoice_sent',
@@ -121,7 +187,13 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'FV wysł.',
     group: 'pieniadze',
     range: false,
+    scope: 'project',
     data: z.object({ number: text, amountNetto: amount, dueDate: dateKey }).passthrough(),
+    fields: [
+      { key: 'number', label: 'Numer faktury', type: 'text' },
+      { key: 'amountNetto', label: 'Kwota netto (zł)', type: 'number' },
+      { key: 'dueDate', label: 'Termin płatności', type: 'date' },
+    ],
   },
   {
     key: 'invoice_paid',
@@ -129,7 +201,12 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'FV opł.',
     group: 'pieniadze',
     range: false,
+    scope: 'project',
     data: z.object({ number: text, amount }).passthrough(),
+    fields: [
+      { key: 'number', label: 'Numer faktury', type: 'text', placeholder: 'paruje wpłatę z fakturą' },
+      { key: 'amount', label: 'Wpłacona kwota (zł)', type: 'number' },
+    ],
     suggestsStatus: 'done',
   },
   {
@@ -138,6 +215,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'sprzęt',
     group: 'firma',
     range: false,
+    scope: 'business',
+    // Zakupy żyją w katalogu sprzętu (data zakupu pozycji) i są rzutowane na
+    // kalendarz — formularz kalendarza zapisuje do katalogu, nie do wydarzeń.
     data: z.object({ itemId: text, amount }).passthrough(),
   },
   {
@@ -146,9 +226,14 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'ads',
     group: 'firma',
     range: true,
+    scope: 'business',
     data: z.object({ campaign: text, spend: amount }).passthrough(),
+    fields: [
+      { key: 'campaign', label: 'Kampania', type: 'text', suggestions: ['Google Ads', 'Meta Ads', 'Instagram'] },
+      { key: 'spend', label: 'Budżet (zł)', type: 'number' },
+    ],
   },
-  { key: 'note', label: 'Notatka', short: 'notatka', group: 'inne', range: true, data: noData },
+  { key: 'note', label: 'Notatka', short: 'notatka', group: 'inne', range: true, scope: 'either', data: noData },
 ]
 
 const BY_KEY = new Map(EVENT_KINDS.map((kind) => [kind.key, kind]))
@@ -158,7 +243,9 @@ export function isKnownKind(key: string): boolean {
 }
 
 export function eventKind(key: string): EventKind {
-  return BY_KEY.get(key) ?? { key, label: key, short: key, group: 'inne', range: true, data: noData }
+  return (
+    BY_KEY.get(key) ?? { key, label: key, short: key, group: 'inne', range: true, scope: 'either', data: noData }
+  )
 }
 
 /**

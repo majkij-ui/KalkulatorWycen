@@ -1,46 +1,55 @@
 'use client'
 
 /**
- * Wariant A „Kafle" — pierwsza propozycja.
- * Projekt = ciemny kafel z kolorową krawędzią po lewej, typ = jasny chip z podpisem.
+ * Siatka miesiąca. Wydarzenia wielodniowe to paski przez kolejne dni (także
+ * przez granicę tygodnia), maksymalnie 3 tory na tydzień, reszta jako
+ * „+N więcej" pod dniem. Układ liczy `lib/calendar-layout.ts`.
  */
 
-import { NEUTRAL_TILE, groupChip, projectTile } from '@/lib/calendar-palette'
-import { eventKind } from '@/lib/event-kinds'
+import { groupChip } from '@/lib/calendar-palette'
 import { hiddenPerDay, layoutWeek } from '@/lib/calendar-layout'
-import type { DemoEvent } from './demo-data'
-import { WEEKDAYS, dimClass, formatDay, mono, projectsById, type CalendarVariant, type MonthGridProps } from './shared'
+import type { CalendarEntry } from '@/lib/calendar-entries'
+import { eventKind } from '@/lib/event-kinds'
+import type { Project } from '@/lib/project-types'
+import { WEEKDAYS, formatDay, mono, tileFor } from './calendar-bits'
 
 const LANES = 3
 
+function entryLabel(entry: CalendarEntry, project: Project | undefined): string {
+  if (project) return project.name
+  if (entry.projectId) return entry.title || 'Usunięty projekt'
+  return entry.title || eventKind(entry.kind).label
+}
+
 function Tile({
-  event,
+  entry,
+  project,
   continuesBefore,
   continuesAfter,
-  focusId,
-  onFocus,
+  dimmed,
+  onClick,
 }: {
-  event: DemoEvent
+  entry: CalendarEntry
+  project: Project | undefined
   continuesBefore: boolean
   continuesAfter: boolean
-  focusId: string | null
-  onFocus: () => void
+  dimmed: boolean
+  onClick: () => void
 }) {
-  const kind = eventKind(event.kind)
-  const project = event.projectId ? projectsById.get(event.projectId) : undefined
-  const tile = project ? projectTile(project.color) : NEUTRAL_TILE
+  const kind = eventKind(entry.kind)
+  const tile = tileFor(project)
   const chip = groupChip(kind.group)
   return (
     <button
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        onFocus()
+        onClick()
       }}
-      title={`${kind.label}: ${event.title}${project ? ` (${project.name})` : ''}`}
-      className={`relative z-10 flex h-full w-full min-w-0 items-center gap-1 overflow-hidden px-1 text-left text-[11px] font-medium leading-none outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+      title={`${kind.label}${entry.title ? `: ${entry.title}` : ''}${project ? ` (${project.name})` : ''}`}
+      className={`relative z-10 flex h-full w-full min-w-0 items-center gap-1 overflow-hidden px-1 text-left text-[11px] font-medium leading-none outline-none transition-opacity duration-200 focus-visible:ring-2 focus-visible:ring-white/70 ${
         continuesBefore ? 'rounded-l-none' : 'rounded-l-[5px]'
-      } ${continuesAfter ? 'rounded-r-none' : 'rounded-r-[5px]'} ${dimClass(focusId, event.projectId)}`}
+      } ${continuesAfter ? 'rounded-r-none' : 'rounded-r-[5px]'} ${dimmed ? 'opacity-[0.18]' : 'opacity-100'}`}
       style={{
         background: tile.bg,
         color: tile.text,
@@ -54,14 +63,34 @@ function Tile({
       >
         {kind.short}
       </span>
-      <span className="hidden truncate sm:inline">{project?.short ?? event.title}</span>
+      <span className="hidden truncate sm:inline">{entryLabel(entry, project)}</span>
     </button>
   )
 }
 
-function MonthGrid({ weeks, events, monthPrefix, today, selectedDay, focusId, onSelectDay, onFocusEvent }: MonthGridProps) {
+export function MonthGrid({
+  weeks,
+  entries,
+  projectsById,
+  monthPrefix,
+  today,
+  selectedDay,
+  focusId,
+  onSelectDay,
+  onEntryClick,
+}: {
+  weeks: string[][]
+  entries: CalendarEntry[]
+  projectsById: Map<string, Project>
+  monthPrefix: string
+  today: string
+  selectedDay: string | null
+  focusId: string | null
+  onSelectDay: (day: string) => void
+  onEntryClick: (entry: CalendarEntry) => void
+}) {
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.07]">
+    <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-black/20">
       <div className="grid grid-cols-7 border-b border-white/[0.07] bg-white/[0.02]">
         {WEEKDAYS.map((d, i) => (
           <div key={d} className={`px-2 py-1.5 text-[11px] font-medium ${i >= 5 ? 'text-zinc-600' : 'text-zinc-500'}`}>
@@ -70,7 +99,7 @@ function MonthGrid({ weeks, events, monthPrefix, today, selectedDay, focusId, on
         ))}
       </div>
       {weeks.map((week) => {
-        const segments = layoutWeek(events, week)
+        const segments = layoutWeek(entries, week)
         const hidden = hiddenPerDay(segments, LANES)
         return (
           <div
@@ -79,16 +108,17 @@ function MonthGrid({ weeks, events, monthPrefix, today, selectedDay, focusId, on
           >
             {week.map((day, col) => {
               const isToday = day === today
+              const isSelected = day === selectedDay
               return (
                 <button
                   key={day}
                   type="button"
                   onClick={() => onSelectDay(day)}
                   aria-label={`${formatDay(day)}${isToday ? ', dziś' : ''}`}
-                  aria-pressed={day === selectedDay}
+                  aria-pressed={isSelected}
                   className={`flex items-start border-r border-white/[0.07] px-2 pt-1.5 text-left outline-none last:border-r-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/50 ${
                     col >= 5 ? 'bg-white/[0.012]' : ''
-                  } ${day === selectedDay ? 'bg-white/[0.045]' : 'hover:bg-white/[0.025]'}`}
+                  } ${isSelected ? 'bg-white/[0.045]' : 'hover:bg-white/[0.025]'}`}
                   style={{ gridColumn: col + 1, gridRow: '1 / -1' }}
                 >
                   <span
@@ -115,11 +145,12 @@ function MonthGrid({ weeks, events, monthPrefix, today, selectedDay, focusId, on
                   style={{ gridColumn: `${s.startCol + 1} / span ${s.span}`, gridRow: s.lane + 2 }}
                 >
                   <Tile
-                    event={s.item}
+                    entry={s.item}
+                    project={s.item.projectId ? projectsById.get(s.item.projectId) : undefined}
                     continuesBefore={s.continuesBefore}
                     continuesAfter={s.continuesAfter}
-                    focusId={focusId}
-                    onFocus={() => onFocusEvent(s.item)}
+                    dimmed={!!focusId && s.item.projectId !== focusId}
+                    onClick={() => onEntryClick(s.item)}
                   />
                 </div>
               ))}
@@ -142,53 +173,4 @@ function MonthGrid({ weeks, events, monthPrefix, today, selectedDay, focusId, on
       })}
     </div>
   )
-}
-
-export const variantA: CalendarVariant = {
-  id: 'a',
-  name: 'Kafle',
-  summary:
-    'Pierwsza propozycja. Projekt to ciemny kafel z kolorową krawędzią po lewej, typ wydarzenia to jasny chip z podpisem.',
-  square: false,
-  MonthGrid,
-  GroupSwatch: ({ group, on = true }) => {
-    const chip = groupChip(group)
-    return (
-      <span
-        className="size-2.5 shrink-0 rounded-[3px]"
-        style={{ background: on ? chip.bg : 'transparent', boxShadow: on ? undefined : `inset 0 0 0 1px ${chip.bg}` }}
-        aria-hidden
-      />
-    )
-  },
-  KindMark: ({ kind }) => {
-    const k = eventKind(kind)
-    const chip = groupChip(k.group)
-    return (
-      <span
-        className="shrink-0 rounded-[3px] px-1 py-[2px] text-[10px] font-semibold leading-none"
-        style={{ background: chip.bg, color: chip.text }}
-      >
-        {k.short}
-      </span>
-    )
-  },
-  PairSample: ({ color, group, label }) => {
-    const tile = color ? projectTile(color) : NEUTRAL_TILE
-    const chip = groupChip(group)
-    return (
-      <span
-        className="flex h-[21px] w-[130px] items-center gap-1 rounded-[5px] px-1 pl-1.5 text-[11px] font-medium"
-        style={{ background: tile.bg, color: tile.text, boxShadow: `inset 3px 0 0 ${tile.edge}` }}
-      >
-        <span
-          className="rounded-[3px] px-1 py-[2px] text-[10px] font-semibold leading-none"
-          style={{ background: chip.bg, color: chip.text }}
-        >
-          {label}
-        </span>
-        Projekt
-      </span>
-    )
-  },
 }

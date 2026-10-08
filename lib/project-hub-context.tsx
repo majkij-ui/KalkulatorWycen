@@ -41,6 +41,8 @@ interface ProjectHubValue {
   closeProject: () => void
   /** Tworzy nowy projekt z BIEŻĄCEGO stanu kalkulatora. */
   createFromCurrentQuote: (name: string) => Promise<Project | null>
+  /** Zakłada lead bez wyceny (np. z formularza kalendarza). Nie otwiera go. */
+  createLead: (params: { name: string; client?: string }) => Promise<Project | null>
   /** Zapisuje stan kalkulatora do otwartego projektu (wraz z finansami). */
   saveActiveProject: () => Promise<void>
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
@@ -142,6 +144,17 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [buildQuoteSnapshot, data.clientName, computeFinancials, projects]
   )
 
+  const createLead = useCallback(
+    async ({ name, client }: { name: string; client?: string }) => {
+      const trimmed = name.trim()
+      if (!trimmed) return null
+      const lead = createProject({ name: trimmed, client: client?.trim() ?? '', existing: projects })
+      setProjects(await upsertProject(lead))
+      return lead
+    },
+    [projects]
+  )
+
   const saveActiveProject = useCallback(async () => {
     if (!activeProject) return
     const updated: Project = {
@@ -217,6 +230,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     openProject,
     closeProject,
     createFromCurrentQuote,
+    createLead,
     saveActiveProject,
     updateActiveProject,
     setStatus,

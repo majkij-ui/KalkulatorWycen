@@ -10,20 +10,23 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, Calculator, FolderKanban, Package, Settings2 } from 'lucide-react'
+import { BarChart3, Calculator, CalendarDays, FolderKanban, Package, Settings2 } from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
 import { EquipmentProvider } from '@/lib/equipment-context'
+import { EventsProvider } from '@/lib/events-context'
 import { QuoteCalculatorView } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectBar } from '@/components/projects/project-bar'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { ProjectEquipment } from '@/components/equipment/project-equipment'
 import { FinanceSection } from '@/components/finance/finance-section'
+import { CalendarSection } from '@/components/calendar/calendar-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
-type Section = 'projekty' | 'finanse' | 'sprzet' | 'ustawienia'
+type Section = 'kalendarz' | 'projekty' | 'finanse' | 'sprzet' | 'ustawienia'
 
 const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
+  { value: 'kalendarz', label: 'Kalendarz', icon: CalendarDays },
   { value: 'projekty', label: 'Projekty', icon: FolderKanban },
   { value: 'finanse', label: 'Finanse', icon: BarChart3 },
   { value: 'sprzet', label: 'Sprzęt', icon: Package },
@@ -145,8 +148,15 @@ function ProjectView() {
 }
 
 function ShellContent() {
-  const [section, setSection] = useState<Section>('projekty')
+  // Kalendarz jest ekranem startowym — przegląd firmy zaczyna się od czasu.
+  const [section, setSection] = useState<Section>('kalendarz')
   const { activeProject, openProject } = useProjectHub()
+
+  const goToProject = (id: string) => {
+    void openProject(id)
+    setSection('projekty')
+    window.scrollTo({ top: 0 })
+  }
 
   return (
     <div className="relative min-h-screen bg-[#050505] md:flex">
@@ -154,17 +164,11 @@ function ShellContent() {
       <Sidebar section={section} onChange={setSection} />
 
       <div className="relative min-w-0 flex-1">
+        {section === 'kalendarz' && <CalendarSection onOpenProject={goToProject} />}
+
         {section === 'projekty' && (activeProject ? <ProjectView /> : <ProjectList />)}
 
-        {section === 'finanse' && (
-          <FinanceSection
-            onOpenProject={(id) => {
-              void openProject(id)
-              setSection('projekty')
-              window.scrollTo({ top: 0 })
-            }}
-          />
-        )}
+        {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
 
         {section === 'sprzet' && <EquipmentSection />}
 
@@ -183,7 +187,9 @@ export function AppShell() {
   return (
     <ProjectHubProvider>
       <EquipmentProvider>
-        <ShellContent />
+        <EventsProvider>
+          <ShellContent />
+        </EventsProvider>
       </EquipmentProvider>
     </ProjectHubProvider>
   )

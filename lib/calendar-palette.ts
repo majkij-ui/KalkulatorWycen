@@ -13,8 +13,6 @@
  * przeprojektować bez migracji danych. Moduł czysty: bez React/Tauri.
  */
 
-import { fitColor, toCss, type Oklch } from './oklch'
-
 // ── Projekty: 12 slotów co ~30° odcienia w OKLCH ─────────────────────────────
 
 /**
@@ -165,42 +163,3 @@ export function groupChip(group: EventGroup): ChipColors {
     text: `oklch(0.2 0.035 ${hue})`,
   }
 }
-
-// ── Warianty z design passu (B–D) ────────────────────────────────────────────
-// Po wyborze wariantu nieużywane funkcje stąd znikną.
-
-function hueOf(key: string | null | undefined): number | undefined {
-  return key ? PROJECT_COLOR_HUES[key as ProjectColorKey] : undefined
-}
-
-/**
- * Wariant B „Montażówka": pełne wypełnienie klipu w średniej jasności i jasny
- * tekst — jak kolory klipów na osi czasu w programie do montażu.
- */
-export function clipColorValues(key: string | null | undefined): { fill: Oklch; text: Oklch } {
-  const hue = hueOf(key)
-  if (hue === undefined) return { fill: [0.36, 0, 0], text: [0.97, 0, 0] }
-  return { fill: fitColor(0.47, 0.12, hue), text: fitColor(0.985, 0.012, hue) }
-}
-
-export function clipColors(key: string | null | undefined): { fill: string; text: string } {
-  const { fill, text } = clipColorValues(key)
-  return { fill: toCss(fill), text: toCss(text) }
-}
-
-/**
- * Warianty C „Nici" i D „Agenda": kolor „tuszu" projektu — linia nici, nazwa
- * projektu jako tekst na ciemnym tle. Bez wypełnień.
- */
-export function projectInkValue(key: string | null | undefined): Oklch {
-  const hue = hueOf(key)
-  if (hue === undefined) return [0.72, 0, 0]
-  return fitColor(0.8, 0.13, hue)
-}
-
-export function projectInk(key: string | null | undefined): string {
-  return toCss(projectInkValue(key))
-}
-
-/** Tło strony (#050505) w OKLCH — do testów kontrastu. */
-export const PAGE_BACKGROUND: Oklch = [0.115, 0, 0]

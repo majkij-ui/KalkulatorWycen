@@ -3,7 +3,13 @@
 > Rolling notes for whoever (human or agent) picks this up next. Newest session on top.
 > For the long-form roadmap see [progress.md](progress.md); architecture in [architecture.md](architecture.md); product context in [context.md](context.md).
 
-## Current branch
+## Start here (2026-10)
+The app is being rebuilt into a project hub on branch `v3/project-hub`. The living plans are
+[docs/PLAN-V3-PROJECT-HUB.md](docs/PLAN-V3-PROJECT-HUB.md) (phases 0–4: data, shell, gear, finance)
+and [docs/PLAN-CALENDAR-AND-THREADS.md](docs/PLAN-CALENDAR-AND-THREADS.md) (calendar, project
+threads, Gmail import via Claude; track status table in §6). The notes below are older sessions.
+
+## Current branch (2026-06 session)
 `feature/tauri-pdf-html2canvas` (off `master`). Work below is committed-pending in the working tree unless noted.
 
 ## Session — 2026-06 (PDF date + blank page fixes, Portfolio Catalogue)

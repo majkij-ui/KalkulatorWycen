@@ -282,8 +282,8 @@ the hub has earned its place.
 
 ## 5c. Calendar design system *(design pass, 2026-10-08)*
 
-Mockup: `/design-lab` route (`app/design-lab/page.tsx` → `components/calendar-lab/`), with example data
-for October 2026. Remove the route before the hub ships; T2 reuses the pieces.
+The mockup (`/design-lab`, variants A–D on example data) lived in commit `ab9c69d` and was removed in
+T2 once the real calendar shipped. Check out that commit to see the variants again.
 
 **Two colour channels, separated by form, not just hue** (`lib/calendar-palette.ts`):
 - **Project = tile.** Dark tint (OKLCH L 0.30) + 3 px edge in the bright hue (L 0.74) + light text.
@@ -329,12 +329,9 @@ has its own pair matrix at the bottom:
 | **C Nici** | coloured line across the week, one lane per project | bead (pill) on the line | line thickens | the thread is literally visible; focus reads as one line | tallest (≈2× A on phone); quiet projects still draw lines |
 | **D Agenda** | colour of the project name only | **shape** + colour (● ■ ▲ ◆ ✚) + muted label | thin rule above the day's list | calmest; type readable without colour; big Archivo numerals | least colour at a glance; long names truncate first |
 
-**Decision 2026-10-08: A (Kafle) is the chosen direction for T2.** B–D stay in the lab for reference
-and get deleted together with `/design-lab` when T2 ships (along with `clipColors`/`projectInk` in
-`calendar-palette.ts` if still unused).
-
-Colours for B–D are fitted to the sRGB gamut by `lib/oklch.ts` (no hand tables). Tests check WCAG for
-every project colour: B clip text ≥ 4.5:1, C/D names on the page background ≥ 7:1.
+**Decision 2026-10-08: A (Kafle) is the chosen direction** and is what T2 shipped. `lib/oklch.ts` now
+guards the palette: tests fail if any tile/chip colour leaves sRGB or drops below 7:1 text contrast,
+or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 
 **Code ready for T2:** `calendar-layout.ts` (month grid, lane packing, overflow; DST-safe, 9 tests),
 `calendar-palette.ts`, `event-kinds.ts` (first draft of the registry from §3.3).
@@ -346,7 +343,7 @@ every project colour: B clip text ≥ 4.5:1, C/D names on the page background �
 | **Design pass** | Palette: ~12 project hues + 5 type-group accents that stay distinct when combined, dark theme, small sizes. Month-view mockup. | — |
 | **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
 | **T1b Project additions** ✅ | Status `lead` (first in thread order; counts toward nothing; sits in the "wyceny" filter until T3). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
-| **T2 Calendar tab** | Month view, add/edit sheet, colours, layer filters, gear purchases projected, becomes landing tab. | T1, design |
+| **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy lead…" (creates a `lead` project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
 | **T3 Lead → thread** | "Nowy lead" flow, client picker + contact copy, project-list filters (jobs-only default), Oś czasu tab, status suggestions, quote prefill from lead. | T1 |
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
@@ -359,7 +356,13 @@ that start at the lead. T4 then fills in 2026 for you.
 
 ---
 
-### Follow-ups noticed during T1
+### Follow-ups noticed during T1–T2
+
+- The Sprzęt screen has no field for `purchaseDate`; the calendar form is currently the only way to
+  set it. Add a date column/field there (T5 touches the gear tab anyway).
+- Deleting a project leaves its events behind; the calendar shows them as „Usunięty projekt" on a
+  neutral tile. Decide: soft-delete the thread with the project, or offer to reassign.
+- Layer toggles and the viewed month are not remembered between launches.
 
 - `Project.date` still has no `.catch`, so a project with a malformed date is dropped on read and
   lost on the next collection write (pre-existing; an existing test asserts it). Worth relaxing

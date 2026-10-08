@@ -25,6 +25,8 @@ interface EquipmentContextValue {
     category: EquipmentCategory
     purchasePrice?: number
     rentalDayRate?: number
+    /** `YYYY-MM-DD` — zakup pokazuje się wtedy w kalendarzu. */
+    purchaseDate?: string
   }) => Promise<EquipmentItem | null>
   updateItem: (item: EquipmentItem) => Promise<void>
   removeItem: (id: string) => Promise<void>
