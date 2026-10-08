@@ -14,6 +14,13 @@ import { useProjectHub } from '@/lib/project-hub-context'
 import { ProjectStatusPicker } from './project-status-badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { SaveActiveProjectResult } from '@/lib/project-hub-context'
+
+type ReplacePrompt = Extract<SaveActiveProjectResult, { status: 'needs-confirmation' }>
+
+function formatPln(amount: number): string {
+  return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
+}
 
 export function ProjectBar() {
   const { activeProject, closeProject, saveActiveProject, updateActiveProject, setStatus } =
@@ -34,13 +41,24 @@ export function ProjectBar() {
     return () => clearTimeout(timer)
   }, [justSaved])
 
+  // Pytanie o zastąpienie finansów z importu dotyczy jednego projektu.
+  const [replacePrompt, setReplacePrompt] = useState<ReplacePrompt | null>(null)
+  useEffect(() => {
+    setReplacePrompt(null)
+  }, [activeProject?.id])
+
   if (!activeProject) return null
 
-  const handleSave = async () => {
+  const handleSave = async (replaceFinancials = false) => {
     setSaving(true)
-    await saveActiveProject()
+    const result = await saveActiveProject({ replaceFinancials })
     setSaving(false)
-    setJustSaved(true)
+    if (result.status === 'needs-confirmation') {
+      setReplacePrompt(result)
+      return
+    }
+    setReplacePrompt(null)
+    if (result.status === 'saved') setJustSaved(true)
   }
 
   const commitName = () => {
@@ -96,16 +114,44 @@ export function ProjectBar() {
             onChange={(status) => setStatus(activeProject.id, status)}
           />
 
-          <Button onClick={handleSave} disabled={saving} size="sm" className="h-8 shrink-0 gap-1.5">
-            {saving ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : justSaved ? (
-              <Check className="size-3.5" />
-            ) : (
-              <Save className="size-3.5" />
-            )}
-            {justSaved ? 'Zapisano' : 'Zapisz'}
-          </Button>
+          {replacePrompt ? (
+            // Projekt ma finanse spoza kalkulatora (np. retro-import) — zapis
+            // wyceny by je zastąpił, więc tylko po jawnej zgodzie.
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-amber-300/90">
+                Zastąpić finanse z importu ({formatPln(replacePrompt.current.sumaNetto)}) wyceną (
+                {formatPln(replacePrompt.proposed?.sumaNetto ?? 0)})?
+              </span>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 px-2 text-xs"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+              >
+                Zastąp
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setReplacePrompt(null)}
+              >
+                Anuluj
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => handleSave()} disabled={saving} size="sm" className="h-8 shrink-0 gap-1.5">
+              {saving ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : justSaved ? (
+                <Check className="size-3.5" />
+              ) : (
+                <Save className="size-3.5" />
+              )}
+              {justSaved ? 'Zapisano' : 'Zapisz'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

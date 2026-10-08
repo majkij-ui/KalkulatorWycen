@@ -25,6 +25,17 @@ import { listImportableQuotes } from './legacy-app'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
 import { backfillMissingFinancials, computeSnapshotFinancials } from './quote-financials'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
+import { blankQuoteSnapshot, planProjectSave, type ProjectSavePlan } from './project-save'
+
+/**
+ * Wynik „Zapisz". `needs-confirmation` — projekt bez wyceny ma finanse spoza
+ * kalkulatora (np. retro-import), a zapis wyceny by je zastąpił. Nic nie
+ * zapisano; po zgodzie użytkownika ponów z `replaceFinancials: true`.
+ */
+export type SaveActiveProjectResult =
+  | { status: 'saved' }
+  | { status: 'no-project' }
+  | Extract<ProjectSavePlan, { status: 'needs-confirmation' }>
 
 interface ProjectHubValue {
   projects: Project[]
@@ -47,7 +58,7 @@ interface ProjectHubValue {
   /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu). Nie otwiera go. */
   createProjectWithoutQuote: (params: { name: string; client?: string }) => Promise<Project | null>
   /** Zapisuje stan kalkulatora do otwartego projektu (wraz z finansami). */
-  saveActiveProject: () => Promise<void>
+  saveActiveProject: (options?: { replaceFinancials?: boolean }) => Promise<SaveActiveProjectResult>
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
   setStatus: (id: string, status: ProjectStatus) => Promise<void>
   removeProject: (id: string) => Promise<void>
@@ -140,9 +151,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       if (!project) return
       // Projekt bez wyceny: czysty kalkulator z klientem z wątku, żeby
       // wycena „podjęła wątek" zamiast zostawić dane poprzedniego projektu.
-      loadQuoteSnapshot(
-        (project.quote ?? { data: { clientName: project.client }, marginMultiplier: 1 }) as never
-      )
+      loadQuoteSnapshot((project.quote ?? blankQuoteSnapshot(project.client)) as never)
       setActiveProjectId(id)
     },
     [projects, loadQuoteSnapshot]
@@ -182,17 +191,22 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [projects]
   )
 
-  const saveActiveProject = useCallback(async () => {
-    if (!activeProject) return
-    const updated: Project = {
-      ...activeProject,
-      quote: buildQuoteSnapshot(),
-      client: data.clientName || activeProject.client,
-      financials: computeFinancials(),
-      updatedAt: new Date().toISOString(),
-    }
-    setProjects(await upsertProject(updated))
-  }, [activeProject, buildQuoteSnapshot, data.clientName, computeFinancials])
+  const saveActiveProject = useCallback(
+    async (options: { replaceFinancials?: boolean } = {}): Promise<SaveActiveProjectResult> => {
+      if (!activeProject) return { status: 'no-project' }
+      // Projekt bez wyceny otwiera się w pustym kalkulatorze — ślepy zapis
+      // wyzerowałby jego finanse z importu. Decyzja i testy: `project-save.ts`.
+      const plan = planProjectSave({
+        project: activeProject,
+        snapshot: buildQuoteSnapshot(),
+        replaceFinancials: options.replaceFinancials,
+      })
+      if (plan.status === 'needs-confirmation') return plan
+      setProjects(await upsertProject(plan.project))
+      return { status: 'saved' }
+    },
+    [activeProject, buildQuoteSnapshot]
+  )
 
   const updateActiveProject = useCallback(
     async (patch: Partial<Project>) => {
