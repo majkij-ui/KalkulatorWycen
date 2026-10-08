@@ -107,7 +107,7 @@ test('walidacja: data, koniec przed początkiem, projekt wymagany dla wątku', (
     ['endDate']
   )
   assert.deepEqual(draftProblems(emptyDraft({ kind: 'won', date: '2026-10-09' })), ['project'])
-  assert.deepEqual(draftProblems(emptyDraft({ kind: 'won', date: '2026-10-09' }), { newLead: true }), [])
+  assert.deepEqual(draftProblems(emptyDraft({ kind: 'won', date: '2026-10-09' }), { newProject: true }), [])
   assert.deepEqual(draftProblems(emptyDraft({ kind: 'note', date: '2026-10-09' })), [], 'notatka bez projektu OK')
   assert.deepEqual(draftProblems({ ...emptyDraft({ kind: 'lead_in', date: '2026-10-02', projectId: 'p' }), time: '9' }), ['time'])
 })

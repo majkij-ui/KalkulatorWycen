@@ -4,7 +4,9 @@
  * Lista projektów — punkt wyjścia całej apki po przebudowie.
  *
  * Chronologicznie (najnowsze u góry), ze statusem oznaczonym kolorem i trzema
- * filtrami z notatek: wszystko / tylko projekty / tylko wyceny.
+ * filtrami z notatek: wszystko / tylko projekty / tylko wyceny. Nieprzyjęte
+ * wyceny są domyślnie ukryte (przełącznik obok filtrów), a gdy są widoczne,
+ * ich kwoty są szare — nie liczą się do wyników firmy.
  */
 
 import { useState } from 'react'
@@ -89,6 +91,8 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
   // nie „0 zł" — zero to konkretna informacja, a tu jej po prostu nie ma.
   const financials = project.financials
   const zysk = financials?.zysk ?? 0
+  // Nieprzyjęta wycena to archiwum: kwoty na szaro, żeby nie udawały wyniku.
+  const lost = project.status === 'lost'
 
   return (
     <motion.div
@@ -121,11 +125,13 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
         <div className="shrink-0 text-right">
           {financials ? (
             <>
-              <div className="tabular-nums font-semibold text-zinc-200">
+              <div className={`tabular-nums font-semibold ${lost ? 'text-zinc-600' : 'text-zinc-200'}`}>
                 {formatPln(financials.sumaNetto)}
               </div>
               <div
-                className={`text-[11px] tabular-nums ${zysk >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}`}
+                className={`text-[11px] tabular-nums ${
+                  lost ? 'text-zinc-600' : zysk >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
+                }`}
               >
                 zysk {formatPln(zysk)}
               </div>
@@ -185,8 +191,18 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
 }
 
 export function ProjectList() {
-  const { visibleProjects, projects, filter, setFilter, openProject, createFromCurrentQuote, isLoading } =
-    useProjectHub()
+  const {
+    visibleProjects,
+    projects,
+    filter,
+    setFilter,
+    hideLost,
+    setHideLost,
+    openProject,
+    createFromCurrentQuote,
+    isLoading,
+  } = useProjectHub()
+  const lostCount = projects.filter((p) => p.status === 'lost').length
   const { totals } = useQuote()
   const [search, setSearch] = useState('')
   const [newName, setNewName] = useState('')
@@ -238,6 +254,17 @@ export function ProjectList() {
             </button>
           ))}
         </div>
+
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-zinc-400 hover:text-zinc-200">
+          <input
+            type="checkbox"
+            checked={hideLost}
+            onChange={(e) => setHideLost(e.target.checked)}
+            className="size-3.5 accent-[var(--primary)]"
+          />
+          Ukryj nieprzyjęte
+          {lostCount > 0 && <span className="tabular-nums text-zinc-600">({lostCount})</span>}
+        </label>
 
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zinc-600" />
@@ -300,7 +327,9 @@ export function ProjectList() {
           <p className="mt-3 text-sm text-zinc-500">
             {projects.length === 0
               ? 'Utwórz pierwszy projekt albo przenieś zapisane wyceny.'
-              : 'Nic nie pasuje do tego filtra.'}
+              : hideLost && lostCount > 0 && filter !== 'projects'
+                ? 'Nic nie pasuje do tego filtra. Nieprzyjęte wyceny są ukryte.'
+                : 'Nic nie pasuje do tego filtra.'}
           </p>
         </div>
       ) : (

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { ledgerDateFor, pendingQuotes, quoteToProject, readMigratedIds } from './project-migration-core'
+import { ledgerDateFor, pendingQuotes, quoteToProject, readMigratedIds, mergeQuoteSources } from './project-migration-core'
 import type { SavedQuoteRecord } from './quote-library'
 import type { Project } from './project-types'
 
@@ -102,4 +102,15 @@ test('nowa wycena dodana po migracji zostaje wykryta', () => {
 
   assert.equal(withNew.length, 1)
   assert.equal(withNew[0].id, 'q-3')
+})
+
+test('wyceny ze starej aplikacji i z huba łączą się bez duplikatów — wygrywa nowsza', () => {
+  const quote = (id: string, updatedAt: string, name = id) =>
+    ({ id, name, createdAt: updatedAt, updatedAt, snapshot: { version: 2, savedAt: updatedAt, data: {} } }) as never
+  const legacy = [quote('q-1', '2026-09-01T10:00:00Z', 'stara wersja'), quote('q-2', '2026-08-01T10:00:00Z')]
+  const own = [quote('q-1', '2026-10-01T10:00:00Z', 'poprawiona'), quote('q-3', '2026-10-05T10:00:00Z')]
+  const merged = mergeQuoteSources(legacy, own) as { id: string; name: string }[]
+  assert.deepEqual(merged.map((q) => q.id), ['q-3', 'q-1', 'q-2'], 'najnowsze u góry')
+  assert.equal(merged.find((q) => q.id === 'q-1')!.name, 'poprawiona')
+  assert.deepEqual(mergeQuoteSources([], []), [])
 })

@@ -21,7 +21,7 @@ import {
   replaceAllProjects,
   upsertProject,
 } from './project-library'
-import { listSavedQuotes } from './quote-library'
+import { listImportableQuotes } from './legacy-app'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
 import { backfillMissingFinancials, computeSnapshotFinancials } from './quote-financials'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
@@ -32,6 +32,9 @@ interface ProjectHubValue {
   visibleProjects: Project[]
   filter: ProjectFilter
   setFilter: (filter: ProjectFilter) => void
+  /** „Ukryj nieprzyjęte" — domyślnie włączone, zapamiętywane między uruchomieniami. */
+  hideLost: boolean
+  setHideLost: (hide: boolean) => void
   activeProject: Project | null
   isLoading: boolean
 
@@ -41,8 +44,8 @@ interface ProjectHubValue {
   closeProject: () => void
   /** Tworzy nowy projekt z BIEŻĄCEGO stanu kalkulatora. */
   createFromCurrentQuote: (name: string) => Promise<Project | null>
-  /** Zakłada lead bez wyceny (np. z formularza kalendarza). Nie otwiera go. */
-  createLead: (params: { name: string; client?: string }) => Promise<Project | null>
+  /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu). Nie otwiera go. */
+  createProjectWithoutQuote: (params: { name: string; client?: string }) => Promise<Project | null>
   /** Zapisuje stan kalkulatora do otwartego projektu (wraz z finansami). */
   saveActiveProject: () => Promise<void>
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
@@ -61,11 +64,32 @@ interface ProjectHubValue {
 
 const ProjectHubContext = createContext<ProjectHubValue | null>(null)
 
+const HIDE_LOST_KEY = 'nonoise-projects-hide-lost'
+
+/** Domyślnie ukrywamy nieprzyjęte; zapamiętane „0" je pokazuje. */
+function readHideLost(): boolean {
+  try {
+    return localStorage.getItem(HIDE_LOST_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
 export function ProjectHubProvider({ children }: { children: React.ReactNode }) {
   const { data, buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [filter, setFilter] = useState<ProjectFilter>('all')
+  const [hideLost, setHideLostState] = useState(readHideLost)
+
+  const setHideLost = useCallback((hide: boolean) => {
+    setHideLostState(hide)
+    try {
+      localStorage.setItem(HIDE_LOST_KEY, hide ? '1' : '0')
+    } catch {
+      // tylko wygoda — bez zapisu przełącznik po prostu wróci do domyślnego
+    }
+  }, [])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [pendingQuoteCount, setPendingQuoteCount] = useState(0)
@@ -76,7 +100,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [loaded, quotes] = await Promise.all([listProjects(), listSavedQuotes()])
+      const [loaded, quotes] = await Promise.all([listProjects(), listImportableQuotes()])
       if (cancelled) return
       setProjects(loaded)
       const migratedIds = new Set(
@@ -95,7 +119,10 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [projects, activeProjectId]
   )
 
-  const visibleProjects = useMemo(() => filterProjects(projects, filter), [projects, filter])
+  const visibleProjects = useMemo(
+    () => filterProjects(projects, filter, { hideLost }),
+    [projects, filter, hideLost]
+  )
 
   /**
    * Migawka finansowa liczona tak samo jak w zakładce Profit — tą samą czystą
@@ -111,7 +138,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     async (id: string) => {
       const project = projects.find((p) => p.id === id)
       if (!project) return
-      // Lead nie ma jeszcze wyceny: czysty kalkulator z klientem z wątku, żeby
+      // Projekt bez wyceny: czysty kalkulator z klientem z wątku, żeby
       // wycena „podjęła wątek" zamiast zostawić dane poprzedniego projektu.
       loadQuoteSnapshot(
         (project.quote ?? { data: { clientName: project.client }, marginMultiplier: 1 }) as never
@@ -144,13 +171,13 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [buildQuoteSnapshot, data.clientName, computeFinancials, projects]
   )
 
-  const createLead = useCallback(
+  const createProjectWithoutQuote = useCallback(
     async ({ name, client }: { name: string; client?: string }) => {
       const trimmed = name.trim()
       if (!trimmed) return null
-      const lead = createProject({ name: trimmed, client: client?.trim() ?? '', existing: projects })
-      setProjects(await upsertProject(lead))
-      return lead
+      const project = createProject({ name: trimmed, client: client?.trim() ?? '', existing: projects })
+      setProjects(await upsertProject(project))
+      return project
     },
     [projects]
   )
@@ -203,7 +230,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     return result
   }, [])
 
-  /** Lead bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
+  /** Projekt bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
   const missingFinancialsCount = useMemo(
     () => projects.filter((p) => !p.financials && p.quote).length,
     [projects]
@@ -225,12 +252,14 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     visibleProjects,
     filter,
     setFilter,
+    hideLost,
+    setHideLost,
     activeProject,
     isLoading,
     openProject,
     closeProject,
     createFromCurrentQuote,
-    createLead,
+    createProjectWithoutQuote,
     saveActiveProject,
     updateActiveProject,
     setStatus,

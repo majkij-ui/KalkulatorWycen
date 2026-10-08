@@ -65,3 +65,17 @@ export function pendingQuotes(
   const migrated = readMigratedIds(existingProjects)
   return quotes.filter((q) => !migrated.has(q.id))
 }
+
+/**
+ * Łączy biblioteki wycen z kilku źródeł (stara aplikacja QuoteGen + biblioteka
+ * w samym hubie). Ta sama wycena (to samo id) liczy się raz — wygrywa nowsza
+ * wersja, żeby ponowny import podchwycił poprawki zrobione w starej aplikacji.
+ */
+export function mergeQuoteSources(...sources: SavedQuoteRecord[][]): SavedQuoteRecord[] {
+  const byId = new Map<string, SavedQuoteRecord>()
+  sources.flat().forEach((quote) => {
+    const current = byId.get(quote.id)
+    if (!current || (quote.updatedAt ?? '') > (current.updatedAt ?? '')) byId.set(quote.id, quote)
+  })
+  return [...byId.values()].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+}

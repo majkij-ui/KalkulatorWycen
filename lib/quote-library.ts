@@ -45,11 +45,12 @@ export function createQuoteId(): string {
   return `q-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function sortByUpdatedDesc(quotes: SavedQuoteRecord[]): SavedQuoteRecord[] {
+export function sortByUpdatedDesc(quotes: SavedQuoteRecord[]): SavedQuoteRecord[] {
   return [...quotes].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
 }
 
-function coerceLibrary(raw: unknown): SavedQuoteRecord[] {
+/** Wczytuje plik biblioteki wycen defensywnie — także cudzy (stara aplikacja). */
+export function coerceLibrary(raw: unknown): SavedQuoteRecord[] {
   if (!raw || typeof raw !== 'object') return []
   const list = (raw as QuotesLibraryFile).quotes
   if (!Array.isArray(list)) return []

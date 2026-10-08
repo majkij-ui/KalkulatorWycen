@@ -69,8 +69,8 @@ export function parseAmount(value: string): number | undefined {
 
 export type DraftProblem = 'date' | 'endDate' | 'time' | 'project'
 
-/** Co blokuje zapis. `newLead` = użytkownik zakłada w formularzu nowy lead. */
-export function draftProblems(draft: EventDraft, options: { newLead?: boolean } = {}): DraftProblem[] {
+/** Co blokuje zapis. `newProject` = użytkownik zakłada w formularzu nowy projekt. */
+export function draftProblems(draft: EventDraft, options: { newProject?: boolean } = {}): DraftProblem[] {
   const problems: DraftProblem[] = []
   const kind = eventKind(draft.kind)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) problems.push('date')
@@ -78,7 +78,7 @@ export function draftProblems(draft: EventDraft, options: { newLead?: boolean } 
   if (kind.range && draft.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(draft.endDate) || draft.endDate < draft.date)) {
     problems.push('endDate')
   }
-  if (kind.scope === 'project' && !draft.projectId && !options.newLead) problems.push('project')
+  if (kind.scope === 'project' && !draft.projectId && !options.newProject) problems.push('project')
   return problems
 }
 

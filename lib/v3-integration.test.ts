@@ -274,16 +274,26 @@ test('migracja zachowuje pełną migawkę wyceny', async () => {
 
 // ── T1b: leady, kolory, pola z nowszej wersji ────────────────────────────────
 
-test('lead bez wyceny: startuje jako lead i przechodzi zapis oraz odczyt', async () => {
-  const lead = createProject({ name: 'Zapytanie — Festiwal', client: 'Fundacja Wisła' })
-  assert.equal(lead.status, 'lead', 'brak wyceny = lead')
-  assert.equal(lead.quote, null)
+test('projekt bez wyceny: startuje jako wycena i przechodzi zapis oraz odczyt', async () => {
+  const inquiry = createProject({ name: 'Zapytanie — Festiwal', client: 'Fundacja Wisła' })
+  assert.equal(inquiry.status, 'quote')
+  assert.equal(inquiry.quote, null)
 
-  await upsertProject(lead)
+  await upsertProject(inquiry)
   const [saved] = await listProjects()
-  assert.equal(saved.status, 'lead')
+  assert.equal(saved.status, 'quote')
   assert.equal(saved.quote, null)
-  assert.equal(filterProjects([saved], 'projects').length, 0, 'lead nie jest realizacją')
+  assert.equal(filterProjects([saved], 'projects').length, 0, 'bez wyceny to nie realizacja')
+})
+
+test('lista domyślnie bez nieprzyjętych wycen', async () => {
+  const lost = { ...createProject({ name: 'Przegrana' }), status: 'lost' as const }
+  const open = createProject({ name: 'Otwarta' })
+  assert.deepEqual(
+    filterProjects([lost, open], 'all', { hideLost: true }).map((p) => p.name),
+    ['Otwarta']
+  )
+  assert.equal(filterProjects([lost, open], 'quotes').length, 2, 'po odznaczeniu widać obie')
 })
 
 test('nowy projekt dostaje kolor inny niż istniejące', async () => {

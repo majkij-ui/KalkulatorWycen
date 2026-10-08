@@ -44,18 +44,18 @@ export interface SavedInfo {
   kind: string
   /** Dzień zapisanego wpisu — kalendarz przechodzi na jego miesiąc. */
   date: string
-  /** Projekt wpisu (także świeżo założony lead, którego lista jeszcze nie zna). */
+  /** Projekt wpisu (także świeżo założony, którego lista jeszcze nie zna). */
   project: Pick<Project, 'id' | 'name' | 'status'> | null
 }
 
-const NEW_LEAD = '__new__'
+const NEW_PROJECT = '__new__'
 
-const PROBLEM_TEXT: Record<DraftProblem | 'leadName' | 'gearName', string> = {
+const PROBLEM_TEXT: Record<DraftProblem | 'projectName' | 'gearName', string> = {
   date: 'Podaj datę.',
   endDate: 'Koniec nie może być przed początkiem.',
   time: 'Godzina w formacie GG:MM.',
-  project: 'Wybierz projekt albo załóż nowy lead.',
-  leadName: 'Nadaj nazwę nowemu leadowi.',
+  project: 'Wybierz projekt albo załóż nowy.',
+  projectName: 'Nadaj nazwę nowemu projektowi.',
   gearName: 'Podaj nazwę sprzętu.',
 }
 
@@ -90,7 +90,7 @@ export function EventForm({
 }) {
   const id = useId()
   const { save, remove } = useEvents()
-  const { projects, createLead } = useProjectHub()
+  const { projects, createProjectWithoutQuote } = useProjectHub()
   const { items, addItem, updateItem } = useEquipment()
 
   const editing = target.mode === 'edit' ? target.entry : null
@@ -106,9 +106,9 @@ export function EventForm({
     const t = target as Extract<FormTarget, { mode: 'new' }>
     return emptyDraft({ kind: t.projectId ? 'shoot_day' : 'lead_in', date: t.date, projectId: t.projectId })
   })
-  const [leadName, setLeadName] = useState('')
-  const [leadClient, setLeadClient] = useState('')
-  const [newLead, setNewLead] = useState(false)
+  const [projectName, setProjectName] = useState('')
+  const [projectClient, setProjectClient] = useState('')
+  const [newProject, setNewProject] = useState(false)
   const [gearCategory, setGearCategory] = useState<EquipmentCategory>(gearItem?.category ?? 'kamery')
   const [gearPrice, setGearPrice] = useState(gearItem?.purchasePrice ? String(gearItem.purchasePrice) : '')
   const [showProblems, setShowProblems] = useState(false)
@@ -127,12 +127,15 @@ export function EventForm({
     gearItem ? k.key === 'gear_purchase' : original ? k.key !== 'gear_purchase' : true
   )
 
-  const problems: (DraftProblem | 'leadName' | 'gearName')[] = isGear
+  const problems: (DraftProblem | 'projectName' | 'gearName')[] = isGear
     ? [
         ...(draft.title.trim() ? [] : (['gearName'] as const)),
         ...draftProblems(draft).filter((p) => p === 'date'),
       ]
-    : [...draftProblems(draft, { newLead }), ...(newLead && !leadName.trim() ? (['leadName'] as const) : [])]
+    : [
+        ...draftProblems(draft, { newProject }),
+        ...(newProject && !projectName.trim() ? (['projectName'] as const) : []),
+      ]
 
   const set = (patch: Partial<EventDraft>) => setDraft((d) => ({ ...d, ...patch }))
   const setField = (key: string, value: string) => setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: value } }))
@@ -146,7 +149,7 @@ export function EventForm({
       time: next.timed ? d.time : '',
       endDate: next.range ? d.endDate : '',
     }))
-    if (next.scope === 'business') setNewLead(false)
+    if (next.scope === 'business') setNewProject(false)
   }
 
   const submit = async () => {
@@ -174,7 +177,7 @@ export function EventForm({
       }
 
       let project: Project | null = projects.find((p) => p.id === draft.projectId) ?? null
-      if (newLead) project = await createLead({ name: leadName, client: leadClient })
+      if (newProject) project = await createProjectWithoutQuote({ name: projectName, client: projectClient })
       const event = eventFromDraft({ ...draft, projectId: project?.id ?? draft.projectId }, original)
       await save(event)
       onSaved({ kind: event.kind, date: draft.date, project: event.projectId ? project : null })
@@ -274,16 +277,16 @@ export function EventForm({
           <Label htmlFor={`${id}-project`}>Projekt</Label>
           <select
             id={`${id}-project`}
-            value={newLead ? NEW_LEAD : (draft.projectId ?? '')}
+            value={newProject ? NEW_PROJECT : (draft.projectId ?? '')}
             onChange={(e) => {
               const value = e.target.value
-              setNewLead(value === NEW_LEAD)
-              set({ projectId: value && value !== NEW_LEAD ? value : null })
+              setNewProject(value === NEW_PROJECT)
+              set({ projectId: value && value !== NEW_PROJECT ? value : null })
             }}
             className={inputClass}
           >
             <option value="">{kind.scope === 'either' ? 'Bez projektu (sprawa firmy)' : 'Wybierz projekt…'}</option>
-            <option value={NEW_LEAD}>+ Nowy lead…</option>
+            <option value={NEW_PROJECT}>+ Nowy projekt…</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -291,25 +294,25 @@ export function EventForm({
               </option>
             ))}
           </select>
-          {newLead && (
+          {newProject && (
             <div className="mt-2 space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
               <div>
-                <Label htmlFor={`${id}-lead-name`}>Nazwa leada</Label>
+                <Label htmlFor={`${id}-project-name`}>Nazwa projektu</Label>
                 <input
-                  id={`${id}-lead-name`}
-                  value={leadName}
-                  onChange={(e) => setLeadName(e.target.value)}
+                  id={`${id}-project-name`}
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
                   placeholder="np. Tchibo — spot jesienny"
                   className={inputClass}
                   autoFocus
                 />
               </div>
               <div>
-                <Label htmlFor={`${id}-lead-client`}>Klient</Label>
+                <Label htmlFor={`${id}-project-client`}>Klient</Label>
                 <input
-                  id={`${id}-lead-client`}
-                  value={leadClient}
-                  onChange={(e) => setLeadClient(e.target.value)}
+                  id={`${id}-project-client`}
+                  value={projectClient}
+                  onChange={(e) => setProjectClient(e.target.value)}
                   list={`${id}-clients`}
                   className={inputClass}
                 />

@@ -77,7 +77,6 @@ export const EVENT_KINDS: EventKind[] = [
       { key: 'channel', label: 'Kanał', type: 'text', suggestions: ['mail', 'telefon', 'formularz', 'Instagram DM'] },
       { key: 'summary', label: 'O co pyta klient', type: 'text' },
     ],
-    suggestsStatus: 'lead',
   },
   {
     key: 'reply_sent',
@@ -263,11 +262,10 @@ export function eventData(event: { kind: string; data?: Record<string, unknown> 
 
 /**
  * Kolejność etapów wątku. `lost` leży między wyceną a realizacją: przegrana
- * zamyka lead lub wycenę, ale klient może wrócić (lost → won), a projektu w
+ * zamyka wycenę, ale klient może wrócić (lost → won), a projektu w
  * realizacji nie cofamy do „przegranego" podpowiedzią — to robi się ręcznie.
  */
 const STATUS_RANK: Record<ProjectStatus, number> = {
-  lead: 0,
   quote: 1,
   lost: 1.5,
   won: 2,

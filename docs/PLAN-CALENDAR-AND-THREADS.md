@@ -165,8 +165,9 @@ These rules let us use it for a few weeks, decide it's wrong, and change it with
 
 ### 3.5 Changes to existing models (all additive)
 
-- `Project.status` gains `lead` before `quote`. Older data still parses (the enum `.catch` defaults
-  to `quote`).
+- ~~`Project.status` gains `lead`~~ — **reverted 2026-10-08**: a lead is the `lead_in` *event*, not a
+  project status. A project without a quote has status `quote` and shows „brak wyceny"; the funnel
+  (inquiries → quotes → jobs) is derived from events. A stored `lead` reads as `quote` via `.catch`.
 - `Project.quote` becomes **optional**: a lead has no quote yet. The calculator bridge
   (`project-hub-context.tsx`) opens an empty calculator when there's none. ⚠️ This touches the bridge.
 - `Project.client` stays a string (now with a picker); new optional `Project.contact` and
@@ -194,14 +195,12 @@ Projects stays a clean list for when you only want to look at jobs.
   filter, so a busy month can be thinned out.
 - Month summary strip: leads in, shoot days, post days, invoiced, paid, gear spend.
 
-**Projekty (list)**: leads will far outnumber jobs, so filtering is required, not optional.
-- **Default view = jobs only** (`won` + `done`). Leads, open quotes and lost ones are hidden until
-  you ask for them.
-- Status chips you can combine: Leady · Wyceny · W realizacji · Zrealizowane · Nieprzyjęte.
-  The current "Wszystko / Tylko projekty / Tylko wyceny" filters are replaced by these.
-- Client filter (the same picker) with that client's total revenue shown when it's active.
-- Year filter; the last-used filters are remembered.
-- Same filter logic as pure functions in `lib/`, so Calendar and Finance can reuse it.
+**Projekty (list)** *(revised with M.J. 2026-10-08)*:
+- Filters stay **Wszystko / Tylko projekty / Tylko wyceny**, plus a **„Ukryj nieprzyjęte"** checkbox,
+  on by default and remembered; it shows how many are hidden. ✅
+- When lost quotes are shown, their amounts are grey — they don't count toward results. ✅
+- „Projekty" in the sidebar always returns to the list, also from an open project. ✅
+- Still to do in T3: client filter (picker) with that client's total; year filter.
 
 **Project page tabs**: `Oś czasu · Klient/Lead · Wycena · Realizacja · Notatki`
 - *Oś czasu*: the thread as a vertical timeline, with derived numbers inline ("odpowiedź po 6 h",
@@ -280,6 +279,16 @@ the hub has earned its place.
   it isn't needed to keep developing.
 - The Claude bridge (§5a) targets the **hub's** folder only.
 
+**Done 2026-10-08:** "NonoiseMedia Hub", identifier `com.michal.nonoisehub`, v0.3.0, own icon (logo on a
+dark tile, source `src-tauri/app-icon-hub.png`). Capabilities allow reading exactly
+`$DATA/com.michal.quotegen/quotes.json` and **deny** every write/mkdir under `$DATA/com.michal.quotegen`
+(also via the broad `$HOME/**` PDF-export permission). `listImportableQuotes()` (`lib/legacy-app.ts`)
+merges the old library with the hub's own (`mergeQuoteSources`, newer copy wins), so the migration
+banner can be re-run any time. Settings the old app kept only in WebView storage (portfolio catalogue,
+"my default" pricing, current pricing) were carried over once: Claude read them from the old app's
+WebKit LocalStorage (a copy) and wrote `carryover-from-quotegen.json` to the hub folder, plus a copy of
+`settings.json`; `applyCarryOver()` applies known keys once at start-up and never overwrites.
+
 ## 5c. Calendar design system *(design pass, 2026-10-08)*
 
 The mockup (`/design-lab`, variants A–D on example data) lived in commit `ab9c69d` and was removed in
@@ -344,7 +353,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
 | **T1b Project additions** ✅ | Status `lead` (first in thread order; counts toward nothing; sits in the "wyceny" filter until T3). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
 | **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy lead…" (creates a `lead` project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
-| **T3 Lead → thread** | "Nowy lead" flow, client picker + contact copy, project-list filters (jobs-only default), Oś czasu tab, status suggestions, quote prefill from lead. | T1 |
+| **T3 Project thread** | Client picker + contact copy, client and year filters, project tabs (Oś czasu · Wycena · Realizacja · Notatki) replacing today's project bar (its name field is squeezed to ~145 px at 1400 px), quote prefill from the thread. List fixes and "+ Nowy projekt" from the calendar are already done. | T1 |
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
@@ -376,7 +385,8 @@ that start at the lead. T4 then fills in 2026 for you.
 
 Confirmed 2026-10-08:
 1. **Landing tab:** Kalendarz is the default screen.
-2. **Lead = project with status `lead`**, and the project list **hides leads by default** (§4).
+2. **No `lead` status** (revised 2026-10-08): a lead is the `lead_in` event; projects without a quote
+   are `quote` / „brak wyceny". The list hides **lost** quotes by default (§4).
 3. **Client is a field on the project**, not a separate record (§3.2a).
 4. **Status changes** are suggestions you confirm.
 5. **Profit tab:** only the screen moves to Realizacja. The data stays where it is (planned costs

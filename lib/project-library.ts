@@ -54,7 +54,8 @@ export function upsertProject(project: Project): Promise<Project[]> {
 }
 
 /**
- * Nowy projekt — z migawki wyceny albo bez niej (lead, `quote: null`).
+ * Nowy projekt — z migawki wyceny albo bez niej (`quote: null`, np. z zapytania
+ * dodanego w kalendarzu; lista pokazuje wtedy „brak wyceny").
  * `existing` = obecne projekty: nowy dostaje najrzadziej używany kolor, więc
  * kolejne projekty w kalendarzu nie wyglądają tak samo.
  */
@@ -73,7 +74,7 @@ export function createProject(params: {
     id: createProjectId(),
     name: params.name,
     client: params.client ?? '',
-    status: params.status ?? (quote ? 'quote' : 'lead'),
+    status: params.status ?? 'quote',
     colorKey: nextProjectColor((params.existing ?? []).map(projectColorFor)),
     date: params.date ?? toDateKey(now),
     createdAt: nowIso,
@@ -90,9 +91,13 @@ export async function getProject(id: string): Promise<Project | null> {
   return all.find((p) => p.id === id) ?? null
 }
 
-/** Filtr listy: tylko projekty / też wyceny / tylko wyceny. */
-export function filterProjects(projects: Project[], filter: ProjectFilter): Project[] {
-  return projects.filter((p) => matchesFilter(p.status, filter))
+/** Filtr listy: wszystko / tylko projekty / tylko wyceny, opcjonalnie bez nieprzyjętych. */
+export function filterProjects(
+  projects: Project[],
+  filter: ProjectFilter,
+  options: { hideLost?: boolean } = {}
+): Project[] {
+  return projects.filter((p) => matchesFilter(p.status, filter, options))
 }
 
 /** Zmiana statusu (np. „wycena weszła") ze stemplem czasu. */

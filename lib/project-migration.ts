@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Migracja: zapisane wyceny (`quotes.json`) → projekty (`projects.json`).
+ * Migracja: zapisane wyceny (`quotes.json` starej aplikacji + huba) → projekty (`projects.json`).
  *
  * Ten moduł odpowiada wyłącznie za wejście/wyjście; całe mapowanie siedzi w
  * `project-migration-core.ts` i jest pokryte testami.
@@ -16,7 +16,8 @@
  */
 
 import { isTauriRuntime, writeJsonFile } from './storage'
-import { listSavedQuotes, type SavedQuoteRecord } from './quote-library'
+import type { SavedQuoteRecord } from './quote-library'
+import { listImportableQuotes } from './legacy-app'
 import { listProjects, replaceAllProjects } from './project-library'
 import { pendingQuotes, quoteToProject } from './project-migration-core'
 import { toDateKey } from './project-types'
@@ -80,7 +81,7 @@ export function isMigrationDone(): boolean {
  * już przeniesione wyceny są pomijane, nowe dopisywane.
  */
 export async function migrateQuotesToProjects(): Promise<MigrationResult> {
-  const quotes = await listSavedQuotes()
+  const quotes = await listImportableQuotes()
   if (quotes.length === 0) {
     return { status: 'skipped-empty', migratedCount: 0, skippedCount: 0, backupLocation: null }
   }

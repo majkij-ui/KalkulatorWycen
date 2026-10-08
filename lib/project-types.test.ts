@@ -120,10 +120,10 @@ test('migawka wyceny przechodzi walidację nietknięta', () => {
   assert.deepEqual(parsed.quote, snapshot, 'nieznane pola wyceny muszą przetrwać')
 })
 
-test('lead bez wyceny jest poprawnym projektem (quote: null)', () => {
-  const lead = projectSchema.parse({ id: 'p-1', name: 'Zapytanie', date: '2026-10-02', status: 'lead', quote: null })
-  assert.equal(lead.status, 'lead')
-  assert.equal(lead.quote, null)
+test('projekt bez wyceny jest poprawny (quote: null)', () => {
+  const inquiry = projectSchema.parse({ id: 'p-1', name: 'Zapytanie', date: '2026-10-02', quote: null })
+  assert.equal(inquiry.status, 'quote')
+  assert.equal(inquiry.quote, null)
   assert.equal(projectSchema.parse({ id: 'p-2', date: '2026-10-02' }).quote, null, 'brak pola = null')
   assert.equal(
     projectSchema.parse({ id: 'p-3', date: '2026-10-02', quote: 'śmieci' }).quote,
@@ -166,8 +166,15 @@ test('pola z nowszej wersji przeżywają odczyt projektu (passthrough)', () => {
   assert.deepEqual(parsed.futureField, { a: 1 })
 })
 
-test('leady nie wliczają się do wyników i lądują w filtrze wycen', () => {
-  assert.equal(countsTowardRevenue('lead'), false)
-  assert.equal(matchesFilter('lead', 'quotes'), true)
-  assert.equal(matchesFilter('lead', 'projects'), false)
+test('status „lead" z krótko istniejącej wersji czyta się jako wycena', () => {
+  const old = projectSchema.parse({ id: 'p-1', date: '2026-10-02', status: 'lead', quote: null })
+  assert.equal(old.status, 'quote')
+})
+
+test('„Ukryj nieprzyjęte" chowa odrzucone wyceny w każdym filtrze', () => {
+  assert.equal(matchesFilter('lost', 'all', { hideLost: true }), false)
+  assert.equal(matchesFilter('lost', 'quotes', { hideLost: true }), false)
+  assert.equal(matchesFilter('quote', 'quotes', { hideLost: true }), true)
+  assert.equal(matchesFilter('won', 'all', { hideLost: true }), true)
+  assert.equal(matchesFilter('lost', 'all'), true, 'bez przełącznika widać wszystko')
 })

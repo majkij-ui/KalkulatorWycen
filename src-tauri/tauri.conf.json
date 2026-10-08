@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "NonoiseMedia QG",
-  "version": "0.1.2",
-  "identifier": "com.michal.quotegen",
+  "productName": "NonoiseMedia Hub",
+  "version": "0.3.0",
+  "identifier": "com.michal.nonoisehub",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Quote Gen",
+        "title": "NonoiseMedia Hub",
         "width": 1400,
         "height": 900,
         "resizable": true,

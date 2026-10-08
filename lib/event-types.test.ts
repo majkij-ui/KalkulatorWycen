@@ -80,7 +80,6 @@ test('eventData czyta pola typu, naprawia złe i zachowuje nieznane', () => {
 })
 
 test('podpowiedzi statusu idą tylko naprzód', () => {
-  assert.equal(statusSuggestion('lead', 'quote_sent'), 'quote')
   assert.equal(statusSuggestion('quote', 'won'), 'won')
   assert.equal(statusSuggestion('won', 'invoice_paid'), 'done')
   assert.equal(statusSuggestion('quote', 'lost'), 'lost')
@@ -89,6 +88,7 @@ test('podpowiedzi statusu idą tylko naprzód', () => {
   assert.equal(statusSuggestion('won', 'quote_sent'), null, 'poprawiona wycena nie cofa realizacji')
   assert.equal(statusSuggestion('won', 'lost'), null, 'realizacji nie zamykamy podpowiedzią')
   assert.equal(statusSuggestion('done', 'lead_in'), null)
+  assert.equal(statusSuggestion('quote', 'lead_in'), null, 'nowe zapytanie nie zmienia statusu')
   assert.equal(statusSuggestion('quote', 'shoot_day'), null, 'typ bez podpowiedzi')
   assert.equal(statusSuggestion('quote', 'quote_sent'), null, 'już ten status')
 })

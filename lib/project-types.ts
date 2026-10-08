@@ -19,21 +19,22 @@ export const PROJECT_SCHEMA_VERSION = 1 as const
 // ── Statusy ──────────────────────────────────────────────────────────────────
 
 /**
- * `lead`  — zapytanie od klienta, wyceny jeszcze nie ma
- * `quote` — sama wycena, nie wiadomo czy wejdzie
+ * `quote` — wycena (także projekt, który jeszcze wyceny nie ma — „brak wyceny")
  * `won`   — klient zaakceptował, projekt w realizacji
  * `done`  — zrealizowany i rozliczony
- * `lost`  — lead lub wycena odrzucone
+ * `lost`  — wycena odrzucona
  *
  * Kolejność = etapy wątku (lista statusów w przełączniku idzie tą kolejnością).
- * Nowy status dopisujemy na końcu albo w miejscu etapu — wartości są w pliku,
- * więc istniejących kluczy NIGDY nie zmieniamy.
+ *
+ * Statusu `lead` celowo NIE ma (decyzja 2026-10-08, był krótko w T1b): to, że
+ * projekt zaczął się od zapytania, mówi wydarzenie `lead_in` w kalendarzu, a
+ * lejek (ile zapytań → ile wycen → ile zleceń) liczymy z wydarzeń. Zapisane
+ * wcześniej `lead` czyta się jako `quote` dzięki `.catch` w schemacie.
  */
-export const PROJECT_STATUSES = ['lead', 'quote', 'won', 'done', 'lost'] as const
+export const PROJECT_STATUSES = ['quote', 'won', 'done', 'lost'] as const
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  lead: 'Lead',
   quote: 'Wycena',
   won: 'W realizacji',
   done: 'Zrealizowany',
@@ -41,7 +42,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 }
 
 /**
- * Czy projekt wlicza się do wyników firmy. Leady, wyceny i przegrane są tylko
+ * Czy projekt wlicza się do wyników firmy. Wyceny i przegrane są tylko
  * hipotezami — nigdy nie zasilają przychodu ani ROI sprzętu.
  */
 export function countsTowardRevenue(status: ProjectStatus): boolean {
@@ -53,13 +54,18 @@ export const PROJECT_FILTERS = ['all', 'projects', 'quotes'] as const
 export type ProjectFilter = (typeof PROJECT_FILTERS)[number]
 
 /**
- * Leady trafiają do „wycen", dopóki T3 nie zastąpi tych trzech filtrów
- * chipami statusów z domyślnym widokiem „tylko realizacje".
+ * `hideLost` — przełącznik „Ukryj nieprzyjęte" (domyślnie włączony): odrzucone
+ * wyceny to archiwum, nie coś, co chce się przeglądać na co dzień.
  */
-export function matchesFilter(status: ProjectStatus, filter: ProjectFilter): boolean {
+export function matchesFilter(
+  status: ProjectStatus,
+  filter: ProjectFilter,
+  options: { hideLost?: boolean } = {}
+): boolean {
+  if (options.hideLost && status === 'lost') return false
   if (filter === 'all') return true
   if (filter === 'projects') return status === 'won' || status === 'done'
-  return status === 'lead' || status === 'quote' || status === 'lost'
+  return status === 'quote' || status === 'lost'
 }
 
 // ── Źródło leada ─────────────────────────────────────────────────────────────

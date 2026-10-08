@@ -150,7 +150,17 @@ function ProjectView() {
 function ShellContent() {
   // Kalendarz jest ekranem startowym — przegląd firmy zaczyna się od czasu.
   const [section, setSection] = useState<Section>('kalendarz')
-  const { activeProject, openProject } = useProjectHub()
+  const { activeProject, openProject, closeProject } = useProjectHub()
+
+  // Klik w „Projekty" w pasku bocznym zawsze wraca do LISTY — także z otwartego
+  // projektu (pasek boczny jest zawsze widoczny, przycisk „Projekty" w pasku
+  // projektu trzeba by najpierw przewinąć). Otwarcie projektu z kalendarza czy
+  // finansów idzie przez `goToProject`, więc tego nie dotyczy.
+  const changeSection = (next: Section) => {
+    if (next === 'projekty') closeProject()
+    setSection(next)
+    window.scrollTo({ top: 0 })
+  }
 
   const goToProject = (id: string) => {
     void openProject(id)
@@ -161,7 +171,7 @@ function ShellContent() {
   return (
     <div className="relative min-h-screen bg-[#050505] md:flex">
       <AmbientGlow />
-      <Sidebar section={section} onChange={setSection} />
+      <Sidebar section={section} onChange={changeSection} />
 
       <div className="relative min-w-0 flex-1">
         {section === 'kalendarz' && <CalendarSection onOpenProject={goToProject} />}
