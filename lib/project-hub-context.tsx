@@ -109,7 +109,11 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     async (id: string) => {
       const project = projects.find((p) => p.id === id)
       if (!project) return
-      loadQuoteSnapshot(project.quote as never)
+      // Lead nie ma jeszcze wyceny: czysty kalkulator z klientem z wątku, żeby
+      // wycena „podjęła wątek" zamiast zostawić dane poprzedniego projektu.
+      loadQuoteSnapshot(
+        (project.quote ?? { data: { clientName: project.client }, marginMultiplier: 1 }) as never
+      )
       setActiveProjectId(id)
     },
     [projects, loadQuoteSnapshot]
@@ -127,6 +131,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
         name: trimmed,
         quote: buildQuoteSnapshot(),
         client: data.clientName ?? '',
+        existing: projects,
       })
       const withFinancials: Project = { ...project, financials: computeFinancials() }
       const next = await upsertProject(withFinancials)
@@ -134,7 +139,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       setActiveProjectId(withFinancials.id)
       return withFinancials
     },
-    [buildQuoteSnapshot, data.clientName, computeFinancials]
+    [buildQuoteSnapshot, data.clientName, computeFinancials, projects]
   )
 
   const saveActiveProject = useCallback(async () => {
@@ -185,8 +190,9 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     return result
   }, [])
 
+  /** Lead bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
   const missingFinancialsCount = useMemo(
-    () => projects.filter((p) => !p.financials).length,
+    () => projects.filter((p) => !p.financials && p.quote).length,
     [projects]
   )
 

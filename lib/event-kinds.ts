@@ -14,12 +14,6 @@ import { z } from 'zod'
 import type { EventGroup } from './calendar-palette'
 import type { ProjectStatus } from './project-types'
 
-/**
- * Status, który wydarzenie może ZAPROPONOWAĆ projektowi. `lead` dojdzie do
- * statusów projektu w T1b; do tego czasu typ żyje tutaj.
- */
-export type ThreadStatus = 'lead' | ProjectStatus
-
 export interface EventKind {
   key: string
   /** Pełna nazwa w formularzach i listach. */
@@ -32,7 +26,7 @@ export interface EventKind {
   /** Pola specyficzne dla typu (`event.data`). Wszystkie opcjonalne. */
   data: z.ZodTypeAny
   /** Status, który ten typ proponuje projektowi (zawsze do potwierdzenia). */
-  suggestsStatus?: ThreadStatus
+  suggestsStatus?: ProjectStatus
 }
 
 // ── Pola wspólne dla kilku typów ─────────────────────────────────────────────
@@ -46,9 +40,6 @@ const dateKey = z
   .optional()
   .catch(undefined)
 
-/** Skąd przyszedł lead — otwarta lista, ale z podpowiedziami w formularzu. */
-export const LEAD_CHANNELS = ['email', 'telefon', 'google_ads', 'instagram', 'polecenie', 'powracajacy', 'inne'] as const
-
 const noData = z.object({}).passthrough()
 
 export const EVENT_KINDS: EventKind[] = [
@@ -58,9 +49,9 @@ export const EVENT_KINDS: EventKind[] = [
     short: 'lead',
     group: 'sprzedaz',
     range: false,
-    data: z
-      .object({ channel: text, contactName: text, contactEmail: text, summary: text })
-      .passthrough(),
+    // Kanał TEJ wiadomości (mail, telefon, formularz). Źródło leada i osoba
+    // kontaktowa to cechy projektu (`leadSource`, `contact`) — jedno miejsce.
+    data: z.object({ channel: text, summary: text }).passthrough(),
     suggestsStatus: 'lead',
   },
   { key: 'reply_sent', label: 'Odpowiedź wysłana', short: 'odp.', group: 'sprzedaz', range: false, data: noData },
@@ -188,7 +179,7 @@ export function eventData(event: { kind: string; data?: Record<string, unknown> 
  * zamyka lead lub wycenę, ale klient może wrócić (lost → won), a projektu w
  * realizacji nie cofamy do „przegranego" podpowiedzią — to robi się ręcznie.
  */
-const STATUS_RANK: Record<ThreadStatus, number> = {
+const STATUS_RANK: Record<ProjectStatus, number> = {
   lead: 0,
   quote: 1,
   lost: 1.5,
@@ -201,7 +192,7 @@ const STATUS_RANK: Record<ThreadStatus, number> = {
  * tylko ruch naprzód — wysłanie poprawionej wyceny projektowi w realizacji nie
  * może sugerować cofnięcia go do „wyceny". Decyzja zawsze należy do użytkownika.
  */
-export function statusSuggestion(current: ThreadStatus, eventKindKey: string): ThreadStatus | null {
+export function statusSuggestion(current: ProjectStatus, eventKindKey: string): ProjectStatus | null {
   const target = eventKind(eventKindKey).suggestsStatus
   if (!target || target === current) return null
   return STATUS_RANK[target] > STATUS_RANK[current] ? target : null

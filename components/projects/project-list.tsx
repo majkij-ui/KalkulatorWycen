@@ -133,7 +133,7 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
           ) : (
             <>
               <div className="text-zinc-600">—</div>
-              <div className="text-[11px] text-zinc-600">nie policzono</div>
+              <div className="text-[11px] text-zinc-600">{project.quote ? 'nie policzono' : 'brak wyceny'}</div>
             </>
           )}
         </div>

@@ -19,15 +19,21 @@ export const PROJECT_SCHEMA_VERSION = 1 as const
 // ── Statusy ──────────────────────────────────────────────────────────────────
 
 /**
+ * `lead`  — zapytanie od klienta, wyceny jeszcze nie ma
  * `quote` — sama wycena, nie wiadomo czy wejdzie
  * `won`   — klient zaakceptował, projekt w realizacji
  * `done`  — zrealizowany i rozliczony
- * `lost`  — wycena odrzucona
+ * `lost`  — lead lub wycena odrzucone
+ *
+ * Kolejność = etapy wątku (lista statusów w przełączniku idzie tą kolejnością).
+ * Nowy status dopisujemy na końcu albo w miejscu etapu — wartości są w pliku,
+ * więc istniejących kluczy NIGDY nie zmieniamy.
  */
-export const PROJECT_STATUSES = ['quote', 'won', 'done', 'lost'] as const
+export const PROJECT_STATUSES = ['lead', 'quote', 'won', 'done', 'lost'] as const
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  lead: 'Lead',
   quote: 'Wycena',
   won: 'W realizacji',
   done: 'Zrealizowany',
@@ -35,8 +41,8 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 }
 
 /**
- * Czy projekt wlicza się do wyników firmy. Wyceny (`quote`) i przegrane
- * (`lost`) są tylko hipotezami — nigdy nie zasilają przychodu ani ROI sprzętu.
+ * Czy projekt wlicza się do wyników firmy. Leady, wyceny i przegrane są tylko
+ * hipotezami — nigdy nie zasilają przychodu ani ROI sprzętu.
  */
 export function countsTowardRevenue(status: ProjectStatus): boolean {
   return status === 'won' || status === 'done'
@@ -46,10 +52,32 @@ export function countsTowardRevenue(status: ProjectStatus): boolean {
 export const PROJECT_FILTERS = ['all', 'projects', 'quotes'] as const
 export type ProjectFilter = (typeof PROJECT_FILTERS)[number]
 
+/**
+ * Leady trafiają do „wycen", dopóki T3 nie zastąpi tych trzech filtrów
+ * chipami statusów z domyślnym widokiem „tylko realizacje".
+ */
 export function matchesFilter(status: ProjectStatus, filter: ProjectFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'projects') return status === 'won' || status === 'done'
-  return status === 'quote' || status === 'lost'
+  return status === 'lead' || status === 'quote' || status === 'lost'
+}
+
+// ── Źródło leada ─────────────────────────────────────────────────────────────
+
+/**
+ * Skąd klient o nas wiedział (do statystyk „konwersja wg źródła"). To cecha
+ * PROJEKTU; kanał konkretnej wiadomości (mail, telefon) żyje w wydarzeniu.
+ * Pole w schemacie jest wolnym stringiem — lista to podpowiedzi formularza.
+ */
+export const LEAD_SOURCES = ['google_ads', 'instagram', 'polecenie', 'powracajacy', 'strona', 'inne'] as const
+
+export const LEAD_SOURCE_LABELS: Record<(typeof LEAD_SOURCES)[number], string> = {
+  google_ads: 'Google Ads',
+  instagram: 'Instagram',
+  polecenie: 'Polecenie',
+  powracajacy: 'Powracający klient',
+  strona: 'Strona www',
+  inne: 'Inne',
 }
 
 // ── Sprzęt ───────────────────────────────────────────────────────────────────
@@ -143,33 +171,59 @@ const quoteSnapshotPassthrough = z.custom<QuoteSnapshot>(
   (value) => !!value && typeof value === 'object'
 )
 
-export const projectSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().catch(''),
-  client: z.string().catch(''),
-  status: z.enum(PROJECT_STATUSES).catch('quote'),
-  /**
-   * Data księgowa projektu (ISO YYYY-MM-DD) — po niej agregujemy kwartały i
-   * lata. Domyślnie dzień utworzenia, edytowalna (zdjęcia bywają w innym
-   * miesiącu niż wycena).
-   */
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'oczekiwano YYYY-MM-DD'),
-  createdAt: z.string().catch(''),
-  updatedAt: z.string().catch(''),
-  quote: quoteSnapshotPassthrough,
-  financials: projectFinancialsSchema.nullable().catch(null),
-  equipment: z.array(projectEquipmentUsageSchema).catch([]),
-  /** Wnioski / lessons learned z projektu. */
-  notes: z.string().catch(''),
-  /**
-   * Id wyceny, z której projekt powstał podczas migracji do v3.
-   *
-   * MUSI być częścią schematu: `z.object` domyślnie obcina nieznane klucze, a
-   * bez tego pola migracja przestaje być idempotentna i przy każdym starcie
-   * duplikuje całą bibliotekę.
-   */
-  migratedFromQuoteId: z.string().optional().catch(undefined),
-})
+/** Osoba kontaktowa — kopiowana z poprzedniego projektu tego samego klienta. */
+export const projectContactSchema = z
+  .object({
+    name: z.string().catch(''),
+    email: z.string().catch(''),
+    phone: z.string().catch(''),
+  })
+  .passthrough()
+export type ProjectContact = z.infer<typeof projectContactSchema>
+
+/**
+ * `.passthrough()` — pola dopisane przez nowszą wersję (albo przez import
+ * Claude'a) przeżywają zapis w starszej. Nowe pola dodajemy jako opcjonalne
+ * z `.catch()`, bez podbijania `PROJECT_SCHEMA_VERSION`.
+ */
+export const projectSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().catch(''),
+    /** Klient jako cecha projektu (bez osobnej kartoteki — plan §3.2a). */
+    client: z.string().catch(''),
+    status: z.enum(PROJECT_STATUSES).catch('quote'),
+    /**
+     * Slot palety kalendarza (`'amber'`), nie hex. Brak = jeszcze nie wybrany;
+     * kolor wylicza wtedy `projectColorFor` i utrwala go pierwszy zapis.
+     */
+    colorKey: z.string().optional().catch(undefined),
+    contact: projectContactSchema.optional().catch(undefined),
+    /** Klucz z `LEAD_SOURCES` albo dowolny tekst; brak = nieznane. */
+    leadSource: z.string().optional().catch(undefined),
+    /**
+     * Data księgowa projektu (ISO YYYY-MM-DD) — po niej agregujemy kwartały i
+     * lata. Domyślnie dzień utworzenia, edytowalna (zdjęcia bywają w innym
+     * miesiącu niż wycena).
+     */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'oczekiwano YYYY-MM-DD'),
+    createdAt: z.string().catch(''),
+    updatedAt: z.string().catch(''),
+    /** `null` = lead bez wyceny. Uszkodzona wartość też daje `null`, nie odrzuca projektu. */
+    quote: quoteSnapshotPassthrough.nullable().catch(null),
+    financials: projectFinancialsSchema.nullable().catch(null),
+    equipment: z.array(projectEquipmentUsageSchema).catch([]),
+    /** Wnioski / lessons learned z projektu. */
+    notes: z.string().catch(''),
+    /**
+     * Id wyceny, z której projekt powstał podczas migracji do v3.
+     *
+     * Jawnie w schemacie (nie tylko dzięki `.passthrough()`): od tego pola zależy
+     * idempotencja migracji — bez niego każdy start duplikowałby całą bibliotekę.
+     */
+    migratedFromQuoteId: z.string().optional().catch(undefined),
+  })
+  .passthrough()
 export type Project = z.infer<typeof projectSchema>
 
 // ── Identyfikatory (idiom z quote-library.ts) ────────────────────────────────

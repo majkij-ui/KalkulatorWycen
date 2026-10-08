@@ -345,7 +345,7 @@ every project colour: B clip text ≥ 4.5:1, C/D names on the page background �
 |---|---|---|
 | **Design pass** | Palette: ~12 project hues + 5 type-group accents that stay distinct when combined, dark theme, small sizes. Month-view mockup. | — |
 | **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
-| **T1b Project additions** | §3.5: status `lead`, `colorKey`, optional quote, `contact`, `leadSource`; `ThreadStatus` in event-kinds collapses into `ProjectStatus`. | Phase 4 committed (touches `project-hub-context.tsx`) |
+| **T1b Project additions** ✅ | Status `lead` (first in thread order; counts toward nothing; sits in the "wyceny" filter until T3). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
 | **T2 Calendar tab** | Month view, add/edit sheet, colours, layer filters, gear purchases projected, becomes landing tab. | T1, design |
 | **T3 Lead → thread** | "Nowy lead" flow, client picker + contact copy, project-list filters (jobs-only default), Oś czasu tab, status suggestions, quote prefill from lead. | T1 |
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
@@ -358,6 +358,16 @@ The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand 
 that start at the lead. T4 then fills in 2026 for you.
 
 ---
+
+### Follow-ups noticed during T1
+
+- `Project.date` still has no `.catch`, so a project with a malformed date is dropped on read and
+  lost on the next collection write (pre-existing; an existing test asserts it). Worth relaxing
+  the same way events were, once the finance views handle an undated project.
+- The project bar now wraps the status switcher onto a second row (5 statuses). Redesign as
+  part of T3's project tabs.
+- Opening a project whose snapshot has no `pdfDraft` keeps the previous project's PDF draft
+  (pre-existing calculator behaviour, now also hit by leads).
 
 ## 7. Decisions
 

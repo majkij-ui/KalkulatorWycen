@@ -87,3 +87,9 @@ test('backfillMissingFinancials: uzupełnia tylko brakujące, nie rusza zamrożo
   assert.equal(result.projects[2].financials, null)
   assert.equal(projects[1].financials, null, 'wejście nie jest mutowane')
 })
+
+test('backfill pomija leady bez wyceny i nie liczy ich jako błędu', () => {
+  const result = backfillMissingFinancials([{ id: 'lead', financials: null, quote: null }])
+  assert.equal(result.filledCount, 0)
+  assert.equal(result.skippedCount, 0)
+})

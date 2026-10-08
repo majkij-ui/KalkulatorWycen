@@ -11,6 +11,7 @@
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS, type ProjectStatus } from '@/lib/project-types'
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
+  lead: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
   quote: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
   won: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
   done: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<ProjectStatus, string> = {
 
 /** Kropka statusu — używana też w wąskich miejscach bez etykiety. */
 export const STATUS_DOT: Record<ProjectStatus, string> = {
+  lead: 'bg-violet-400',
   quote: 'bg-sky-400',
   won: 'bg-amber-400',
   done: 'bg-emerald-400',

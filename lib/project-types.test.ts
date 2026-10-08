@@ -120,9 +120,54 @@ test('migawka wyceny przechodzi walidację nietknięta', () => {
   assert.deepEqual(parsed.quote, snapshot, 'nieznane pola wyceny muszą przetrwać')
 })
 
-test('projekt bez migawki wyceny jest odrzucany', () => {
+test('lead bez wyceny jest poprawnym projektem (quote: null)', () => {
+  const lead = projectSchema.parse({ id: 'p-1', name: 'Zapytanie', date: '2026-10-02', status: 'lead', quote: null })
+  assert.equal(lead.status, 'lead')
+  assert.equal(lead.quote, null)
+  assert.equal(projectSchema.parse({ id: 'p-2', date: '2026-10-02' }).quote, null, 'brak pola = null')
   assert.equal(
-    projectSchema.safeParse({ id: 'p-1', name: 'Test', date: '2026-05-14', quote: null }).success,
-    false
+    projectSchema.parse({ id: 'p-3', date: '2026-10-02', quote: 'śmieci' }).quote,
+    null,
+    'uszkodzona wycena nie odrzuca całego projektu'
   )
+})
+
+test('rekord sprzed T1b czyta się bez zmian, nowe pola są opcjonalne', () => {
+  const old = projectSchema.parse({
+    id: 'p-old',
+    name: 'Stary',
+    client: 'Tchibo',
+    status: 'won',
+    date: '2026-05-14',
+    quote: { data: {} },
+    financials: null,
+    equipment: [],
+    notes: '',
+  })
+  assert.equal(old.status, 'won')
+  assert.equal(old.colorKey, undefined)
+  assert.equal(old.contact, undefined)
+  assert.equal(old.leadSource, undefined)
+})
+
+test('pola z nowszej wersji przeżywają odczyt projektu (passthrough)', () => {
+  const parsed = projectSchema.parse({
+    id: 'p-1',
+    date: '2026-10-02',
+    quote: null,
+    colorKey: 'amber',
+    leadSource: 'google_ads',
+    contact: { name: 'Anna', email: 'anna@example.com', phone: 123, role: 'brand manager' },
+    futureField: { a: 1 },
+  }) as Record<string, unknown>
+  assert.equal(parsed.colorKey, 'amber')
+  assert.equal(parsed.leadSource, 'google_ads')
+  assert.deepEqual(parsed.contact, { name: 'Anna', email: 'anna@example.com', phone: '', role: 'brand manager' })
+  assert.deepEqual(parsed.futureField, { a: 1 })
+})
+
+test('leady nie wliczają się do wyników i lądują w filtrze wycen', () => {
+  assert.equal(countsTowardRevenue('lead'), false)
+  assert.equal(matchesFilter('lead', 'quotes'), true)
+  assert.equal(matchesFilter('lead', 'projects'), false)
 })

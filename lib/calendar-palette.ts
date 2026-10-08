@@ -71,6 +71,30 @@ export function nextProjectColor(used: readonly string[]): ProjectColorKey {
   return best
 }
 
+export function isProjectColorKey(key: unknown): key is ProjectColorKey {
+  return typeof key === 'string' && key in PROJECT_COLORS
+}
+
+/** FNV-1a — krótki, deterministyczny skrót id (bez zależności). */
+function hashId(id: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) {
+    hash ^= id.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
+/**
+ * Kolor projektu: zapisany slot, a gdy go brak (projekty sprzed kalendarza,
+ * import) — slot wyliczony ze skrótu id. Skrót jest STABILNY: kolor starego
+ * projektu nie zmienia się, gdy dochodzą nowe. Pierwszy zapis projektu go utrwala.
+ */
+export function projectColorFor(project: { id: string; colorKey?: string | null }): ProjectColorKey {
+  if (isProjectColorKey(project.colorKey)) return project.colorKey
+  return PROJECT_COLOR_KEYS[hashId(project.id) % PROJECT_COLOR_KEYS.length]
+}
+
 export interface TileColors {
   /** Tło kafla — ciemne, nasycone na tyle, by odróżnić projekty. */
   bg: string

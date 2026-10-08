@@ -271,3 +271,63 @@ test('migracja zachowuje pełną migawkę wyceny', async () => {
   assert.equal(snapshot.marginMultiplier, 1.1)
   assert.deepEqual(snapshot.pricingConfig, { stawka: 1000 }, 'cennik z chwili zapisu ocalony')
 })
+
+// ── T1b: leady, kolory, pola z nowszej wersji ────────────────────────────────
+
+test('lead bez wyceny: startuje jako lead i przechodzi zapis oraz odczyt', async () => {
+  const lead = createProject({ name: 'Zapytanie — Festiwal', client: 'Fundacja Wisła' })
+  assert.equal(lead.status, 'lead', 'brak wyceny = lead')
+  assert.equal(lead.quote, null)
+
+  await upsertProject(lead)
+  const [saved] = await listProjects()
+  assert.equal(saved.status, 'lead')
+  assert.equal(saved.quote, null)
+  assert.equal(filterProjects([saved], 'projects').length, 0, 'lead nie jest realizacją')
+})
+
+test('nowy projekt dostaje kolor inny niż istniejące', async () => {
+  const first = createProject({ name: 'A' })
+  const second = createProject({ name: 'B', existing: [first] })
+  const third = createProject({ name: 'C', existing: [first, second] })
+  assert.equal(new Set([first.colorKey, second.colorKey, third.colorKey]).size, 3)
+})
+
+test('zapis utrwala kolor projektu, który go nie miał (np. zmigrowanego)', async () => {
+  storage.setItem(
+    WEB_PROJECTS_KEY,
+    JSON.stringify({ version: 1, items: [{ id: 'p-old', name: 'Stary', date: '2026-05-01', quote: { version: 2 } }] })
+  )
+  const [old] = await listProjects()
+  assert.equal(old.colorKey, undefined, 'odczyt niczego nie zapisuje')
+
+  await setProjectStatus('p-old', 'won')
+  const stored = JSON.parse(storage.getItem(WEB_PROJECTS_KEY) ?? '{}').items[0]
+  assert.equal(typeof stored.colorKey, 'string')
+  assert.ok(stored.colorKey.length > 0, 'kolor zapisany przy pierwszym zapisie')
+})
+
+test('pola z nowszej wersji przeżywają zapis INNEGO projektu', async () => {
+  storage.setItem(
+    WEB_PROJECTS_KEY,
+    JSON.stringify({
+      version: 1,
+      items: [
+        {
+          id: 'p-future',
+          name: 'Z przyszłości',
+          date: '2026-05-01',
+          quote: null,
+          status: 'lead',
+          contact: { name: 'Anna', email: 'a@example.com', phone: '', linkedin: 'anna-k' },
+          gmailThreadId: 't-123',
+        },
+      ],
+    })
+  )
+  await upsertProject(createProject({ name: 'Inny' }))
+  const raw = JSON.parse(storage.getItem(WEB_PROJECTS_KEY) ?? '{}').items as Record<string, unknown>[]
+  const future = raw.find((p) => p.id === 'p-future')!
+  assert.equal(future.gmailThreadId, 't-123')
+  assert.deepEqual(future.contact, { name: 'Anna', email: 'a@example.com', phone: '', linkedin: 'anna-k' })
+})

@@ -160,7 +160,8 @@ export function backfillMissingFinancials<
   let filledCount = 0
   let skippedCount = 0
   const next = projects.map((project) => {
-    if (project.financials) return project
+    // Lead bez wyceny (`quote: null`) to nie błąd danych — nie liczymy go jako pominiętego.
+    if (project.financials || !project.quote) return project
     const financials = computeSnapshotFinancials(project.quote as FinancialsSource, now)
     if (!financials) {
       skippedCount += 1

@@ -20,6 +20,7 @@ import {
 } from './project-types'
 import { matchesFilter } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
+import { nextProjectColor, projectColorFor } from './calendar-palette'
 
 export const PROJECTS_FILE = 'projects.json'
 export const WEB_PROJECTS_KEY = 'nonoise-projects-v1'
@@ -39,30 +40,45 @@ const store = createCollectionStore<Project>({
 })
 
 export const listProjects = store.list
-export const upsertProject = store.upsert
 export const deleteProject = store.remove
 export const replaceAllProjects = store.replaceAll
 export const readProjectsRaw = store.readRaw
 
-/** Nowy projekt z istniejącej migawki wyceny. */
+/**
+ * Zapis projektu. Utrwala kolor: projekt bez `colorKey` dostaje slot wyliczony
+ * ze swojego id, więc kolor w kalendarzu nie zmieni się już nigdy, nawet jeśli
+ * paleta się kiedyś przebuduje.
+ */
+export function upsertProject(project: Project): Promise<Project[]> {
+  return store.upsert(project.colorKey ? project : { ...project, colorKey: projectColorFor(project) })
+}
+
+/**
+ * Nowy projekt — z migawki wyceny albo bez niej (lead, `quote: null`).
+ * `existing` = obecne projekty: nowy dostaje najrzadziej używany kolor, więc
+ * kolejne projekty w kalendarzu nie wyglądają tak samo.
+ */
 export function createProject(params: {
   name: string
-  quote: QuoteSnapshot
+  quote?: QuoteSnapshot | null
   client?: string
   status?: ProjectStatus
   date?: string
+  existing?: Pick<Project, 'id' | 'colorKey'>[]
 }): Project {
   const now = new Date()
   const nowIso = now.toISOString()
+  const quote = params.quote ?? null
   return {
     id: createProjectId(),
     name: params.name,
     client: params.client ?? '',
-    status: params.status ?? 'quote',
+    status: params.status ?? (quote ? 'quote' : 'lead'),
+    colorKey: nextProjectColor((params.existing ?? []).map(projectColorFor)),
     date: params.date ?? toDateKey(now),
     createdAt: nowIso,
     updatedAt: nowIso,
-    quote: params.quote,
+    quote,
     financials: null,
     equipment: [],
     notes: '',

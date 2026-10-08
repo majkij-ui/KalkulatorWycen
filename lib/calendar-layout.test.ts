@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { addDays, daysBetween, hiddenPerDay, layoutWeek, monthGrid } from './calendar-layout'
-import { PROJECT_COLOR_KEYS, PROJECT_COLOR_ORDER, nextProjectColor, projectTile, NEUTRAL_TILE } from './calendar-palette'
+import { PROJECT_COLOR_KEYS, PROJECT_COLOR_ORDER, nextProjectColor, projectColorFor, projectTile, NEUTRAL_TILE } from './calendar-palette'
 import { eventKind } from './event-kinds'
 
 test('październik 2026 zaczyna siatkę w poniedziałek 28 września', () => {
@@ -73,4 +73,14 @@ test('kolory projektów: kolejność przydziału używa każdego slotu raz', () 
 test('nieznane klucze nie wywracają aplikacji', () => {
   assert.deepEqual(projectTile('ultraviolet'), NEUTRAL_TILE)
   assert.equal(eventKind('ksef_import').group, 'inne')
+})
+
+test('kolor projektu: zapisany slot wygrywa, brak = stały slot z id', () => {
+  assert.equal(projectColorFor({ id: 'p-1', colorKey: 'teal' }), 'teal')
+  const derived = projectColorFor({ id: 'p-123' })
+  assert.ok(PROJECT_COLOR_KEYS.includes(derived))
+  assert.equal(projectColorFor({ id: 'p-123', colorKey: '' }), derived, 'ten sam przy każdym odczycie')
+  assert.equal(projectColorFor({ id: 'p-123', colorKey: 'ultrafiolet' }), derived, 'nieznany slot = jak brak')
+  const spread = new Set(Array.from({ length: 60 }, (_, i) => projectColorFor({ id: `p-${i}` })))
+  assert.ok(spread.size >= 10, `skrót rozkłada kolory (${spread.size}/12)`)
 })
