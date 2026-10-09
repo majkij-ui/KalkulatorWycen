@@ -200,7 +200,7 @@ Projects stays a clean list for when you only want to look at jobs.
   on by default and remembered; it shows how many are hidden. ✅
 - When lost quotes are shown, their amounts are grey — they don't count toward results. ✅
 - „Projekty" in the sidebar always returns to the list, also from an open project. ✅
-- Still to do in T3: client filter (picker) with that client's total; year filter.
+- Client filter (picker) with that client's revenue, and a year filter; both remembered. ✅ (T3)
 
 **Project page tabs**: `Oś czasu · Klient/Lead · Wycena · Realizacja · Notatki`
 - *Oś czasu*: the thread as a vertical timeline, with derived numbers inline ("odpowiedź po 6 h",
@@ -353,7 +353,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
 | **T1b Project additions** ✅ | ~~Status `lead`~~ (reverted 2026-10-08: a lead is the `lead_in` event; quote-less projects are `quote`, see §3.5). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
 | **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy projekt…" (creates a quote-less project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
-| **T3 Project thread** (next, spec in §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing today's crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes its thread. | T1 |
+| **T3 Project thread** ✅ (2026-10-09, §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing the crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes it together with its thread, with undo. Pure: `clients.ts`, `project-list.ts`, `project-deletion.ts`, header client rule in `project-save.ts`; collection writes are serialized. 27 new tests; 18/18 mutations caught; flows verified in the browser. | T1 |
 | **T4 Gmail import v0** (partly done) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). Left: inbox format + review queue in the app, then a recurring "sync my mail" from chat for new leads, replies and invoices. | T1, T3 |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
@@ -392,6 +392,36 @@ to the existing filters + "Ukryj nieprzyjęte"; remember the last choice.
 **Deleting a project soft-deletes its events too** (decided): the confirmation says how many
 ("usunie też 6 wydarzeń"); events get `deletedAt`, nothing is hard-deleted. Projected gear purchases
 are not project events and stay.
+
+**As built (2026-10-09):**
+- **Project deletion is soft too** (`Project.deletedAt`), so "nothing is hard-deleted" holds for the
+  project as well. The project and its thread get the *same* `deletedAt`; "Cofnij" on the list
+  restores exactly those events (an event deleted separately before stays deleted). Migration and the
+  financials backfill read the full file (`listAllProjects`), so a deleted migrated quote does not come
+  back and a whole-collection write does not drop deleted records.
+- **Leads go with the project.** A `lead_in` linked to the deleted project is soft-deleted with it and
+  leaves the Marketing stats; the confirmation says so ("w tym 1 lead"). If leads should rather stay
+  as project-less leads, that is a one-line change in `planProjectDeletion`.
+- **Header client wins.** The client set in the header is the project's client (grouping, client
+  revenue). The "Nazwa klienta" field in the PDF tab is only the printed label (e.g. the full company
+  name) and fills the project's client only when it is empty (`clientAfterSave`). A blank quote picks
+  up a newly chosen client only while nothing would be lost: no saved quote, nothing built in the
+  calculator, PDF tab not opened yet (`canReprefillBlankQuote`).
+- **Client picker:** suggestions by normalised key (`clientKey`: trim, case, Polish letters incl. "ł"),
+  most frequent spelling shown. Typed text is kept as typed; picking from the list uses the shown
+  spelling. Contact is copied from the client's most recent project that has one, only when the
+  current project has none ("Kontakt (…) skopiowany z projektu „…""). The timeline tab shows and edits
+  the contact; "Przepisz z leada" fills it from the lead's contact fields.
+- **Timeline tab:** numbers on top, thread below (shared `ThreadStatsList` / `ThreadTimeline` with the
+  calendar's thread panel), lead card with one-click quality, campaign/origin, channel, request,
+  contact; add/edit through the calendar's `EventForm`; the shared `EventNotice` gives "Cofnij" after a
+  delete and the confirm-first status suggestion after a save.
+- **Notes tab:** autosave ~0.7 s after typing, on blur and when leaving the tab. Hub writes go through
+  `patchProject` on the latest in-memory project, and the collection store queues writes, so a notes
+  save never reverts a status change made a moment before (and vice versa).
+- **List:** client filter shows the client's revenue (same rule as Finance: W realizacji +
+  Zrealizowane, `sumaNetto`), for the selected year if one is chosen; filter, client and year are
+  remembered (`nonoise-projects-list-v1`); search ignores case and Polish letters.
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
@@ -466,15 +496,24 @@ header asks for it, and months without a reading count as 0 zł (no estimate).
 
 - The Sprzęt screen has no field for `purchaseDate`; the calendar form is currently the only way to
   set it. Add a date column/field there (T5 touches the gear tab anyway).
-- Deleting a project leaves its events behind; the calendar shows them as „Usunięty projekt" on a
-  neutral tile. **Decided 2026-10-09: soft-delete the thread with the project (T3, §6b).**
+- ~~Deleting a project leaves its events behind~~ — done in T3: the thread is soft-deleted with the
+  project (§6b). Events deleted by older builds' hard project deletes still show as „Usunięty projekt".
 - Layer toggles and the viewed month are not remembered between launches.
 
 - `Project.date` still has no `.catch`, so a project with a malformed date is dropped on read and
   lost on the next collection write (pre-existing; an existing test asserts it). Worth relaxing
   the same way events were, once the finance views handle an undated project.
-- The project bar is overcrowded (name squeezed to ~145 px, origin dropdown, status, save). Redesign
-  as part of T3's project header + tabs; the paid checkbox moves there too.
+- ~~The project bar is overcrowded~~ — replaced by the T3 project header (name on its own row).
+
+### Follow-ups noticed during T3
+
+- "Merge client names" in Settings (rewrite `client` on the affected projects) is still open; grouping
+  already treats spelling variants as one client.
+- The financials backfill and the quote migration read and write the whole project file outside the
+  write queue. Both are rare manual actions; move them onto `store.mutate` if that ever matters.
+- The event form opened from a project still offers business kinds (gear purchase, marketing) and
+  "+ Nowy projekt…"; picking them moves the entry out of this thread. Consider a project-only mode.
+- Equipment, fixed costs and campaigns are still hard-deleted (pre-existing).
 - ~~Opening a project without its own `pdfDraft` keeps the previous project's PDF draft~~ — fixed
   2026-10-09.
 
