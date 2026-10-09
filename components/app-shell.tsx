@@ -8,15 +8,28 @@
  * konfiguracji builda, identyczne zachowanie w przeglądarce i w desktopie.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, Calculator, CalendarDays, FolderKanban, Megaphone, Package, Settings2 } from 'lucide-react'
+import {
+  BarChart3,
+  Calculator,
+  CalendarDays,
+  FolderKanban,
+  Megaphone,
+  NotebookPen,
+  Package,
+  Settings2,
+  Waypoints,
+} from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
 import { EquipmentProvider } from '@/lib/equipment-context'
 import { EventsProvider } from '@/lib/events-context'
 import { QuoteCalculatorView } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
-import { ProjectBar } from '@/components/projects/project-bar'
+import { ProjectHeader } from '@/components/projects/project-header'
+import { ProjectTimeline } from '@/components/projects/project-timeline'
+import { ProjectNotes } from '@/components/projects/project-notes'
+import { defaultProjectTab, type Project, type ProjectTab } from '@/lib/project-types'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { ProjectEquipment } from '@/components/equipment/project-equipment'
 import { FinanceSection } from '@/components/finance/finance-section'
@@ -90,33 +103,28 @@ function Sidebar({
   )
 }
 
-type ProjectTab = 'wycena' | 'sprzet'
-
-const PROJECT_TABS: { value: ProjectTab; label: string; icon: typeof Calculator }[] = [
+const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calculator }[] = [
+  { value: 'os', label: 'Oś czasu', icon: Waypoints },
   { value: 'wycena', label: 'Wycena', icon: Calculator },
   { value: 'sprzet', label: 'Sprzęt', icon: Package },
+  { value: 'notatki', label: 'Notatki', icon: NotebookPen },
 ]
 
 /**
- * Otwarty projekt. Kalkulator zostaje nietknięty w zakładce „Wycena";
- * „Sprzęt" to warstwa projektowa, która nie dotyka kwot oferty.
+ * Otwarty projekt: nagłówek + zakładki. Kalkulator zostaje nietknięty w
+ * zakładce „Wycena"; oś czasu czyta te same wydarzenia co kalendarz.
+ * Montowany z `key` = id projektu, więc każdy projekt startuje od swojej
+ * domyślnej zakładki (`defaultProjectTab`) i czystego stanu nagłówka.
  */
-function ProjectView() {
-  const { activeProject } = useProjectHub()
-  const [tab, setTab] = useState<ProjectTab>('wycena')
-
-  // Zmiana projektu wraca na wycenę — inaczej otwarcie kolejnego projektu
-  // lądowałoby w zakładce sprzętu poprzedniego.
-  useEffect(() => {
-    setTab('wycena')
-  }, [activeProject?.id])
+function ProjectView({ project }: { project: Project }) {
+  const [tab, setTab] = useState<ProjectTab>(() => defaultProjectTab(project.status))
 
   return (
     <>
-      <ProjectBar />
+      <ProjectHeader />
       <div className="border-b border-white/5 bg-black/20">
-        <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist">
-          {PROJECT_TABS.map(({ value, label, icon: Icon }) => {
+        <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist" aria-label="Zakładki projektu">
+          {PROJECT_TAB_ITEMS.map(({ value, label, icon: Icon }) => {
             const active = value === tab
             return (
               <button
@@ -144,7 +152,10 @@ function ProjectView() {
         </div>
       </div>
 
-      {tab === 'wycena' ? <QuoteCalculatorView /> : <ProjectEquipment />}
+      {tab === 'os' && <ProjectTimeline project={project} />}
+      {tab === 'wycena' && <QuoteCalculatorView />}
+      {tab === 'sprzet' && <ProjectEquipment />}
+      {tab === 'notatki' && <ProjectNotes project={project} />}
     </>
   )
 }
@@ -178,7 +189,8 @@ function ShellContent() {
       <div className="relative min-w-0 flex-1">
         {section === 'kalendarz' && <CalendarSection onOpenProject={goToProject} />}
 
-        {section === 'projekty' && (activeProject ? <ProjectView /> : <ProjectList />)}
+        {section === 'projekty' &&
+          (activeProject ? <ProjectView key={activeProject.id} project={activeProject} /> : <ProjectList />)}
 
         {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
 

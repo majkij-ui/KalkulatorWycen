@@ -11,21 +11,23 @@
  * Dzięki temu kalkulator nie wie o istnieniu projektów i nie wymaga zmian.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuote } from './quote-context'
 import {
   createProject,
   deleteProject as deleteProjectRecord,
-  filterProjects,
-  listProjects,
+  listAllProjects,
   replaceAllProjects,
+  restoreProject as restoreProjectRecord,
   upsertProject,
 } from './project-library'
 import { listImportableQuotes } from './legacy-app'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
 import { backfillMissingFinancials } from './quote-financials'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
-import { blankQuoteSnapshot, planProjectSave, type ProjectSavePlan } from './project-save'
+import { blankQuoteSnapshot, canReprefillBlankQuote, planProjectSave, type ProjectSavePlan } from './project-save'
+import { applyClientChoice, type ClientChoice } from './clients'
+import { parseListPrefs, type ProjectListPrefs } from './project-list'
 
 /**
  * Wynik „Zapisz". `needs-confirmation` — projekt bez wyceny ma finanse spoza
@@ -39,13 +41,17 @@ export type SaveActiveProjectResult =
 
 interface ProjectHubValue {
   projects: Project[]
-  /** Projekty po zastosowaniu aktywnego filtra listy. */
-  visibleProjects: Project[]
   filter: ProjectFilter
   setFilter: (filter: ProjectFilter) => void
   /** „Ukryj nieprzyjęte" — domyślnie włączone, zapamiętywane między uruchomieniami. */
   hideLost: boolean
   setHideLost: (hide: boolean) => void
+  /** Klient na liście (klucz `clientKey`, pusty = wszyscy) — zapamiętywany. */
+  listClient: string
+  setListClient: (key: string) => void
+  /** Rok na liście (`null` = wszystkie) — zapamiętywany. */
+  listYear: number | null
+  setListYear: (year: number | null) => void
   activeProject: Project | null
   isLoading: boolean
 
@@ -71,8 +77,19 @@ interface ProjectHubValue {
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
   /** Zmiana pól dowolnego projektu (nie dotyka wyceny w kalkulatorze). */
   updateProject: (id: string, patch: Partial<Project>) => Promise<void>
+  /**
+   * Klient otwartego projektu (nagłówek). Kopiuje kontakt z ostatniego projektu
+   * tego klienta, gdy bieżący go nie ma (`clients.ts`), a pustą wycenę wgrywa
+   * na nowo z nowym klientem, jeśli nic by przy tym nie przepadło.
+   */
+  changeActiveClient: (name: string) => Promise<ClientChoice | null>
   setStatus: (id: string, status: ProjectStatus) => Promise<void>
-  removeProject: (id: string) => Promise<void>
+  /**
+   * Miękkie usunięcie projektu (`deletedAt`). Zwraca usunięty rekord — jego
+   * znacznik dostaje też wątek (`project-deletion.ts`), a „Cofnij" go przywraca.
+   */
+  removeProject: (id: string, deletedAt?: string) => Promise<Project | null>
+  restoreProject: (id: string) => Promise<void>
 
   /** Ile starych wycen czeka na przeniesienie (0 = nic do zrobienia). */
   pendingQuoteCount: number
@@ -87,6 +104,15 @@ interface ProjectHubValue {
 const ProjectHubContext = createContext<ProjectHubValue | null>(null)
 
 const HIDE_LOST_KEY = 'nonoise-projects-hide-lost'
+const LIST_PREFS_KEY = 'nonoise-projects-list-v1'
+
+function readListPrefs(): ProjectListPrefs {
+  try {
+    return parseListPrefs(localStorage.getItem(LIST_PREFS_KEY))
+  } catch {
+    return parseListPrefs(null)
+  }
+}
 
 /** Domyślnie ukrywamy nieprzyjęte; zapamiętane „0" je pokazuje. */
 function readHideLost(): boolean {
@@ -100,9 +126,34 @@ function readHideLost(): boolean {
 export function ProjectHubProvider({ children }: { children: React.ReactNode }) {
   const { buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
 
-  const [projects, setProjects] = useState<Project[]>([])
-  const [filter, setFilter] = useState<ProjectFilter>('all')
+  const [projects, setProjectsState] = useState<Project[]>([])
+  // Najświeższa lista także dla zapisów odpalonych z opóźnieniem (autozapis
+  // notatek) — inaczej zapis na starej kopii projektu cofnąłby nowszą zmianę.
+  const projectsRef = useRef<Project[]>([])
+  const setProjects = useCallback((next: Project[]) => {
+    projectsRef.current = next
+    setProjectsState(next)
+  }, [])
+  // Numer ostatniego zapisu: wynik starszego zapisu nie może cofnąć na ekranie
+  // zmiany, która jest już w drodze.
+  const writeSeqRef = useRef(0)
+  const [listPrefs, setListPrefs] = useState(readListPrefs)
   const [hideLost, setHideLostState] = useState(readHideLost)
+
+  const updateListPrefs = useCallback((patch: Partial<ProjectListPrefs>) => {
+    setListPrefs((prev) => {
+      const next = { ...prev, ...patch }
+      try {
+        localStorage.setItem(LIST_PREFS_KEY, JSON.stringify(next))
+      } catch {
+        // tylko wygoda — bez zapisu lista wróci do domyślnych filtrów
+      }
+      return next
+    })
+  }, [])
+  const setFilter = useCallback((filter: ProjectFilter) => updateListPrefs({ filter }), [updateListPrefs])
+  const setListClient = useCallback((client: string) => updateListPrefs({ client }), [updateListPrefs])
+  const setListYear = useCallback((year: number | null) => updateListPrefs({ year }), [updateListPrefs])
 
   const setHideLost = useCallback((hide: boolean) => {
     setHideLostState(hide)
@@ -122,9 +173,10 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [loaded, quotes] = await Promise.all([listProjects(), listImportableQuotes()])
+      const [loaded, quotes] = await Promise.all([listAllProjects(), listImportableQuotes()])
       if (cancelled) return
-      setProjects(loaded)
+      setProjects(loaded.filter((p) => !p.deletedAt))
+      // Usunięte też się liczą: usunięta wycena nie jest „do przeniesienia".
       const migratedIds = new Set(
         loaded.map((p) => p.migratedFromQuoteId).filter((id): id is string => !!id)
       )
@@ -134,16 +186,34 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setProjects])
+
+  /** Zapis jednego projektu: od razu na ekranie, potem do pliku. */
+  const writeProject = useCallback(
+    async (updated: Project) => {
+      const seq = ++writeSeqRef.current
+      setProjects(projectsRef.current.map((p) => (p.id === updated.id ? updated : p)))
+      const saved = await upsertProject(updated)
+      if (seq === writeSeqRef.current) setProjects(saved)
+    },
+    [setProjects]
+  )
+
+  /** Zmiana pól na NAJŚWIEŻSZEJ wersji projektu (nie na kopii z domknięcia). */
+  const patchProject = useCallback(
+    async (id: string, patch: Partial<Project>) => {
+      const current = projectsRef.current.find((p) => p.id === id)
+      if (!current) return null
+      const updated: Project = { ...current, ...patch, id, updatedAt: new Date().toISOString() }
+      await writeProject(updated)
+      return updated
+    },
+    [writeProject]
+  )
 
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) ?? null,
     [projects, activeProjectId]
-  )
-
-  const visibleProjects = useMemo(
-    () => filterProjects(projects, filter, { hideLost }),
-    [projects, filter, hideLost]
   )
 
   const openProject = useCallback(
@@ -169,13 +239,13 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     async (name: string) => {
       const trimmed = name.trim()
       if (!trimmed) return null
-      const project = createProject({ name: trimmed, existing: projects })
+      const project = createProject({ name: trimmed, existing: projectsRef.current })
       setProjects(await upsertProject(project))
       loadQuoteSnapshot(blankQuoteSnapshot('') as never)
       setActiveProjectId(project.id)
       return project
     },
-    [projects, loadQuoteSnapshot]
+    [loadQuoteSnapshot, setProjects]
   )
 
   const createProjectWithoutQuote = useCallback<ProjectHubValue['createProjectWithoutQuote']>(
@@ -188,75 +258,96 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
         date,
         leadSource,
         contact,
-        existing: projects,
+        existing: projectsRef.current,
       })
       setProjects(await upsertProject(project))
       return project
     },
-    [projects]
+    [setProjects]
   )
 
   const saveActiveProject = useCallback(
     async (options: { replaceFinancials?: boolean } = {}): Promise<SaveActiveProjectResult> => {
-      if (!activeProject) return { status: 'no-project' }
+      const project = projectsRef.current.find((p) => p.id === activeProjectId)
+      if (!project) return { status: 'no-project' }
       // Projekt bez wyceny otwiera się w pustym kalkulatorze — ślepy zapis
       // wyzerowałby jego finanse z importu. Decyzja i testy: `project-save.ts`.
       const plan = planProjectSave({
-        project: activeProject,
+        project,
         snapshot: buildQuoteSnapshot(),
         replaceFinancials: options.replaceFinancials,
       })
       if (plan.status === 'needs-confirmation') return plan
-      setProjects(await upsertProject(plan.project))
+      await writeProject(plan.project)
       return { status: 'saved' }
     },
-    [activeProject, buildQuoteSnapshot]
+    [activeProjectId, buildQuoteSnapshot, writeProject]
   )
 
   const updateActiveProject = useCallback(
     async (patch: Partial<Project>) => {
-      if (!activeProject) return
-      const updated: Project = { ...activeProject, ...patch, updatedAt: new Date().toISOString() }
-      setProjects(await upsertProject(updated))
+      if (activeProjectId) await patchProject(activeProjectId, patch)
     },
-    [activeProject]
+    [activeProjectId, patchProject]
+  )
+
+  const changeActiveClient = useCallback(
+    async (name: string) => {
+      const project = projectsRef.current.find((p) => p.id === activeProjectId)
+      if (!project) return null
+      const choice = applyClientChoice(project, name, projectsRef.current)
+      if (!choice) return null
+      // Przed zapisem: decyzja dotyczy kalkulatora z chwili zmiany.
+      const reprefill = canReprefillBlankQuote(project, buildQuoteSnapshot())
+      await patchProject(project.id, choice.patch)
+      if (reprefill) loadQuoteSnapshot(blankQuoteSnapshot(choice.patch.client) as never)
+      return choice
+    },
+    [activeProjectId, buildQuoteSnapshot, loadQuoteSnapshot, patchProject]
   )
 
   const setStatus = useCallback(
     async (id: string, status: ProjectStatus) => {
-      const project = projects.find((p) => p.id === id)
-      if (!project) return
-      setProjects(await upsertProject({ ...project, status, updatedAt: new Date().toISOString() }))
+      await patchProject(id, { status })
     },
-    [projects]
+    [patchProject]
   )
 
   const updateProject = useCallback(
     async (id: string, patch: Partial<Project>) => {
-      const project = projects.find((p) => p.id === id)
-      if (!project) return
-      setProjects(await upsertProject({ ...project, ...patch, id, updatedAt: new Date().toISOString() }))
+      await patchProject(id, patch)
     },
-    [projects]
+    [patchProject]
   )
 
   const removeProject = useCallback(
-    async (id: string) => {
-      const next = await deleteProjectRecord(id)
-      setProjects(next)
+    async (id: string, deletedAt: string = new Date().toISOString()) => {
+      const project = projectsRef.current.find((p) => p.id === id)
+      if (!project) return null
       if (activeProjectId === id) setActiveProjectId(null)
+      writeSeqRef.current += 1
+      setProjects(await deleteProjectRecord(id, deletedAt))
+      return { ...project, deletedAt }
     },
-    [activeProjectId]
+    [activeProjectId, setProjects]
+  )
+
+  const restoreProject = useCallback(
+    async (id: string) => {
+      writeSeqRef.current += 1
+      setProjects(await restoreProjectRecord(id))
+    },
+    [setProjects]
   )
 
   const runMigration = useCallback(async () => {
     const result = await migrateQuotesToProjects()
-    setProjects(await listProjects())
+    setProjects((await listAllProjects()).filter((p) => !p.deletedAt))
     if (result.status === 'migrated' || result.status === 'skipped-already-done') {
       setPendingQuoteCount(0)
     }
     return result
-  }, [])
+  }, [setProjects])
 
   /** Projekt bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
   const missingFinancialsCount = useMemo(
@@ -265,23 +356,28 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   )
 
   const backfillFinancials = useCallback(async () => {
-    const current = await listProjects()
+    // Pełna lista z usuniętymi — zapis całej kolekcji nie może ich zgubić.
+    const current = await listAllProjects()
     const result = backfillMissingFinancials(current)
+    writeSeqRef.current += 1
     if (result.filledCount > 0) {
       setProjects(await replaceAllProjects(result.projects))
     } else {
-      setProjects(current)
+      setProjects(current.filter((p) => !p.deletedAt))
     }
     return { filledCount: result.filledCount, skippedCount: result.skippedCount }
-  }, [])
+  }, [setProjects])
 
   const value: ProjectHubValue = {
     projects,
-    visibleProjects,
-    filter,
+    filter: listPrefs.filter,
     setFilter,
     hideLost,
     setHideLost,
+    listClient: listPrefs.client,
+    setListClient,
+    listYear: listPrefs.year,
+    setListYear,
     activeProject,
     isLoading,
     openProject,
@@ -291,8 +387,10 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     saveActiveProject,
     updateActiveProject,
     updateProject,
+    changeActiveClient,
     setStatus,
     removeProject,
+    restoreProject,
     pendingQuoteCount,
     runMigration,
     missingFinancialsCount,

@@ -14,25 +14,21 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { EVENT_GROUPS, EVENT_GROUP_LABELS, groupChip, type EventGroup } from '@/lib/calendar-palette'
 import { buildCalendarEntries, monthSummary, type CalendarEntry } from '@/lib/calendar-entries'
 import { dayKey, monthGrid } from '@/lib/calendar-layout'
-import { eventKind, statusSuggestion } from '@/lib/event-kinds'
-import type { TimelineEvent } from '@/lib/event-types'
+import { eventKind } from '@/lib/event-kinds'
 import { useEvents } from '@/lib/events-context'
 import { useEquipment } from '@/lib/equipment-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { PROJECT_STATUS_LABELS, toDateKey, type ProjectStatus } from '@/lib/project-types'
+import { toDateKey } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
 import { MONTHS, archivo, mono, pln } from './calendar-bits'
 import { MonthGrid } from './month-grid'
 import { DayPanel } from './day-panel'
 import { ThreadPanel } from './thread-panel'
 import { EventForm, type FormTarget, type SavedInfo } from './event-form'
+import { EventNotice, noticeAfterSave, type EventNoticeState } from './event-notice'
 
 /** Od tej szerokości okna panel stoi obok siatki (okno Tauri ma 1400 px). */
 const SIDE_PANEL_QUERY = '(min-width: 1260px)'
-
-type Notice =
-  | { type: 'deleted'; event: TimelineEvent }
-  | { type: 'status'; projectId: string; projectName: string; to: ProjectStatus }
 
 function coversDay(entry: CalendarEntry, day: string): boolean {
   const start = dayKey(entry.start)
@@ -42,16 +38,16 @@ function coversDay(entry: CalendarEntry, day: string): boolean {
 
 export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const today = toDateKey(new Date())
-  const { events, restore } = useEvents()
+  const { events } = useEvents()
   const { items } = useEquipment()
-  const { projects, setStatus } = useProjectHub()
+  const { projects } = useProjectHub()
 
   const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }))
   const [selectedDay, setSelectedDay] = useState(today)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [form, setForm] = useState<{ target: FormTarget; key: number } | null>(null)
   const [hiddenGroups, setHiddenGroups] = useState<Set<EventGroup>>(new Set())
-  const [notice, setNotice] = useState<Notice | null>(null)
+  const [notice, setNotice] = useState<EventNoticeState | null>(null)
   const panelRef = useRef<HTMLElement>(null)
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
@@ -102,15 +98,12 @@ export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string)
     }
   }
 
-  const onSaved = ({ kind, date, project }: SavedInfo) => {
+  const onSaved = (info: SavedInfo) => {
     setForm(null)
-    setSelectedDay(date)
-    if (!date.startsWith(monthPrefix)) showMonthOf(date)
-    const suggested = project ? statusSuggestion(project.status, kind) : null
-    setNotice(
-      project && suggested ? { type: 'status', projectId: project.id, projectName: project.name, to: suggested } : null
-    )
-    setFocusId(project?.id ?? null)
+    setSelectedDay(info.date)
+    if (!info.date.startsWith(monthPrefix)) showMonthOf(info.date)
+    setNotice(noticeAfterSave(info))
+    setFocusId(info.project?.id ?? null)
   }
 
   useEffect(() => {
@@ -256,50 +249,7 @@ export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string)
         />
 
         <aside ref={panelRef} className="min-w-0 scroll-mt-20" aria-label="Szczegóły">
-          {notice && (
-            <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300" role="status">
-              {notice.type === 'deleted' ? (
-                <>
-                  <span className="min-w-0 flex-1">
-                    Usunięto „{notice.event.title || eventKind(notice.event.kind).label}".
-                  </span>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await restore(notice.event.id)
-                      setNotice(null)
-                    }}
-                    className="font-semibold text-primary outline-none hover:underline focus-visible:underline"
-                  >
-                    Cofnij
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="min-w-0 flex-1">
-                    Ustawić status „{PROJECT_STATUS_LABELS[notice.to]}" dla {notice.projectName}?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await setStatus(notice.projectId, notice.to)
-                      setNotice(null)
-                    }}
-                    className="font-semibold text-primary outline-none hover:underline focus-visible:underline"
-                  >
-                    Ustaw
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNotice(null)}
-                    className="font-semibold text-zinc-500 outline-none hover:text-zinc-200 focus-visible:underline"
-                  >
-                    Zostaw
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+          {notice && <EventNotice notice={notice} onDone={() => setNotice(null)} className="mb-4" />}
 
           {form ? (
             <EventForm

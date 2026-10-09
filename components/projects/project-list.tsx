@@ -6,12 +6,16 @@
  * Chronologicznie (najnowsze u góry), ze statusem oznaczonym kolorem i trzema
  * filtrami z notatek: wszystko / tylko projekty / tylko wyceny. Nieprzyjęte
  * wyceny są domyślnie ukryte (przełącznik obok filtrów), a gdy są widoczne,
- * ich kwoty są szare — nie liczą się do wyników firmy.
+ * ich kwoty są szare — nie liczą się do wyników firmy. Do tego klient (z jego
+ * przychodem) i rok — wybór zapamiętuje się między uruchomieniami.
+ *
+ * Usunięcie jest miękkie i zabiera ze sobą wątek projektu; „Cofnij" przywraca
+ * jedno i drugie (`use-project-deletion.ts`).
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, FolderPlus, Loader2, PackageOpen, Search, Trash2 } from 'lucide-react'
+import { ArrowRight, FolderPlus, Loader2, PackageOpen, Search, Trash2, X } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
 import {
   PROJECT_FILTERS,
@@ -20,9 +24,13 @@ import {
   type Project,
   type ProjectFilter,
 } from '@/lib/project-types'
+import { clientDirectory, clientRevenue } from '@/lib/clients'
+import { filterProjectList, lostInScope, projectYears } from '@/lib/project-list'
 import { ProjectStatusBadge } from './project-status-badge'
 import { PaidToggle } from './paid-toggle'
-import { itemLabel } from '@/lib/pl-plural'
+import { ClientCombobox } from './client-combobox'
+import { useProjectDeletion } from './use-project-deletion'
+import { itemLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -89,9 +97,18 @@ function MigrationBanner() {
   )
 }
 
-function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void }) {
-  const { removeProject } = useProjectHub()
+function ProjectRow({
+  project,
+  onOpen,
+  onDeleted,
+}: {
+  project: Project
+  onOpen: () => void
+  onDeleted: (deleted: { project: Project; eventCount: number }) => void
+}) {
+  const { describe, deleteWithThread } = useProjectDeletion()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Zmigrowane wyceny nie mają jeszcze policzonych finansów. Pokazujemy „—",
   // nie „0 zł" — zero to konkretna informacja, a tu jej po prostu nie ma.
@@ -115,8 +132,13 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group flex items-center gap-4 rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3 transition-colors hover:border-white/15 hover:bg-zinc-900/70"
+      className={`group rounded-xl border px-4 py-3 transition-colors ${
+        confirmDelete
+          ? 'border-red-500/25 bg-red-500/[0.04]'
+          : 'border-white/5 bg-zinc-900/40 hover:border-white/15 hover:bg-zinc-900/70'
+      }`}
     >
+      <div className="flex items-center gap-4">
       <button
         type="button"
         onClick={onOpen}
@@ -165,74 +187,131 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
       <div className="flex w-[132px] shrink-0 justify-start">{counts && <PaidToggle project={project} />}</div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {confirmDelete ? (
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-7 px-2 text-xs"
-              onClick={() => removeProject(project.id)}
-            >
-              Usuń
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs"
-              onClick={() => setConfirmDelete(false)}
-            >
-              Anuluj
-            </Button>
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              aria-label={`Usuń projekt ${project.name}`}
-              className="rounded-md p-1.5 text-zinc-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
-            >
-              <Trash2 className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onOpen}
-              aria-label={`Otwórz projekt ${project.name}`}
-              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:text-white"
-            >
-              <ArrowRight className="size-4" />
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          aria-label={`Usuń projekt ${project.name}`}
+          className={`rounded-md p-1.5 text-zinc-600 transition-opacity hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100 ${
+            confirmDelete ? 'invisible' : 'opacity-0'
+          }`}
+        >
+          <Trash2 className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Otwórz projekt ${project.name}`}
+          className="rounded-md p-1.5 text-zinc-500 transition-colors hover:text-white"
+        >
+          <ArrowRight className="size-4" />
+        </button>
       </div>
+      </div>
+
+      {confirmDelete && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-red-500/15 pt-3 text-xs" role="alert">
+          <span className="min-w-0 flex-1 text-zinc-300">
+            Usunąć „{project.name}"? {describe(project.id) ?? 'Projekt nie ma wydarzeń w kalendarzu.'}{' '}
+            <span className="text-zinc-500">Można cofnąć.</span>
+          </span>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 px-2 text-xs"
+            disabled={deleting}
+            onClick={async () => {
+              setDeleting(true)
+              const deleted = await deleteWithThread(project.id)
+              setDeleting(false)
+              if (deleted) onDeleted(deleted)
+            }}
+          >
+            {deleting && <Loader2 className="size-3 animate-spin" />}
+            Usuń
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setConfirmDelete(false)}>
+            Anuluj
+          </Button>
+        </div>
+      )}
     </motion.div>
+  )
+}
+
+/** „Usunięto … Cofnij" — usunięcie zabiera wątek, cofnięcie przywraca oba. */
+function DeletedBanner({
+  deleted,
+  onClose,
+}: {
+  deleted: { project: Project; eventCount: number }
+  onClose: () => void
+}) {
+  const { undoDelete } = useProjectDeletion()
+  const [busy, setBusy] = useState(false)
+  const { project, eventCount } = deleted
+  return (
+    <div
+      className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300"
+      role="status"
+    >
+      <span className="min-w-0 flex-1">
+        Usunięto „{project.name}"
+        {eventCount > 0 && ` i ${eventCount} ${plural(eventCount, 'wydarzenie', 'wydarzenia', 'wydarzeń')} z kalendarza`}.
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          await undoDelete(project)
+          onClose()
+        }}
+        className="font-semibold text-primary outline-none hover:underline focus-visible:underline disabled:opacity-50"
+      >
+        Cofnij
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Zamknij"
+        className="rounded p-0.5 text-zinc-500 outline-none hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-white/50"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
   )
 }
 
 export function ProjectList() {
   const {
-    visibleProjects,
     projects,
     filter,
     setFilter,
     hideLost,
     setHideLost,
+    listClient,
+    setListClient,
+    listYear,
+    setListYear,
     openProject,
     createBlankProject,
     isLoading,
   } = useProjectHub()
-  const lostCount = projects.filter((p) => p.status === 'lost').length
   const [search, setSearch] = useState('')
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [deleted, setDeleted] = useState<{ project: Project; eventCount: number } | null>(null)
 
-  const query = search.trim().toLowerCase()
-  const rows = query
-    ? visibleProjects.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) || p.client.toLowerCase().includes(query)
-      )
-    : visibleProjects
+  const directory = useMemo(() => clientDirectory(projects), [projects])
+  const years = useMemo(() => projectYears(projects), [projects])
+  // Zapamiętany klient, którego już nie ma (zmiana nazwy, usunięcie) — lista pokazuje wszystkich.
+  const selectedClient = directory.find((c) => c.key === listClient) ?? null
+  const year = listYear !== null && years.includes(listYear) ? listYear : null
+  const query = { filter, hideLost, client: selectedClient?.key ?? '', year, search }
+  const rows = filterProjectList(projects, query)
+  const lostCount = lostInScope(projects, query)
+  const revenue = selectedClient ? clientRevenue(projects, selectedClient.key, year) : null
+  const narrowed = !!selectedClient || year !== null || !!search.trim()
 
   const handleCreate = async () => {
     const name = newName.trim()
@@ -255,8 +334,10 @@ export function ProjectList() {
 
       <MigrationBanner />
 
-      {/* Filtry + wyszukiwarka */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {deleted && <DeletedBanner key={deleted.project.id} deleted={deleted} onClose={() => setDeleted(null)} />}
+
+      {/* Filtry: status, nieprzyjęte, klient, rok, wyszukiwarka */}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <div className="inline-flex items-center rounded-lg border border-white/10 bg-black/40 p-0.5">
           {PROJECT_FILTERS.map((value) => (
             <button
@@ -283,6 +364,33 @@ export function ProjectList() {
           Ukryj nieprzyjęte
           {lostCount > 0 && <span className="tabular-nums text-zinc-600">({lostCount})</span>}
         </label>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <ClientCombobox
+          value={selectedClient?.name ?? ''}
+          directory={directory}
+          onCommit={(_, picked) => setListClient(picked?.key ?? '')}
+          placeholder="Wszyscy klienci"
+          ariaLabel="Filtr klienta"
+          className="w-56"
+        />
+
+        <select
+          value={year ?? ''}
+          onChange={(e) => setListYear(e.target.value ? Number(e.target.value) : null)}
+          aria-label="Filtr roku"
+          className={`h-8 rounded-md border border-white/10 bg-black/40 px-2 text-sm outline-none [color-scheme:dark] focus:border-white/30 ${
+            year === null ? 'text-zinc-500' : 'text-zinc-200'
+          }`}
+        >
+          <option value="">Wszystkie lata</option>
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
 
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-zinc-600" />
@@ -290,11 +398,26 @@ export function ProjectList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Szukaj po nazwie lub kliencie…"
-            className="h-9 border-white/10 bg-black/40 pl-9 text-sm"
+            className="h-8 border-white/10 bg-black/40 pl-9 text-sm"
             aria-label="Szukaj projektów"
           />
         </div>
       </div>
+
+      {selectedClient && revenue && (
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl border border-white/5 bg-zinc-900/30 px-4 py-3">
+          <span className="font-semibold text-zinc-100">{selectedClient.name}</span>
+          <span className="text-sm text-zinc-400">
+            przychód{year !== null ? ` w ${year}` : ''}:{' '}
+            <span className="font-semibold tabular-nums text-zinc-100">{formatPln(revenue.revenue)}</span>
+          </span>
+          <span className="text-xs text-zinc-500">
+            {revenue.countedProjects}{' '}
+            {plural(revenue.countedProjects, 'projekt wliczony', 'projekty wliczone', 'projektów wliczonych')} (w
+            realizacji i zrealizowane, jak w Finansach)
+          </span>
+        </div>
+      )}
 
       {/* Nowy projekt — zawsze pusty, niczego nie przejmuje z poprzednio otwartego */}
       <div className="mb-6 rounded-xl border border-white/5 bg-zinc-900/30 p-4">
@@ -343,14 +466,32 @@ export function ProjectList() {
             {projects.length === 0
               ? 'Utwórz pierwszy projekt albo przenieś zapisane wyceny.'
               : hideLost && lostCount > 0 && filter !== 'projects'
-                ? 'Nic nie pasuje do tego filtra. Nieprzyjęte wyceny są ukryte.'
-                : 'Nic nie pasuje do tego filtra.'}
+                ? 'Nic nie pasuje do tych filtrów. Nieprzyjęte wyceny są ukryte.'
+                : 'Nic nie pasuje do tych filtrów.'}
           </p>
+          {narrowed && (
+            <button
+              type="button"
+              onClick={() => {
+                setListClient('')
+                setListYear(null)
+                setSearch('')
+              }}
+              className="mt-3 text-xs font-semibold text-primary hover:underline"
+            >
+              Pokaż wszystkich klientów i lata
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {rows.map((project) => (
-            <ProjectRow key={project.id} project={project} onOpen={() => openProject(project.id)} />
+            <ProjectRow
+              key={project.id}
+              project={project}
+              onOpen={() => openProject(project.id)}
+              onDeleted={setDeleted}
+            />
           ))}
         </div>
       )}
