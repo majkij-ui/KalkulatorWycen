@@ -33,6 +33,11 @@ test('retro-projekt z importu: faktura + wpłata = zapłacony, wpłata z importu
   const state = paymentState(events, 'p-1', TODAY)
   assert.equal(state.paid, true)
   assert.equal(state.importedPayments, 1)
+
+  // Wpłata przyjęta ze skrzynki (z poczty) też nie jest wpisem ręcznym.
+  const fromMail = [ev('invoice_paid', '2026-10-08', { source: { type: 'gmail' } })]
+  assert.equal(paymentState(fromMail, 'p-1', TODAY).importedPayments, 1)
+  assert.equal(paymentState([ev('invoice_paid', '2026-10-08')], 'p-1', TODAY).importedPayments, 0)
 })
 
 test('wysłana, nieopłacona faktura: niezapłacony; odhaczenie paruje wpłatę po numerze', () => {
