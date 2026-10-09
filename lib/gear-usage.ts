@@ -39,9 +39,15 @@ export function legacyToGearDays(equipment: ProjectEquipmentUsage[]): GearDay[] 
   }))
 }
 
-/** Dni sprzętu projektu: nowy kształt, a gdy go brak — przeliczony stary. */
+/**
+ * Dni sprzętu projektu: nowy kształt, a gdy go brak — przeliczony stary.
+ * Dni usunięte w Realizacji (`deletedAt`) zostają w pliku, ale nie liczą się
+ * nigdzie: ani w statystykach, ani na liście pakowania.
+ */
 export function projectGearDays(project: Pick<Project, 'gearDays' | 'equipment'>): GearDay[] {
-  return project.gearDays ?? legacyToGearDays(project.equipment ?? [])
+  return project.gearDays
+    ? project.gearDays.filter((day) => !day.deletedAt)
+    : legacyToGearDays(project.equipment ?? [])
 }
 
 /** Czy na projekcie zapisano jakikolwiek sprzęt. */
@@ -83,12 +89,14 @@ export function removeGearDay(days: GearDay[], dayId: string): GearDay[] {
 /**
  * Kopia dnia wstawiona zaraz za oryginałem — „drugi dzień, ten sam zestaw".
  * Data zostaje pusta: kolejny dzień zdjęciowy nie zawsze jest następnym dniem
- * kalendarza, a zła data byłaby gorsza niż żadna.
+ * kalendarza, a zła data byłaby gorsza niż żadna. Z tego samego powodu kopia
+ * nie jest powiązana z wydarzeniem oryginału.
  */
 export function duplicateGearDay(days: GearDay[], dayId: string): GearDay[] {
   const index = days.findIndex((day) => day.id === dayId)
   if (index === -1) return days
-  const source = days[index]
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { eventId, eventDay, deletedAt, ...source } = days[index]
   const copy: GearDay = {
     ...source,
     id: createGearDayId(),

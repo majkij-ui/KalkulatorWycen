@@ -312,3 +312,28 @@ test('historia pozycji: tylko zrealizowane projekty, od najnowszego użycia', ()
     ['nowy', 'stary']
   )
 })
+
+test('z wydarzeniami data użycia pochodzi z kalendarza; usunięty dzień się nie liczy', () => {
+  const camera = item('c1', 'FX3', 20000, 500)
+  const p = project('p1', 'done', {
+    gearDays: [
+      { ...day('d1', [['c1', 1]], '2026-02-10'), eventId: 'ev1', eventDay: 1 },
+      { ...day('d2', [['c1', 1]], '2026-03-01'), deletedAt: '2026-03-02T00:00:00Z' },
+    ],
+  })
+  const moved = {
+    id: 'ev1',
+    kind: 'shoot_day',
+    projectId: 'p1',
+    start: '2026-05-04',
+    end: '2026-05-05',
+    deletedAt: undefined,
+  }
+  const withCalendar = roiOf(computeGearReport([camera], [p], { now: NOW, events: [moved] }), 'c1')
+  assert.equal(withCalendar.firstUsed, '2026-05-05', 'drugi dzień przesuniętego wydarzenia')
+  assert.equal(withCalendar.daysUsed, 1)
+
+  const without = roiOf(computeGearReport([camera], [p], { now: NOW }), 'c1')
+  assert.equal(without.firstUsed, '2026-02-10', 'bez wydarzeń — ostatnia znana data')
+  assert.equal(itemUsageHistory('c1', [p], [camera], { events: [moved] })[0].use.dates[0], '2026-05-05')
+})

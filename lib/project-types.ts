@@ -49,7 +49,10 @@ export function countsTowardRevenue(status: ProjectStatus): boolean {
   return status === 'won' || status === 'done'
 }
 
-/** Zakładki otwartego projektu (T3). Klucze na stałe, etykiety w interfejsie. */
+/**
+ * Zakładki otwartego projektu (T3). Klucze na stałe, etykiety w interfejsie:
+ * `sprzet` to od T5a zakładka „Realizacja" (dni, sprzęt, ekipa, koszty, plan).
+ */
 export const PROJECT_TABS = ['os', 'wycena', 'sprzet', 'notatki'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
@@ -212,8 +215,14 @@ export const gearLineSchema = z
 export type GearLine = z.infer<typeof gearLineSchema>
 
 /**
- * Dzień zdjęciowy z punktu widzenia sprzętu: co realnie pojechało na plan.
- * To dane PROJEKTU (użycie), nie wyceny (cena) — nie zmieniają kwot oferty.
+ * Dzień realizacji (zdjęciowy albo przygotowań): co realnie pojechało na plan,
+ * a przez `ProjectCost.dayId` także ekipa i koszty tego dnia. To dane PROJEKTU
+ * (użycie), nie wyceny (cena) — nie zmieniają kwot oferty.
+ *
+ * Datę dnia trzyma KALENDARZ (decyzja M.J. 2026-10-09, wariant A): dzień
+ * wskazuje swoje wydarzenie (`eventId` + `eventDay`), a `date` to tylko
+ * ostatnia znana data — dla dnia bez wydarzenia, po usunięciu wydarzenia i dla
+ * starszej wersji aplikacji, która powiązań nie zna (`realization-days.ts`).
  */
 export const gearDaySchema = z
   .object({
@@ -223,6 +232,14 @@ export const gearDaySchema = z
     /** YYYY-MM-DD albo '' — bez daty liczy się data księgowa projektu. */
     date: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).catch(''),
     lines: lenientArray(gearLineSchema),
+    /** Wydarzenie `shoot_day` / `prep_day`, które jest tym dniem. */
+    eventId: z.string().min(1).optional().catch(undefined),
+    /** Który dzień wydarzenia wielodniowego (0 = pierwszy); brak = 0. */
+    eventDay: z.number().int().min(0).optional().catch(undefined),
+    /** Typ dnia bez wydarzenia (`shoot_day` / `prep_day`); brak = zdjęciowy. */
+    kind: z.string().min(1).optional().catch(undefined),
+    /** Miękkie usunięcie (ISO); koszty dnia dostają ten sam znacznik. */
+    deletedAt: z.string().optional().catch(undefined),
   })
   .passthrough()
 export type GearDay = z.infer<typeof gearDaySchema>
@@ -238,6 +255,78 @@ export const projectEquipmentUsageSchema = z.object({
   days: z.number().finite().nonnegative().catch(0),
 })
 export type ProjectEquipmentUsage = z.infer<typeof projectEquipmentUsageSchema>
+
+// ── Koszty rzeczywiste projektu ──────────────────────────────────────────────
+
+/**
+ * Kategorie kosztów rzeczywistych (zakładka Realizacja). Klucze na zawsze,
+ * etykiety można zmieniać; `category` w rekordzie to wolny string, nieznany
+ * klucz pokazuje się dosłownie.
+ */
+export const COST_CATEGORIES = [
+  'ekipa',
+  'wynajem',
+  'dojazd',
+  'catering',
+  'nocleg',
+  'sprzet',
+  'preprodukcja',
+  'postprodukcja',
+  'inne',
+] as const
+export type CostCategory = (typeof COST_CATEGORIES)[number]
+
+export const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
+  ekipa: 'Ekipa',
+  wynajem: 'Wynajem (sprzęt, studio, lokacja)',
+  dojazd: 'Dojazd',
+  catering: 'Catering',
+  nocleg: 'Nocleg',
+  sprzet: 'Sprzęt kupiony pod projekt',
+  preprodukcja: 'Preprodukcja',
+  postprodukcja: 'Postprodukcja',
+  inne: 'Inne',
+}
+
+/** Etykieta kategorii kosztu; nieznany klucz pokazuje się dosłownie. */
+export function costCategoryLabel(category: string): string {
+  return COST_CATEGORY_LABELS[category as CostCategory] ?? category
+}
+
+/**
+ * Jeden koszt rzeczywisty projektu (PLN netto): ilość × stawka. Ekipa to
+ * koszt z osobą i rolą, zwykle 1 × stawka dzienna, przypięty do dnia.
+ *
+ * Koszty NIE zmieniają `financials` ani Finansów — to dane wejściowe dla T6
+ * (plan vs rzeczywistość w Finansach). `.passthrough()` i miękkie usuwanie.
+ */
+export const projectCostSchema = z
+  .object({
+    id: z.string().min(1),
+    /** Klucz z `COST_CATEGORIES` albo dowolny tekst. */
+    category: z.string().min(1).catch('inne'),
+    /** Stawka za jednostkę, PLN netto. */
+    unitCost: z.number().finite().nonnegative().catch(0),
+    // Reszta pól jest opcjonalna i bez wartości domyślnych: brakujące pole
+    // zostaje brakujące, więc `npm run data` nie uzna rekordu za „poprawiony".
+    /** Ilość jednostek; brak = 1 (`costAmount`). */
+    quantity: z.number().finite().nonnegative().optional().catch(undefined),
+    /** Opis pozycji („Wynajem studia", „Paliwo Poznań"). */
+    label: z.string().optional().catch(undefined),
+    /** Osoba (ekipa). */
+    person: z.string().optional().catch(undefined),
+    /** Rola na planie (ekipa): „Operator B", „Gafer". */
+    role: z.string().optional().catch(undefined),
+    /** Dzień realizacji (`gearDays[].id`); brak = koszt całego projektu. */
+    dayId: z.string().min(1).optional().catch(undefined),
+    /** Skąd pozycja: brak = wpisana ręcznie, `plan` = przepisana z planu wyceny. */
+    source: z.string().optional().catch(undefined),
+    createdAt: z.string().optional().catch(undefined),
+    /** Miękkie usunięcie (ISO); „Cofnij" przywraca pozycje o tym samym znaczniku. */
+    deletedAt: z.string().optional().catch(undefined),
+  })
+  .passthrough()
+export type ProjectCost = z.infer<typeof projectCostSchema>
 
 // ── Koszty stałe firmy ───────────────────────────────────────────────────────
 
@@ -356,6 +445,11 @@ export const projectSchema = z
      * starym kształcie (`equipment`); pusta lista = świadomie bez sprzętu.
      */
     gearDays: lenientArray(gearDaySchema).optional(),
+    /**
+     * Koszty rzeczywiste (zakładka Realizacja): ekipa, wynajem, dojazd…
+     * Brak = nic jeszcze nie wpisano. Nie zmieniają `financials` (to T6).
+     */
+    costs: lenientArray(projectCostSchema).optional(),
     /** Wnioski / lessons learned z projektu. */
     notes: z.string().catch(''),
     /**
@@ -391,6 +485,10 @@ export function createEquipmentId(): string {
 
 export function createGearDayId(): string {
   return `gd-${randomSuffix()}`
+}
+
+export function createProjectCostId(): string {
+  return `pc-${randomSuffix()}`
 }
 
 export function createFixedCostId(): string {

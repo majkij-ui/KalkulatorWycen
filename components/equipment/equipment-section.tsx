@@ -7,12 +7,14 @@
  *  - Odpracował: ile kosztowałby rental za każdy dzień, w którym był na planie,
  *  - Zarobił: ile zapłacili za niego klienci (szacunek z wycen do czasu G5).
  * Klik w pozycję otwiera panel z edycją, statystykami i historią projektów.
- * Samo zaznaczanie sprzętu dzieje się w zakładce Sprzęt projektu.
+ * Samo zaznaczanie sprzętu dzieje się w zakładce Realizacja projektu; daty
+ * dni pochodzą z kalendarza.
  */
 
 import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, ChevronDown, Loader2, Package, Plus, Search } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
+import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { computeGearReport, type EquipmentRoi, type MissingGearProject } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
@@ -216,6 +218,7 @@ function MissingGearBanner({
 export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
   const { items, isLoading } = useEquipment()
   const { projects } = useProjectHub()
+  const { allEvents } = useEvents()
 
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('kategoria')
@@ -223,7 +226,10 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
   /** `undefined` = panel zamknięty, `null` = nowa pozycja, id = edycja. */
   const [sheetItemId, setSheetItemId] = useState<string | null | undefined>(undefined)
 
-  const report = useMemo(() => computeGearReport(items, projects), [items, projects])
+  const report = useMemo(
+    () => computeGearReport(items, projects, { events: allEvents }),
+    [items, projects, allEvents]
+  )
   const { totals } = report
 
   const active = items.filter((i) => !i.retiredAt)

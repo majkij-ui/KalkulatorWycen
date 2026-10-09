@@ -20,6 +20,8 @@
 import { daysBetween } from './calendar-layout'
 import { projectGearRevenue, type GearRevenue } from './gear-revenue'
 import { gearDayDate, hasGearLogged, projectGearDays } from './gear-usage'
+import { gearDaysWithCalendarDates } from './realization-days'
+import type { TimelineEvent } from './event-types'
 import {
   countsTowardRevenue,
   toDateKey,
@@ -59,17 +61,26 @@ function toCatalogMap(catalog: EquipmentItem[] | Map<string, EquipmentItem>): Ma
   return catalog instanceof Map ? catalog : new Map(catalog.map((item) => [item.id, item]))
 }
 
+/** Opcje statystyk: `events` = wydarzenia kalendarza, z których dni biorą daty. */
+export interface GearStatsOptions {
+  events?: Pick<TimelineEvent, 'id' | 'kind' | 'projectId' | 'start' | 'end' | 'deletedAt'>[]
+}
+
 /**
  * Sprzęt jednego projektu: co, ile dni, ile odpracował i ile zarobił. Status
  * projektu NIE jest tu sprawdzany — zakładka projektu pokazuje to także dla
  * wyceny; raport katalogu (`computeGearReport`) bierze tylko won/done.
+ *
+ * Z `events` data dnia powiązanego z kalendarzem pochodzi z wydarzenia (jedno
+ * źródło dat, `realization-days.ts`); bez nich — z ostatniej znanej daty dnia.
  */
 export function summarizeProjectGear(
   project: Project,
-  catalog: EquipmentItem[] | Map<string, EquipmentItem>
+  catalog: EquipmentItem[] | Map<string, EquipmentItem>,
+  options: GearStatsOptions = {}
 ): ProjectGearSummary {
   const byId = toCatalogMap(catalog)
-  const days = projectGearDays(project)
+  const days = options.events ? gearDaysWithCalendarDates(project, options.events) : projectGearDays(project)
   const uses = new Map<string, ProjectGearItemUse>()
 
   const perDay = days.map((day) => {
@@ -226,7 +237,7 @@ function pct(value: number, invested: number): number | null {
 export function computeGearReport(
   items: EquipmentItem[],
   projects: Project[],
-  options: { now?: Date } = {}
+  options: { now?: Date } & GearStatsOptions = {}
 ): GearReport {
   const today = toDateKey(options.now ?? new Date())
   const byId = toCatalogMap(items)
@@ -242,7 +253,7 @@ export function computeGearReport(
     if (!hasGearLogged(project)) {
       missingGear.push({ project, revenue: projectGearRevenue(project) })
     }
-    const summary = summarizeProjectGear(project, byId)
+    const summary = summarizeProjectGear(project, byId, { events: options.events })
     if (summary.revenue) {
       unassignedClientPaid += summary.revenue.ownGear - summary.clientPaidAssigned
     }
@@ -346,13 +357,14 @@ function lastDate(use: ProjectGearItemUse): string {
 export function itemUsageHistory(
   itemId: string,
   projects: Project[],
-  catalog: EquipmentItem[]
+  catalog: EquipmentItem[],
+  options: GearStatsOptions = {}
 ): { project: Project; use: ProjectGearItemUse }[] {
   const byId = toCatalogMap(catalog)
   return projects
     .filter((project) => countsTowardRevenue(project.status))
     .flatMap((project) => {
-      const use = summarizeProjectGear(project, byId).items.find((u) => u.itemId === itemId)
+      const use = summarizeProjectGear(project, byId, options).items.find((u) => u.itemId === itemId)
       return use ? [{ project, use }] : []
     })
     .sort((a, b) => lastDate(b.use).localeCompare(lastDate(a.use)))
