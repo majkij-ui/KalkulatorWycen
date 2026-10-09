@@ -12,7 +12,6 @@ import { createCollectionStore } from './v3-store'
 import {
   createEquipmentId,
   equipmentItemSchema,
-  type EquipmentCategory,
   type EquipmentItem,
 } from './project-types'
 
@@ -39,13 +38,16 @@ export const replaceAllEquipment = store.replaceAll
 
 export function createEquipmentItem(params: {
   name: string
-  category: EquipmentCategory
+  /** Klucz z `EQUIPMENT_CATEGORIES` albo własna kategoria. */
+  category: string
   purchasePrice?: number
   rentalDayRate?: number
+  /** Liczba sztuk; 1 nie jest zapisywane (brak pola = 1). */
+  quantity?: number
   purchaseDate?: string
   notes?: string
 }): EquipmentItem {
-  return {
+  const item: EquipmentItem = {
     id: createEquipmentId(),
     name: params.name,
     category: params.category,
@@ -54,11 +56,13 @@ export function createEquipmentItem(params: {
     purchaseDate: params.purchaseDate ?? '',
     notes: params.notes ?? '',
   }
+  if (params.quantity && params.quantity > 1) item.quantity = Math.floor(params.quantity)
+  return item
 }
 
 /** Pozycje pogrupowane po kategorii — pod rozwijaną listę w zakładce Produkcja. */
-export function groupByCategory(items: EquipmentItem[]): Map<EquipmentCategory, EquipmentItem[]> {
-  const map = new Map<EquipmentCategory, EquipmentItem[]>()
+export function groupByCategory(items: EquipmentItem[]): Map<string, EquipmentItem[]> {
+  const map = new Map<string, EquipmentItem[]>()
   items.forEach((item) => {
     const bucket = map.get(item.category) ?? []
     bucket.push(item)

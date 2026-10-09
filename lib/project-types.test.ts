@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   countsTowardRevenue,
   defaultProjectTab,
+  equipmentCategoryLabel,
   equipmentItemSchema,
   fixedCostSchema,
   matchesFilter,
@@ -12,6 +13,7 @@ import {
   toMonthKey,
   toQuarter,
   toYear,
+  unitsOwned,
 } from './project-types'
 
 test('do wyników firmy wliczają się tylko projekty won/done', () => {
@@ -54,14 +56,74 @@ test('schemat sprzętu naprawia uszkodzone pola zamiast odrzucać rekord', () =>
   const parsed = equipmentItemSchema.parse({
     id: 'eq-1',
     name: 'FX3',
-    category: 'nieistniejaca',
+    category: 42,
     purchasePrice: Number.NaN,
     rentalDayRate: -5,
   })
-  assert.equal(parsed.category, 'inne', 'nieznana kategoria → inne')
+  assert.equal(parsed.category, 'inne', 'kategoria, która nie jest tekstem → inne')
   assert.equal(parsed.purchasePrice, 0, 'NaN → 0')
   assert.equal(parsed.rentalDayRate, 0, 'liczba ujemna → 0')
   assert.equal(parsed.notes, '')
+})
+
+test('nieznana kategoria i pola z nowszej wersji przeżywają odczyt (zasada 4)', () => {
+  const parsed = equipmentItemSchema.parse({
+    id: 'eq-1',
+    name: 'C-stand',
+    category: 'grip',
+    purchasePrice: 400,
+    rentalDayRate: 30,
+    serial: 'AB-123',
+  })
+  assert.equal(parsed.category, 'grip')
+  assert.equal((parsed as Record<string, unknown>).serial, 'AB-123')
+  assert.equal(equipmentCategoryLabel('grip'), 'grip', 'nieznana kategoria pokazuje się dosłownie')
+  assert.equal(equipmentCategoryLabel('podglad'), 'Podgląd')
+})
+
+test('sztuki: brak albo bzdura = 1 sztuka, wycofanie tylko z poprawną datą', () => {
+  const base = { id: 'eq-1', name: 'Aputure', category: 'swiatlo' }
+  assert.equal(equipmentItemSchema.parse(base).quantity, undefined)
+  assert.equal(unitsOwned(equipmentItemSchema.parse(base)), 1)
+  assert.equal(unitsOwned(equipmentItemSchema.parse({ ...base, quantity: 3 })), 3)
+  for (const bad of [0, -2, 1.5, 'dwie']) {
+    assert.equal(equipmentItemSchema.parse({ ...base, quantity: bad }).quantity, undefined, String(bad))
+  }
+  assert.equal(equipmentItemSchema.parse({ ...base, retiredAt: '2026-02-01' }).retiredAt, '2026-02-01')
+  assert.equal(equipmentItemSchema.parse({ ...base, retiredAt: 'wczoraj' }).retiredAt, undefined)
+})
+
+test('dni sprzętu w projekcie: zły wpis znika, reszta zostaje', () => {
+  const base = { id: 'p-1', name: 'X', date: '2026-03-01' }
+  assert.equal(projectSchema.parse(base).gearDays, undefined, 'brak pola = stary kształt')
+  assert.deepEqual(projectSchema.parse({ ...base, gearDays: 'bzdura' }).gearDays, [])
+
+  const parsed = projectSchema.parse({
+    ...base,
+    gearDays: [
+      {
+        id: 'gd-1',
+        date: '2026-03-02',
+        lines: [{ itemId: 'fx3', qty: 2 }, { qty: 1 }, { itemId: 'lampa' }, 'x'],
+        weather: 'deszcz',
+      },
+      { label: 'bez id' },
+      { id: 'gd-2', date: 'jutro', lines: 'nic' },
+    ],
+  })
+  assert.deepEqual(parsed.gearDays, [
+    {
+      id: 'gd-1',
+      label: '',
+      date: '2026-03-02',
+      lines: [
+        { itemId: 'fx3', qty: 2 },
+        { itemId: 'lampa', qty: 1 },
+      ],
+      weather: 'deszcz',
+    },
+    { id: 'gd-2', label: '', date: '', lines: [] },
+  ])
 })
 
 test('koszt stały wymaga poprawnego miesiąca', () => {

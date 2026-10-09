@@ -109,31 +109,129 @@ export function leadSourceLabel(source: string | undefined | null): string {
 
 // ── Sprzęt ───────────────────────────────────────────────────────────────────
 
-export const EQUIPMENT_CATEGORIES = ['kamery', 'swiatlo', 'dzwiek', 'inne'] as const
+/**
+ * Znane kategorie w kolejności pakowania wozu (i sekcji sprzętu dnia
+ * zdjęciowego w wycenie: kamery → obiektywy → stabilizacja → podgląd → światło).
+ *
+ * `category` w rekordzie to WOLNY string, nie enum (zasada 4 planu): kategoria
+ * dopisana przez nowszą wersję albo import przeżywa zapis w starszej i
+ * pokazuje się dosłownie, zamiast po cichu zamienić się w „inne".
+ */
+export const EQUIPMENT_CATEGORIES = [
+  'kamery',
+  'obiektywy',
+  'stabilizacja',
+  'podglad',
+  'swiatlo',
+  'dzwiek',
+  'zasilanie',
+  'drony',
+  'inne',
+] as const
 export type EquipmentCategory = (typeof EQUIPMENT_CATEGORIES)[number]
 
 export const EQUIPMENT_CATEGORY_LABELS: Record<EquipmentCategory, string> = {
   kamery: 'Kamery',
+  obiektywy: 'Obiektywy',
+  stabilizacja: 'Stabilizacja',
+  podglad: 'Podgląd',
   swiatlo: 'Światło',
   dzwiek: 'Dźwięk',
+  zasilanie: 'Zasilanie',
+  drony: 'Drony',
   inne: 'Inne',
 }
 
-export const equipmentItemSchema = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  category: z.enum(EQUIPMENT_CATEGORIES).catch('inne'),
-  /** Cena zakupu (PLN netto). 0 = nieznana / sprzęt nie własny. */
-  purchasePrice: z.number().finite().nonnegative().catch(0),
-  /** Średnia cena rentalowa za dzień (PLN netto) — podstawa wyceny ROI. */
-  rentalDayRate: z.number().finite().nonnegative().catch(0),
-  /** ISO YYYY-MM-DD; pusty = nieznana. */
-  purchaseDate: z.string().catch(''),
-  notes: z.string().catch(''),
-})
+/** Etykieta kategorii; nieznany klucz pokazuje się dosłownie. */
+export function equipmentCategoryLabel(category: string): string {
+  return EQUIPMENT_CATEGORY_LABELS[category as EquipmentCategory] ?? category
+}
+
+/** Pozycja kategorii w kolejności pakowania; nieznane na końcu, za „inne". */
+export function equipmentCategoryRank(category: string): number {
+  const index = (EQUIPMENT_CATEGORIES as readonly string[]).indexOf(category)
+  return index === -1 ? EQUIPMENT_CATEGORIES.length : index
+}
+
+export const equipmentItemSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    /** Klucz z `EQUIPMENT_CATEGORIES` albo dowolny tekst. */
+    category: z.string().min(1).catch('inne'),
+    /** Cena zakupu JEDNEJ sztuki (PLN netto). 0 = nieznana / sprzęt nie własny. */
+    purchasePrice: z.number().finite().nonnegative().catch(0),
+    /** Średnia cena rentalowa JEDNEJ sztuki za dzień (PLN netto) — podstawa ROI. */
+    rentalDayRate: z.number().finite().nonnegative().catch(0),
+    /**
+     * Ile identycznych sztuk mam (2× ta sama lampa). Brak = 1. Zainwestowane =
+     * cena × sztuki; na planie liczy się tyle sztuk, ile realnie pojechało.
+     */
+    quantity: z.number().int().min(1).optional().catch(undefined),
+    /** ISO YYYY-MM-DD; pusty = nieznana. */
+    purchaseDate: z.string().catch(''),
+    /**
+     * Sprzedany / zepsuty (YYYY-MM-DD). Zostaje w historii i statystykach,
+     * znika z list wyboru w projektach.
+     */
+    retiredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
+    notes: z.string().catch(''),
+  })
+  .passthrough()
 export type EquipmentItem = z.infer<typeof equipmentItemSchema>
 
-/** Użycie sprzętu w projekcie. Trzymane PRZY projekcie — brak osieroconych relacji. */
+/** Liczba posiadanych sztuk (brak pola = 1). */
+export function unitsOwned(item: Pick<EquipmentItem, 'quantity'>): number {
+  return item.quantity && item.quantity > 0 ? item.quantity : 1
+}
+
+/**
+ * Tablica, w której uszkodzony element znika, a reszta zostaje. Zwykłe
+ * `z.array(...).catch([])` wyzerowałoby CAŁĄ listę przez jeden zły wpis.
+ */
+function lenientArray<S extends z.ZodTypeAny>(schema: S) {
+  return z
+    .array(z.unknown())
+    .catch([])
+    .transform((list) =>
+      list.flatMap((entry) => {
+        const parsed = schema.safeParse(entry)
+        return parsed.success ? [parsed.data as z.output<S>] : []
+      })
+    )
+}
+
+/** Jedna pozycja sprzętu w dniu zdjęciowym. */
+export const gearLineSchema = z
+  .object({
+    itemId: z.string().min(1),
+    /** Ile sztuk pojechało tego dnia (≥ 1). */
+    qty: z.number().int().min(1).catch(1),
+  })
+  .passthrough()
+export type GearLine = z.infer<typeof gearLineSchema>
+
+/**
+ * Dzień zdjęciowy z punktu widzenia sprzętu: co realnie pojechało na plan.
+ * To dane PROJEKTU (użycie), nie wyceny (cena) — nie zmieniają kwot oferty.
+ */
+export const gearDaySchema = z
+  .object({
+    id: z.string().min(1),
+    /** Własna nazwa dnia; pusta = „Dzień N". */
+    label: z.string().catch(''),
+    /** YYYY-MM-DD albo '' — bez daty liczy się data księgowa projektu. */
+    date: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).catch(''),
+    lines: lenientArray(gearLineSchema),
+  })
+  .passthrough()
+export type GearDay = z.infer<typeof gearDaySchema>
+
+/**
+ * Użycie sprzętu w projekcie w STARYM kształcie (faza 3): pozycja × liczba dni,
+ * bez podziału na dni. Wciąż czytane — projekt bez `gearDays` liczy się z tego
+ * pola (`projectGearDays` w gear-usage.ts zamienia je na dni).
+ */
 export const projectEquipmentUsageSchema = z.object({
   itemId: z.string().min(1),
   /** Liczba dni na planie. */
@@ -251,7 +349,13 @@ export const projectSchema = z
     /** `null` = lead bez wyceny. Uszkodzona wartość też daje `null`, nie odrzuca projektu. */
     quote: quoteSnapshotPassthrough.nullable().catch(null),
     financials: projectFinancialsSchema.nullable().catch(null),
+    /** Stary kształt użycia sprzętu; czytany tylko, gdy brak `gearDays`. */
     equipment: z.array(projectEquipmentUsageSchema).catch([]),
+    /**
+     * Sprzęt dzień po dniu (zakładka Sprzęt). Brak pola = projekt jeszcze w
+     * starym kształcie (`equipment`); pusta lista = świadomie bez sprzętu.
+     */
+    gearDays: lenientArray(gearDaySchema).optional(),
     /** Wnioski / lessons learned z projektu. */
     notes: z.string().catch(''),
     /**
@@ -283,6 +387,10 @@ export function createProjectId(): string {
 
 export function createEquipmentId(): string {
   return `eq-${randomSuffix()}`
+}
+
+export function createGearDayId(): string {
+  return `gd-${randomSuffix()}`
 }
 
 export function createFixedCostId(): string {

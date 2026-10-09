@@ -106,10 +106,13 @@ export interface FinancialsSource {
  * Migawka finansowa projektu — liczona tak samo jak zakładka Profit.
  * Zwraca `null`, gdy migawka nie zawiera danych wyceny (nie ma czego liczyć).
  */
-export function computeSnapshotFinancials(
-  snapshot: FinancialsSource | null | undefined,
-  now: Date = new Date()
-): ProjectFinancials | null {
+/**
+ * Dane, cennik i marża migawki — dokładnie tak, jak wczytuje je kalkulator.
+ * Każda migawka liczy się z WŁASNEGO cennika. `null` = brak danych wyceny.
+ */
+export function resolveSnapshot(
+  snapshot: FinancialsSource | null | undefined
+): { data: QuoteData; pricing: PricingConfigShape; margin: number } | null {
   if (!snapshot || typeof snapshot !== 'object' || !snapshot.data || typeof snapshot.data !== 'object') {
     return null
   }
@@ -122,6 +125,16 @@ export function computeSnapshotFinancials(
     typeof snapshot.marginMultiplier === 'number' && Number.isFinite(snapshot.marginMultiplier)
       ? snapshot.marginMultiplier
       : 1
+  return { data, pricing, margin }
+}
+
+export function computeSnapshotFinancials(
+  snapshot: FinancialsSource | null | undefined,
+  now: Date = new Date()
+): ProjectFinancials | null {
+  const resolved = resolveSnapshot(snapshot)
+  if (!resolved) return null
+  const { data, pricing, margin } = resolved
 
   const totals = computeQuoteTotals(data, margin, pricing)
   const { totalCost } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))

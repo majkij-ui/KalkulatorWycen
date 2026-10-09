@@ -15,18 +15,20 @@ import {
   listEquipment,
   upsertEquipment,
 } from './equipment-catalog'
-import type { EquipmentCategory, EquipmentItem } from './project-types'
+import type { EquipmentItem } from './project-types'
 
 interface EquipmentContextValue {
   items: EquipmentItem[]
   isLoading: boolean
   addItem: (params: {
     name: string
-    category: EquipmentCategory
+    category: string
     purchasePrice?: number
     rentalDayRate?: number
+    quantity?: number
     /** `YYYY-MM-DD` — zakup pokazuje się wtedy w kalendarzu. */
     purchaseDate?: string
+    notes?: string
   }) => Promise<EquipmentItem | null>
   updateItem: (item: EquipmentItem) => Promise<void>
   removeItem: (id: string) => Promise<void>

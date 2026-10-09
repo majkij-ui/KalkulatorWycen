@@ -31,7 +31,6 @@ import {
   EQUIPMENT_CATEGORIES,
   EQUIPMENT_CATEGORY_LABELS,
   PROJECT_STATUS_LABELS,
-  type EquipmentCategory,
   type Project,
 } from '@/lib/project-types'
 import { archivo } from './calendar-bits'
@@ -109,7 +108,7 @@ export function EventForm({
   const [projectName, setProjectName] = useState('')
   const [projectClient, setProjectClient] = useState('')
   const [newProject, setNewProject] = useState(false)
-  const [gearCategory, setGearCategory] = useState<EquipmentCategory>(gearItem?.category ?? 'kamery')
+  const [gearCategory, setGearCategory] = useState<string>(gearItem?.category ?? 'kamery')
   const [gearPrice, setGearPrice] = useState(gearItem?.purchasePrice ? String(gearItem.purchasePrice) : '')
   const [showProblems, setShowProblems] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -386,7 +385,7 @@ export function EventForm({
               <select
                 id={`${id}-category`}
                 value={gearCategory}
-                onChange={(e) => setGearCategory(e.target.value as EquipmentCategory)}
+                onChange={(e) => setGearCategory(e.target.value)}
                 className={inputClass}
               >
                 {EQUIPMENT_CATEGORIES.map((c) => (
