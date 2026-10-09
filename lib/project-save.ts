@@ -56,6 +56,26 @@ export function isBlankQuoteData(data: Partial<QuoteData>): boolean {
   return sameJson(current, blank)
 }
 
+/**
+ * Klient projektu po zapisie. Od T3 klienta ustawia się w nagłówku projektu —
+ * to on grupuje projekty i liczy przychód klienta. Pole „Nazwa klienta" w
+ * zakładce PDF to etykieta na wydruku (np. pełna nazwa spółki) i nie nadpisuje
+ * klienta projektu; uzupełnia go tylko, gdy projekt klienta jeszcze nie ma.
+ */
+export function clientAfterSave(project: Pick<Project, 'client'>, snapshot: Pick<QuoteSnapshot, 'data'>): string {
+  return project.client.trim() ? project.client : (snapshot.data.clientName ?? '').trim()
+}
+
+/**
+ * Czy po zmianie klienta w nagłówku można wgrać pustą wycenę z nowym klientem
+ * (tak jak przy otwarciu projektu). Tylko gdy nic by nie przepadło: projekt
+ * nie ma zapisanej wyceny, w kalkulatorze nic nie zbudowano, a zakładki PDF
+ * jeszcze nie otwierano (`pdfDraft` puste — jej teksty żyją tylko w szkicu).
+ */
+export function canReprefillBlankQuote(project: Pick<Project, 'quote'>, snapshot: QuoteSnapshot): boolean {
+  return !project.quote && snapshot.pdfDraft == null && isBlankQuoteData(snapshot.data)
+}
+
 export type ProjectSavePlan =
   | {
       status: 'ready'
@@ -80,7 +100,7 @@ export function planProjectSave(params: {
 }): ProjectSavePlan {
   const { project, snapshot, replaceFinancials = false, now = new Date() } = params
   const updatedAt = now.toISOString()
-  const client = snapshot.data.clientName || project.client
+  const client = clientAfterSave(project, snapshot)
 
   if (!project.quote && isBlankQuoteData(snapshot.data)) {
     return { status: 'ready', source: 'kept', project: { ...project, client, updatedAt } }

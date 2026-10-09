@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   countsTowardRevenue,
+  defaultProjectTab,
   equipmentItemSchema,
   fixedCostSchema,
   matchesFilter,
@@ -177,4 +178,19 @@ test('„Ukryj nieprzyjęte" chowa odrzucone wyceny w każdym filtrze', () => {
   assert.equal(matchesFilter('quote', 'quotes', { hideLost: true }), true)
   assert.equal(matchesFilter('won', 'all', { hideLost: true }), true)
   assert.equal(matchesFilter('lost', 'all'), true, 'bez przełącznika widać wszystko')
+})
+
+test('domyślna zakładka: oś czasu dla W realizacji i Zrealizowanych, wycena dla reszty', () => {
+  assert.equal(defaultProjectTab('won'), 'os')
+  assert.equal(defaultProjectTab('done'), 'os')
+  assert.equal(defaultProjectTab('quote'), 'wycena')
+  assert.equal(defaultProjectTab('lost'), 'wycena')
+})
+
+test('deletedAt przechodzi przez schemat; zepsuta wartość nie odrzuca projektu', () => {
+  const base = { id: 'p-1', date: '2026-10-09' }
+  assert.equal(projectSchema.parse({ ...base, deletedAt: '2026-10-09T10:00:00.000Z' }).deletedAt, '2026-10-09T10:00:00.000Z')
+  const broken = projectSchema.safeParse({ ...base, deletedAt: 42 })
+  assert.equal(broken.success, true)
+  assert.equal(broken.success && broken.data.deletedAt, undefined)
 })

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { blankQuoteSnapshot, isBlankQuoteData, planProjectSave } from './project-save'
+import { blankQuoteSnapshot, canReprefillBlankQuote, isBlankQuoteData, planProjectSave } from './project-save'
 import { mergeQuoteDataPartial } from './quote-financials'
 import { DEFAULT_PRICING } from './pricing-config'
 import { defaultQuoteData, type QuoteData } from './quote-types'
@@ -158,4 +158,28 @@ test('projekt z wyceną zapisuje się jak dotąd: finanse zawsze z kalkulatora, 
   assert.equal(plan.project.quote, snap)
   assert.ok(plan.project.financials)
   assert.ok(plan.project.financials.sumaNetto > 0)
+})
+
+test('klient z nagłówka wygrywa z etykietą PDF; PDF uzupełnia tylko pustego klienta', () => {
+  const withQuote = project({ client: 'Tchibo', quote: snapshot({ dniDokumentacji: 1 }) })
+  const legalName = snapshot({ clientName: 'Tchibo Polska Sp. z o.o.', dniDokumentacji: 2 })
+  const plan = planProjectSave({ project: withQuote, snapshot: legalName, now: NOW })
+  assert.ok(plan.status === 'ready')
+  assert.equal(plan.project.client, 'Tchibo')
+  assert.equal((plan.project.quote as QuoteSnapshot).data.clientName, 'Tchibo Polska Sp. z o.o.', 'etykieta zostaje w wycenie')
+
+  const noClient = project({ client: '  ', quote: snapshot({ dniDokumentacji: 1 }) })
+  const filled = planProjectSave({ project: noClient, snapshot: legalName, now: NOW })
+  assert.ok(filled.status === 'ready')
+  assert.equal(filled.project.client, 'Tchibo Polska Sp. z o.o.')
+})
+
+test('canReprefillBlankQuote: tylko gdy nic by nie przepadło', () => {
+  const lead = project({ quote: null })
+  assert.equal(canReprefillBlankQuote(lead, freshlyOpened(lead)), true)
+  assert.equal(canReprefillBlankQuote(lead, snapshot({ clientName: 'Inny' })), true, 'sam klient to nie wycena')
+  assert.equal(canReprefillBlankQuote(lead, snapshot({ dniDokumentacji: 1 })), false, 'zbudowana wycena')
+  assert.equal(canReprefillBlankQuote(lead, snapshot({}, { pdfDraft: { terms: [] } })), false, 'otwarty szkic PDF')
+  const quoted = project({ quote: snapshot({ dniDokumentacji: 1 }) })
+  assert.equal(canReprefillBlankQuote(quoted, freshlyOpened(quoted)), false, 'projekt ma zapisaną wycenę')
 })

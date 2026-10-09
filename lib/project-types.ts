@@ -49,6 +49,19 @@ export function countsTowardRevenue(status: ProjectStatus): boolean {
   return status === 'won' || status === 'done'
 }
 
+/** Zakładki otwartego projektu (T3). Klucze na stałe, etykiety w interfejsie. */
+export const PROJECT_TABS = ['os', 'wycena', 'sprzet', 'notatki'] as const
+export type ProjectTab = (typeof PROJECT_TABS)[number]
+
+/**
+ * Zakładka przy otwarciu projektu: projekt w realizacji albo zrealizowany
+ * otwiera się na osi czasu (tam toczy się jego życie), wycena i nieprzyjęta —
+ * w kalkulatorze (decyzja 2026-10-09).
+ */
+export function defaultProjectTab(status: ProjectStatus): ProjectTab {
+  return countsTowardRevenue(status) ? 'os' : 'wycena'
+}
+
 /** Filtry listy projektów z notatek: „tylko projekty / też wyceny / tylko wyceny". */
 export const PROJECT_FILTERS = ['all', 'projects', 'quotes'] as const
 export type ProjectFilter = (typeof PROJECT_FILTERS)[number]
@@ -248,6 +261,12 @@ export const projectSchema = z
      * idempotencja migracji — bez niego każdy start duplikowałby całą bibliotekę.
      */
     migratedFromQuoteId: z.string().optional().catch(undefined),
+    /**
+     * Miękkie usunięcie (ISO). Rekord zostaje w pliku: usunięcie da się cofnąć,
+     * a migracja nie wskrzesza usuniętej wyceny. Wątek projektu dostaje ten
+     * sam znacznik (`project-deletion.ts`).
+     */
+    deletedAt: z.string().optional().catch(undefined),
   })
   .passthrough()
 export type Project = z.infer<typeof projectSchema>
