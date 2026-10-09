@@ -28,6 +28,7 @@ interface EquipmentContextValue {
     quantity?: number
     /** `YYYY-MM-DD` — zakup pokazuje się wtedy w kalendarzu. */
     purchaseDate?: string
+    notes?: string
   }) => Promise<EquipmentItem | null>
   updateItem: (item: EquipmentItem) => Promise<void>
   removeItem: (id: string) => Promise<void>

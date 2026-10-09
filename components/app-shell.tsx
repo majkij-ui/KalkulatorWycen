@@ -184,7 +184,7 @@ function ShellContent() {
 
         {section === 'marketing' && <MarketingSection onOpenProject={goToProject} />}
 
-        {section === 'sprzet' && <EquipmentSection />}
+        {section === 'sprzet' && <EquipmentSection onOpenProject={goToProject} />}
 
         {section === 'ustawienia' && (
           <ComingSoon

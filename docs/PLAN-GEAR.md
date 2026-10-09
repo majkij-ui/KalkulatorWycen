@@ -25,7 +25,7 @@ buy better next time.
    | **Odpracował** (`rentValue`) | What it would have cost me to rent it every time I took it | unit-days × rental day rate |
    | **Zarobił** (`clientPaid`) | What clients actually paid for it | the quote's gear amount, spread over the items used (§4) |
 
-   Names are working titles until M.J. confirms them.
+   Names confirmed by M.J. 2026-10-09.
 4. **Identical items = one record with a quantity.** Purchase price and rental rate are per unit;
    invested = price × quantity. No per-unit tracking (serials, different purchase dates).
 5. **Gear in the quote with a discount** (old decision E reversed): the quote's per-day gear
@@ -80,12 +80,20 @@ Finance. They only answer "did this purchase pay off".
 | Track | What | Who / status |
 |---|---|---|
 | **G1 Data + logic** | §3, §4 | ✅ this session |
-| **G2 Import my gear list** | M.J. sends the list (any format). Claude turns it into `equipment.json` records, flags missing rental rates (can propose rates from Polish rental price lists to confirm), and hands over a patch for `npm run data -- apply` (backs up first). **Install a hub build that includes G1 before importing**, or an older build will rewrite new categories as "inne" and drop `quantity`. | waiting for the list |
-| **G3 Project Sprzęt tab** | Days side by side (prefilled per §3), searchable catalogue grouped by category, click to add to the selected day or all days, quantity, copy day, Odpracował per day and total, Zarobił for the project, packing list per day or whole project (print). Retired items hidden. Body stays in `components/equipment/project-equipment.tsx` (T3 mounts it). | next, this session |
-| **G4 Sprzęt screen** | Item list with both numbers and two-tone payoff bar, sort by Odpracował / Zarobił / most used / unused, click an item for details and editing (purchase date, quantity, retire) and its project history; totals incl. unassigned; "2026 projects without gear" checklist with links. | next, this session |
+| **G2 Import my gear list** | First batch staged: `imports/2026-10-09-sprzet.json`, 15 items from M.J.'s "GEAR YOU OWN" screenshot, **without purchase prices and rental rates** (not in the screenshot). Apply per §5a. Later changes to existing items go in as `update` + `set` (an `upsert` replaces the whole record and would wipe what was typed in the app). | file ready; prices and rates to come |
+| **G3 Project Sprzęt tab** | Grid: rows = catalogue (search, "Na planie" filter, retired hidden unless used here), columns = days (popover: name, date, duplicate, delete). Click a name = all days, click a cell = one day; items with several units cycle all → one less → none. Odpracował per item, per day and total; Zarobił for the project (from the quote, "~"). Suggested days are shown but saved only on the first change. Local copy + 250 ms delayed save so fast clicking can't lose edits. Packing list for the whole project or one day, printable. | ✅ |
+| **G4 Sprzęt screen** | Tiles (invested, Odpracował, Zarobił incl. unassigned, unused; warnings for missing price / rate), banner listing won/done projects without gear (click opens the project), search, sort (category, Odpracował, Zarobił, most used, closest to payoff, longest unused), retired toggle. Rows: units, prices, usage, both numbers, two-tone payoff bar + forecast. Click → side panel: edit everything incl. purchase date, quantity, custom category; stats; project history (click opens the project); retire / restore; delete with a warning. | ✅ |
 | **G5 Gear in the quote** | Produkcja detailed mode: replace guessed gear options per day with the G3 picker; price = rental rate × days; gear discount slider per quote + "gratis" per item; rate and discount frozen in the snapshot; old quotes calculate exactly as before; PDF optionally shows "wartość X, rabat Y". Then Zarobił stops being an estimate. "Take from quote" button in the Sprzęt tab. | separate session, after G3/G4 and the real catalogue |
 | **G6 Kits** | Saved gear sets ("Wywiad", "Event") applied to a day in one click; quick-mode packages become kits. | with G5 |
 | **G7 Retrofit 2026** | M.J. logs gear per project from the G4 checklist (route A: Sprzęt tab only, numbers untouched) or rebuilds the quote (route B, after G5; the existing replace-financials confirmation in `lib/project-save.ts` covers it). Adding shoot days in the calendar first lets the Sprzęt tab prefill dates. | M.J. |
+
+## 5a. Applying an import (on the Mac)
+
+1. The hub app installed on the Mac must include G1 (this branch merged into `v3/project-hub`, app rebuilt).
+2. Quit the hub app (the script refuses to write while it runs).
+3. `npm run data -- apply imports/2026-10-09-sprzet.json` (add `--dry-run` first to preview). It backs up
+   `equipment.json` to `backups/` before writing; re-running is a no-op.
+4. Open the app: Sprzęt shows the items; fill in purchase price, date and rental rate per item in its panel.
 
 ## 6. Coordination
 
@@ -93,7 +101,9 @@ Finance. They only answer "did this purchase pay off".
 - Files outside the gear area touched by G1: `lib/quote-financials.ts` (extracted `resolveSnapshot`,
   behaviour unchanged) and two lines in `components/calendar/event-form.tsx` (category is a string).
 - **T3: please keep `components/equipment/project-equipment.tsx` and its `ProjectEquipment` export**;
-  G3 rewrites its body.
+  G3 rewrote its body. `app-shell.tsx` got one line: `<EquipmentSection onOpenProject={goToProject} />`.
+- After T3: let "open project" from the Sprzęt screen land directly on the project's Sprzęt tab (today it
+  opens the project on its default tab).
 - T5 (Realizacja) absorbs the Sprzęt tab as is; nothing in G changes that plan.
 
 ## 7. Ideas, not planned

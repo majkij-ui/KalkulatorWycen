@@ -131,6 +131,29 @@ export function setGearLineEverywhere(days: GearDay[], itemId: string, qty: numb
   return days.map((day) => withLine(day, itemId, qty))
 }
 
+/**
+ * Następna liczba sztuk po kliknięciu w komórkę: brak → wszystkie → o jedną
+ * mniej → … → brak. Zwykle zabiera się komplet, więc pierwszy klik daje
+ * wszystkie sztuki; jedna sztuka to zwykły przełącznik.
+ */
+export function cycleGearQty(current: number, owned: number): number {
+  const max = Math.max(1, Math.floor(owned))
+  if (current <= 0) return max
+  return Math.min(current, max) - 1
+}
+
+/**
+ * Klik w nazwę pozycji: gdy jest we WSZYSTKICH dniach — znika z każdego;
+ * w przeciwnym razie dochodzi do brakujących dni (komplet sztuk), a dni, w
+ * których już jest, zachowują swoją liczbę.
+ */
+export function toggleGearItemAllDays(days: GearDay[], itemId: string, owned: number): GearDay[] {
+  const inEvery = days.length > 0 && days.every((day) => day.lines.some((l) => l.itemId === itemId))
+  if (inEvery) return setGearLineEverywhere(days, itemId, 0)
+  const qty = Math.max(1, Math.floor(owned))
+  return days.map((day) => (day.lines.some((l) => l.itemId === itemId) ? day : withLine(day, itemId, qty)))
+}
+
 // ── Podpowiedź dni ───────────────────────────────────────────────────────────
 
 type ShootEvent = Pick<TimelineEvent, 'kind' | 'projectId' | 'start' | 'end' | 'deletedAt'>

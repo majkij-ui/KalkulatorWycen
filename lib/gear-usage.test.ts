@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   addGearDay,
   buildPackingList,
+  cycleGearQty,
   duplicateGearDay,
   gearDayDate,
   gearDayLabel,
@@ -16,6 +17,7 @@ import {
   setGearLine,
   setGearLineEverywhere,
   suggestGearDays,
+  toggleGearItemAllDays,
   updateGearDay,
 } from './gear-usage'
 import type { EquipmentItem, GearDay, Project } from './project-types'
@@ -190,4 +192,27 @@ test('lista pakowania: znane kategorie w kolejności wozu, własne na końcu', (
     buildPackingList(p, catalog).map((g) => g.category),
     ['kamery', 'obiektywy', 'dzwiek', 'inne', 'akumulatory', 'grip']
   )
+})
+
+test('klik w komórkę: brak → komplet → o jedną mniej → brak', () => {
+  assert.equal(cycleGearQty(0, 1), 1)
+  assert.equal(cycleGearQty(1, 1), 0)
+  const seq = [0]
+  for (let i = 0; i < 3; i += 1) seq.push(cycleGearQty(seq[seq.length - 1], 2))
+  assert.deepEqual(seq, [0, 2, 1, 0])
+  assert.equal(cycleGearQty(5, 2), 1, 'więcej niż mam (np. po zmianie katalogu) → schodzi w dół')
+  assert.equal(cycleGearQty(0, 0), 1, 'pozycja bez liczby sztuk to jedna sztuka')
+})
+
+test('klik w nazwę: dokłada do brakujących dni, a gdy jest wszędzie, zdejmuje wszędzie', () => {
+  const days = [day('d1', [['lampa', 1]]), day('d2', []), day('d3', [])]
+  const added = toggleGearItemAllDays(days, 'lampa', 2)
+  assert.deepEqual(
+    added.map((d) => d.lines.find((l) => l.itemId === 'lampa')?.qty),
+    [1, 2, 2],
+    'dzień, w którym już była, zachowuje swoją liczbę'
+  )
+  const removed = toggleGearItemAllDays(added, 'lampa', 2)
+  assert.ok(removed.every((d) => d.lines.length === 0))
+  assert.deepEqual(toggleGearItemAllDays([], 'lampa', 1), [])
 })

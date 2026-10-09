@@ -1,0 +1,144 @@
+{
+  "note": "Sprzęt M.J. z listy „GEAR YOU OWN” (zrzut ekranu, 2026-10-09). Bez cen zakupu i stawek rentalowych: do uzupełnienia. Wymaga huba z G1 (kategorie jako tekst, sztuki).",
+  "upsert": {
+    "equipment.json": [
+      {
+        "id": "eq-red-komodo-x",
+        "name": "RED Komodo X",
+        "category": "kamery",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-sony-a7s-iii",
+        "name": "Sony A7S III",
+        "category": "kamery",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": "zużyty, martwe HDMI"
+      },
+      {
+        "id": "eq-sony-fe-28-135mm-f-4-pz",
+        "name": "Sony FE 28-135mm f/4 PZ",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-sigma-28-45mm-f-1-8",
+        "name": "Sigma 28-45mm f/1.8",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-sony-fe-100-400mm-gm",
+        "name": "Sony FE 100-400mm GM",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-sony-fe-135mm-f-1-8-gm",
+        "name": "Sony FE 135mm f/1.8 GM",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-tamron-17-28mm-f-2-8",
+        "name": "Tamron 17-28mm f/2.8",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-16-35mm-komodo-ef-rf",
+        "name": "16-35mm (Komodo, EF/RF)",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-leica-lens-set",
+        "name": "Leica lens set",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": "zestaw"
+      },
+      {
+        "id": "eq-pl-revolver-red-nd-adapter",
+        "name": "PL Revolver (RED ND adapter)",
+        "category": "obiektywy",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-amaran-200x",
+        "name": "Amaran 200x",
+        "category": "swiatlo",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-amaran-60x",
+        "name": "Amaran 60x",
+        "category": "swiatlo",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": "",
+        "quantity": 2
+      },
+      {
+        "id": "eq-nanlite-tubes",
+        "name": "NanLite tubes",
+        "category": "swiatlo",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": "",
+        "quantity": 2
+      },
+      {
+        "id": "eq-7-inch-monitor",
+        "name": "7-inch monitor",
+        "category": "podglad",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      },
+      {
+        "id": "eq-viltrox-6-inch",
+        "name": "Viltrox 6-inch",
+        "category": "podglad",
+        "purchasePrice": 0,
+        "rentalDayRate": 0,
+        "purchaseDate": "",
+        "notes": ""
+      }
+    ]
+  }
+}
