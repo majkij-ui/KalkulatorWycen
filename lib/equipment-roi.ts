@@ -55,6 +55,8 @@ export interface ProjectGearSummary {
   revenue: GearRevenue | null
   /** Ile z `revenue.ownGear` przypisano pozycjom (0, gdy nie ma czego obciążyć). */
   clientPaidAssigned: number
+  /** Cała zapłata za sprzęt pochodzi z pozycji katalogu w wycenie — bez szacunku. */
+  clientPaidExact: boolean
 }
 
 function toCatalogMap(catalog: EquipmentItem[] | Map<string, EquipmentItem>): Map<string, EquipmentItem> {
@@ -108,22 +110,45 @@ export function summarizeProjectGear(
     return { dayId: day.id, rentValue: dayValue }
   })
 
+  const revenue = projectGearRevenue(project)
+
+  // Zapłata za pozycje wycenione z katalogu (G5) jest DOKŁADNA i należy do
+  // pozycji także wtedy, gdy nie zaznaczono jej w Realizacji — klient za nią
+  // zapłacił. Pozycja usunięta z katalogu zostaje nieprzypisana.
+  let clientPaidAssigned = 0
+  revenue?.byItem.forEach((amount, itemId) => {
+    const item = byId.get(itemId)
+    if (!item) return
+    const use = uses.get(itemId) ?? {
+      itemId,
+      item,
+      daysUsed: 0,
+      unitDays: 0,
+      rentValue: 0,
+      clientPaid: 0,
+      dates: [],
+    }
+    use.clientPaid += amount
+    uses.set(itemId, use)
+    clientPaidAssigned += amount
+  })
+
   const items = [...uses.values()]
   items.forEach((use) => use.dates.sort())
 
-  // Rozkład zapłaty klienta: wagą jest wartość rentalowa; gdy wszystkie
-  // stawki są puste — sztuko-dni. Pozycje spoza katalogu nic nie dostają.
-  const revenue = projectGearRevenue(project)
-  const inCatalog = items.filter((use) => use.item)
-  const byValue = inCatalog.reduce((sum, use) => sum + use.rentValue, 0)
+  // Sprzęt wyceniony po staremu: kwota bez pozycji, rozkładana na sprzęt
+  // użyty w dniach — wagą jest wartość rentalowa, a gdy wszystkie stawki są
+  // puste, sztuko-dni. Pozycje spoza katalogu nic nie dostają.
+  const unitemized = revenue?.unitemized ?? 0
+  const used = items.filter((use) => use.item && use.unitDays > 0)
+  const byValue = used.reduce((sum, use) => sum + use.rentValue, 0)
   const weightOf = (use: ProjectGearItemUse) => (byValue > 0 ? use.rentValue : use.unitDays)
-  const totalWeight = inCatalog.reduce((sum, use) => sum + weightOf(use), 0)
-  let clientPaidAssigned = 0
-  if (revenue && revenue.ownGear > 0 && totalWeight > 0) {
-    inCatalog.forEach((use) => {
-      use.clientPaid = (revenue.ownGear * weightOf(use)) / totalWeight
+  const totalWeight = used.reduce((sum, use) => sum + weightOf(use), 0)
+  if (unitemized > 0 && totalWeight > 0) {
+    used.forEach((use) => {
+      use.clientPaid += (unitemized * weightOf(use)) / totalWeight
     })
-    clientPaidAssigned = revenue.ownGear
+    clientPaidAssigned += unitemized
   }
 
   return {
@@ -132,6 +157,7 @@ export function summarizeProjectGear(
     rentValue: perDay.reduce((sum, day) => sum + day.rentValue, 0),
     revenue,
     clientPaidAssigned,
+    clientPaidExact: !!revenue && revenue.itemized > 0 && revenue.unitemized === 0,
   }
 }
 

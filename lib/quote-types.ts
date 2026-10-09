@@ -50,6 +50,32 @@ export type DronOpcja = 'brak' | 'dji' | 'fpv'
 
 export type CrewRoleKey = 'rezOp' | 'asystent' | 'gafer' | 'dzwiekowiec' | 'mua' | 'aktor' | 'model' | 'statysta'
 
+/**
+ * Pozycja MOJEGO sprzętu z katalogu w dniu wyceny (plan G5). Nazwa i stawka są
+ * ZAMROŻONE w chwili dodania: późniejsza zmiana stawki w katalogu nie zmienia
+ * wysłanej oferty (odświeżenie stawek to świadomy klik).
+ */
+export interface QuoteGearLine {
+  /** Id pozycji katalogu (`equipment.json`). */
+  itemId: string
+  name: string
+  /** Stawka rentalowa za dzień za sztukę (PLN netto) w chwili dodania. */
+  rate: number
+  qty: number
+  /** Jedzie na plan, ale klient za to nie płaci: wartość widać, cena 0. */
+  gratis?: boolean
+}
+
+/**
+ * Sprzęt dorentalowany na ten dzień z wypożyczalni: kwota dla klienta = mój
+ * koszt (pozycja kosztowa w planie, kategoria „wynajem").
+ */
+export interface QuoteExternalRental {
+  id: string
+  label: string
+  amount: number
+}
+
 export interface ShootingDay {
   id: string
   rezOp: number
@@ -71,6 +97,13 @@ export interface ShootingDay {
   dayAdjustment: number
   /** Per-day overrides for crew/role labels (empty = use default label). */
   crewNames: Partial<Record<CrewRoleKey, string>>
+  /**
+   * Mój sprzęt z katalogu (G5): cena = stawka × sztuki, minus rabat na sprzęt
+   * z całej wyceny, bez marży. Brak pola = dzień sprzed G5.
+   */
+  gear?: QuoteGearLine[]
+  /** Sprzęt z wypożyczalni (G5): cena dla klienta = koszt, bez marży i rabatu. */
+  externalRentals?: QuoteExternalRental[]
 }
 
 function createShootingDayId(): string {
@@ -104,7 +137,16 @@ export function cloneShootingDay(source: ShootingDay): ShootingDay {
   return {
     ...source,
     id: createShootingDayId(),
+    // Własne kopie list, żeby edycja jednego dnia nie dotykała drugiego.
+    ...(source.gear ? { gear: source.gear.map((line) => ({ ...line })) } : {}),
+    ...(source.externalRentals
+      ? { externalRentals: source.externalRentals.map((r) => ({ ...r, id: createExternalRentalId() })) }
+      : {}),
   }
+}
+
+export function createExternalRentalId(): string {
+  return `rent-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 // =========================
@@ -231,6 +273,12 @@ export interface QuoteData {
   profitFuelPricePerLiter: number
   /** Średnie spalanie (l/100 km) do wyliczenia realnego kosztu dojazdu. */
   profitFuelConsumption: number
+
+  // Sprzęt z katalogu (G5)
+  /** Rabat na mój sprzęt z katalogu, 0–100 %, dla całej wyceny. */
+  gearDiscountPercent: number
+  /** Czy opis sprzętu w PDF pokazuje wartość rynkową i rabat. */
+  gearValueInPdf: boolean
 }
 
 export const defaultQuoteData: QuoteData = {
@@ -282,6 +330,8 @@ export const defaultQuoteData: QuoteData = {
   profitTransferAmount: null,
   profitFuelPricePerLiter: 6.5,
   profitFuelConsumption: 8,
+  gearDiscountPercent: 0,
+  gearValueInPdf: true,
 }
 
 /** User-saved quote template (persisted in localStorage) */

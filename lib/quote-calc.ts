@@ -4,6 +4,7 @@ import type { QuoteData, ShootingDay, Deliverable } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
 import { computeFuelRatePerKm } from './profit-calc'
+import { dayGearFigures } from './quote-gear'
 
 const VAT_RATE = 0.23
 
@@ -163,12 +164,14 @@ export function getBreakdownWithPricing(
     safeArray<ShootingDay>(data.detailedShootingDays).forEach((day, i) => {
       const dayNet = computeShootingDayNet(day, pro)
       const adjustment = safeNum(day.dayAdjustment, 0)
-      const lineNetto = applyMargin(dayNet, marginMultiplier) + adjustment
+      // Sprzęt z katalogu i z wypożyczalni: bez marży (patrz quote-gear.ts).
+      const gear = dayGearFigures(day, data.gearDiscountPercent)
+      const lineNetto = applyMargin(dayNet, marginMultiplier) + adjustment + gear.charged + gear.external
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
         value: 'Szczegółowa wycena',
         quantity: 1,
-        unitPriceNet: dayNet,
+        unitPriceNet: dayNet + gear.charged + gear.external,
         lineNetto,
       })
     })
@@ -370,6 +373,8 @@ export function getProductionEkipaCastSprzetNetto(
     ekipaNetto += applyMargin(crewNetto, marginMultiplier)
     castNetto += applyMargin(castDayNetto, marginMultiplier)
     sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
+    const gear = dayGearFigures(day, data.gearDiscountPercent)
+    sprzetNetto += gear.charged + gear.external
     ekipaNetto += safeNum(day.dayAdjustment, 0)
   })
 

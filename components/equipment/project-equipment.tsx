@@ -19,9 +19,10 @@
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { Copy, Package, PackageOpen, Printer, Search, Trash2 } from 'lucide-react'
+import { Copy, Layers, Package, PackageOpen, Printer, Search, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import {
+  applyKitToGearDay,
   buildPackingList,
   cycleGearQty,
   duplicateGearDay,
@@ -38,6 +39,7 @@ import {
   unitsOwned,
   type EquipmentItem,
   type GearDay,
+  type GearKit,
   type Project,
 } from '@/lib/project-types'
 import { dayLabel, itemLabel, plural } from '@/lib/pl-plural'
@@ -88,6 +90,8 @@ export interface GearGridProps {
   onRemoveDay: (day: GearDay) => void
   /** Przycisk „+ Dzień" (rodzic decyduje: z datą → kalendarz, bez daty → projekt). */
   addDayButton: ReactNode
+  /** Dodatkowe akcje paska siatki (np. „Sprzęt z wyceny"). */
+  extraActions?: ReactNode
 }
 
 export function GearGrid({
@@ -102,8 +106,9 @@ export function GearGrid({
   dayRemoval,
   onRemoveDay,
   addDayButton,
+  extraActions,
 }: GearGridProps) {
-  const { items, isLoading } = useEquipment()
+  const { items, isLoading, kits, addKit } = useEquipment()
 
   const [query, setQuery] = useState('')
   const [onlyUsed, setOnlyUsed] = useState(false)
@@ -271,6 +276,7 @@ export function GearGrid({
                 </button>
               ))}
             </div>
+            {extraActions}
             {addDayButton}
           </div>
 
@@ -302,6 +308,9 @@ export function GearGrid({
                     onRename={(label) => commit(updateGearDay(days, day.id, { label }))}
                     onDuplicate={() => commit(duplicateGearDay(days, day.id))}
                     onRemove={() => onRemoveDay(day)}
+                    kits={kits}
+                    onApplyKit={(lines) => commit(applyKitToGearDay(days, day.id, lines, items))}
+                    onSaveKit={(name) => void addKit(name, day.lines)}
                   />
                 ))}
                 <div className="text-right text-[11px] text-zinc-500">Odpracował</div>
@@ -505,7 +514,11 @@ function SummaryTile({
   )
 }
 
-/** „Zarobił": ile klient zapłacił za sprzęt w tym projekcie (z wyceny, szacunek). */
+/**
+ * „Zarobił": ile klient zapłacił za mój sprzęt w tym projekcie. Dokładnie, gdy
+ * wycena wycenia sprzęt pozycjami z katalogu (G5); szacunek („~") dla sprzętu
+ * wycenionego po staremu (pakiet, kamery standard/rental).
+ */
 function EarnedTile({ summary }: { summary: ReturnType<typeof summarizeProjectGear> }) {
   const { revenue } = summary
   if (!revenue) {
@@ -514,18 +527,22 @@ function EarnedTile({ summary }: { summary: ReturnType<typeof summarizeProjectGe
   if (revenue.charged <= 0) {
     return <SummaryTile label="Zarobił" value={pln(0)} hint="wycena nie nalicza sprzętu" tone="muted" />
   }
-  const unassigned = summary.clientPaidAssigned === 0 && revenue.ownGear > 0
-  const hint = unassigned
-    ? 'zaznacz sprzęt, żeby przypisać'
-    : revenue.rentedIn > 0
-      ? `z ${pln(revenue.charged)}, −${pln(revenue.rentedIn)} rental`
-      : 'szacunek z wyceny'
+  // Część wyceniona po staremu czeka, aż w dniach pojawi się sprzęt, na który ją rozłożyć.
+  const waiting = revenue.ownGear - summary.clientPaidAssigned
+  const hint =
+    waiting > 0.5
+      ? `${pln(waiting)} czeka: zaznacz sprzęt w dniach`
+      : revenue.rentedIn > 0
+        ? `z ${pln(revenue.charged)}, −${pln(revenue.rentedIn)} wynajem`
+        : summary.clientPaidExact
+          ? 'z wyceny, pozycja po pozycji'
+          : 'szacunek z wyceny'
   return (
     <SummaryTile
       label="Zarobił"
-      value={`~${pln(revenue.ownGear)}`}
+      value={`${summary.clientPaidExact ? '' : '~'}${pln(revenue.ownGear)}`}
       hint={hint}
-      tone={unassigned || revenue.ownGear <= 0 ? 'muted' : 'good'}
+      tone={summary.clientPaidAssigned <= 0 ? 'muted' : 'good'}
     />
   )
 }
@@ -554,6 +571,9 @@ function DayHeader({
   onRename,
   onDuplicate,
   onRemove,
+  kits,
+  onApplyKit,
+  onSaveKit,
 }: {
   day: GearDay
   info: DayInfo | undefined
@@ -564,9 +584,14 @@ function DayHeader({
   onRename: (label: string) => void
   onDuplicate: () => void
   onRemove: () => void
+  /** Zestawy sprzętu (G6): dodanie do dnia jednym klikiem, zapis dnia jako zestawu. */
+  kits: GearKit[]
+  onApplyKit: (lines: GearKit['lines']) => void
+  onSaveKit: (name: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const [kitName, setKitName] = useState<string | null>(null)
   const hint = linkHint(info)
   const close = () => setOpen(false)
 
@@ -653,6 +678,67 @@ function DayHeader({
           {!removal.ok && removal.reason && <p className="text-[11px] text-zinc-500">{removal.reason}</p>}
           {confirm && removal.ok && removal.confirm && (
             <p className="text-[11px] text-zinc-500">{removal.confirm} Kliknij jeszcze raz, żeby usunąć.</p>
+          )}
+          {(kits.length > 0 || day.lines.length > 0) && (
+            <div className="mt-1 border-t border-white/5 pt-2">
+              <div className="mb-1 text-[11px] text-zinc-500">Zestawy</div>
+              {kits.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {kits.map((kit) => (
+                    <button
+                      key={kit.id}
+                      type="button"
+                      onClick={() => {
+                        onApplyKit(kit.lines)
+                        setOpen(false)
+                      }}
+                      title={`Dodaj do dnia: ${kit.lines.length} poz.`}
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/5"
+                    >
+                      <Layers className="size-3" />
+                      {kit.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {day.lines.length > 0 &&
+                (kitName === null ? (
+                  <button
+                    type="button"
+                    onClick={() => setKitName('')}
+                    className="mt-1.5 text-[11px] text-zinc-500 hover:text-zinc-300"
+                  >
+                    + Zapisz ten dzień jako zestaw
+                  </button>
+                ) : (
+                  <div className="mt-1.5 flex gap-1">
+                    <Input
+                      autoFocus
+                      value={kitName}
+                      placeholder="Nazwa zestawu"
+                      onChange={(e) => setKitName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && kitName.trim()) {
+                          onSaveKit(kitName)
+                          setKitName(null)
+                        }
+                      }}
+                      className="h-8 border-white/10 bg-black/40 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!kitName.trim()}
+                      onClick={() => {
+                        onSaveKit(kitName)
+                        setKitName(null)
+                      }}
+                      className="h-8 text-xs"
+                    >
+                      Zapisz
+                    </Button>
+                  </div>
+                ))}
+            </div>
           )}
         </div>
       </PopoverContent>

@@ -245,6 +245,21 @@ export const gearDaySchema = z
 export type GearDay = z.infer<typeof gearDaySchema>
 
 /**
+ * Zestaw sprzętu (G6): zapisany komplet pozycji katalogu („Wywiad", „Event"),
+ * dodawany jednym klikiem do dnia wyceny albo dnia Realizacji. Trzyma tylko
+ * pozycje i sztuki — ceny zawsze z katalogu w chwili użycia.
+ */
+export const gearKitSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().catch(''),
+    lines: lenientArray(gearLineSchema),
+    createdAt: z.string().catch(''),
+  })
+  .passthrough()
+export type GearKit = z.infer<typeof gearKitSchema>
+
+/**
  * Użycie sprzętu w projekcie w STARYM kształcie (faza 3): pozycja × liczba dni,
  * bez podziału na dni. Wciąż czytane — projekt bez `gearDays` liczy się z tego
  * pola (`projectGearDays` w gear-usage.ts zamienia je na dni).
@@ -485,6 +500,10 @@ export function createEquipmentId(): string {
 
 export function createGearDayId(): string {
   return `gd-${randomSuffix()}`
+}
+
+export function createGearKitId(): string {
+  return `kit-${randomSuffix()}`
 }
 
 export function createProjectCostId(): string {

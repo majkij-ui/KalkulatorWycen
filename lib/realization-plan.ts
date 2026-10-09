@@ -10,7 +10,7 @@
  * SAMYM przychodzie i ryczałcie co plan. Przychód z faktur policzy T6.
  */
 
-import { resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
+import { isRentalCostKey, resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
 import { computeQuoteTotals, computeTotalCrewDays, resolveSnapshot, type FinancialsSource } from './quote-financials'
 import { isBlankQuoteData } from './project-save'
 import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts } from './project-costs'
@@ -60,7 +60,7 @@ export function planLineCategory(line: Pick<ProfitLine, 'key' | 'section' | 'isC
     if (line.section === 'postprodukcja') return 'postprodukcja'
     return 'inne'
   }
-  if (key === 'pro:rentalSprzetu') return 'wynajem'
+  if (isRentalCostKey(key)) return 'wynajem'
   if (key === 'log:dojazd') return 'dojazd'
   if (key === 'log:catering') return 'catering'
   if (key === 'log:noclegi') return 'nocleg'

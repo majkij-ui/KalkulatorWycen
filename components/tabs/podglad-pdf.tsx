@@ -16,6 +16,7 @@ import { PrintableQuote } from '@/components/pdf/printable-quote'
 import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeArray, safeNum } from '@/lib/safe-numbers'
 import { getProductionEkipaCastSprzetNetto, type LineItemRow } from '@/lib/quote-calc'
+import { pdfGearSentences } from '@/lib/quote-gear'
 import type { LocalPdfState, PdfRowKey, PortfolioRow, QuoteData } from '@/lib/quote-types'
 import { isTauriRuntime } from '@/lib/storage'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
@@ -245,10 +246,13 @@ function getOpisInitial({
   key,
   data,
   lang = 'pl',
+  money = (pln: number) => formatPdfAmount(pln, 'PLN'),
 }: {
   key: PdfRowKey
   data: QuoteData
   lang?: PdfLang
+  /** Kwota PLN → tekst w walucie PDF (opis sprzętu pokazuje wartość i rabat). */
+  money?: (pln: number) => string
 }): string {
   const L = PDF_LABELS[lang]
   const yn = (v: boolean) => (v ? L.yes : L.no)
@@ -320,7 +324,10 @@ function getOpisInitial({
       return `${L.opisEquipmentClass}: ${equipmentClass}.\n${L.opisDroneSurcharge}: ${yn(data.crudeDroneSurcharge)}.`
     }
 
-    return `${L.opisDetailedEquipment} ${safeArray(data.detailedShootingDays).length} ${L.opisShootingDays}.`
+    return [
+      `${L.opisDetailedEquipment} ${safeArray(data.detailedShootingDays).length} ${L.opisShootingDays}.`,
+      ...pdfGearSentences(data, L, money),
+    ].join('\n')
   }
 
   if (key === 'logistyka') {
@@ -463,7 +470,12 @@ export function PodgladPdfTab() {
           key: 'sprzet',
           title: L.rowSprzet,
           cenaNetto: toCurrency(sprzetNetto),
-          opis: getOpisInitial({ key: 'sprzet', data, lang }),
+          opis: getOpisInitial({
+            key: 'sprzet',
+            data,
+            lang,
+            money: (pln) => formatPdfAmount(toCurrency(pln), currency),
+          }),
         },
         logistyka: {
           key: 'logistyka',

@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ClipboardCopy, Plus } from 'lucide-react'
+import { ClipboardCopy, PackagePlus, Plus } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
@@ -27,6 +27,7 @@ import { createEvent } from '@/lib/events-store'
 import { eventKind } from '@/lib/event-kinds'
 import type { TimelineEvent } from '@/lib/event-types'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
+import { gearFromQuote } from '@/lib/gear-usage'
 import {
   addCost,
   copyCrewToDays,
@@ -339,6 +340,37 @@ function RealizationView({ project }: { project: Project }) {
     })
   }
 
+  // Sprzęt z wyceny (G5): dzień N szczegółowej wyceny → N-ty dzień zdjęciowy.
+  const quoteDays = useMemo(
+    () => (data.isDetailedProdukcja ? (data.detailedShootingDays ?? []) : []),
+    [data.isDetailedProdukcja, data.detailedShootingDays]
+  )
+  const quoteHasGear = quoteDays.some((d) => (d.gear ?? []).length > 0)
+
+  const copyGearFromQuote = () => {
+    const before = days
+    const result = gearFromQuote(quoteDays, days, (d) => info.get(d.id)?.kind ?? 'shoot_day')
+    const notes: string[] = []
+    if (result.keptDays) {
+      notes.push(`${result.keptDays} ${plural(result.keptDays, 'dzień miał', 'dni miały', 'dni miało')} już sprzęt`)
+    }
+    if (result.missingDays) {
+      notes.push(
+        `${result.missingDays} ${plural(result.missingDays, 'dzień', 'dni', 'dni')} z wyceny nie ma odpowiednika — dodaj dni zdjęciowe`
+      )
+    }
+    const tail = notes.length ? ` (${notes.join('; ')})` : ''
+    if (result.added === 0) {
+      setNotice({ message: `Nic nie dopisano${tail}.` })
+      return
+    }
+    commitDays(result.days)
+    setNotice({
+      message: `Dopisano z wyceny ${result.added} ${plural(result.added, 'pozycję', 'pozycje', 'pozycji')} sprzętu${tail}.`,
+      undo: () => commitDays(before),
+    })
+  }
+
   // ── Liczby ─────────────────────────────────────────────────────────────────
 
   const plan = useMemo(() => projectPlan(project, live), [project, live])
@@ -471,6 +503,22 @@ function RealizationView({ project }: { project: Project }) {
         dayRemoval={dayRemoval}
         onRemoveDay={(day) => void removeDay(day)}
         addDayButton={newDayButton}
+        extraActions={
+          <button
+            type="button"
+            onClick={copyGearFromQuote}
+            disabled={!quoteHasGear || days.length === 0}
+            title={
+              quoteHasGear
+                ? 'Sprzęt z dni wyceny trafia do dni zdjęciowych, które nie mają jeszcze sprzętu'
+                : 'Wycena nie ma sprzętu z katalogu (szczegółowa wycena produkcji)'
+            }
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-2.5 text-xs font-medium text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <PackagePlus className="size-3.5" />
+            Sprzęt z wyceny
+          </button>
+        }
       />
 
       <section aria-label="Koszty całego projektu" className="space-y-2">

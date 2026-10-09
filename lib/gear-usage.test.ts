@@ -3,10 +3,12 @@ import assert from 'node:assert/strict'
 
 import {
   addGearDay,
+  applyKitToGearDay,
   buildPackingList,
   cycleGearQty,
   duplicateGearDay,
   gearDayDate,
+  gearFromQuote,
   gearDayLabel,
   hasGearLogged,
   legacyToGearDays,
@@ -215,4 +217,51 @@ test('klik w nazwę: dokłada do brakujących dni, a gdy jest wszędzie, zdejmuj
   const removed = toggleGearItemAllDays(added, 'lampa', 2)
   assert.ok(removed.every((d) => d.lines.length === 0))
   assert.deepEqual(toggleGearItemAllDays([], 'lampa', 1), [])
+})
+
+test('sprzęt z wyceny: dzień N wyceny → N-ty dzień zdjęciowy, zajęte dni bez zmian', () => {
+  const days = [
+    { ...day('prep', []), kind: 'prep_day' },
+    day('s1', []),
+    day('s2', [['lampa', 1]]),
+  ]
+  const kindOf = (d: GearDay) => d.kind ?? 'shoot_day'
+  const result = gearFromQuote(
+    [
+      { gear: [{ itemId: 'fx3', qty: 1 }, { itemId: 'amaran', qty: 2 }, { itemId: 'fx3', qty: 1 }] },
+      { gear: [{ itemId: 'fx3', qty: 1 }] },
+      { gear: [{ itemId: 'dron', qty: 1 }] },
+      { gear: [] },
+    ],
+    days,
+    kindOf
+  )
+  assert.deepEqual(result.days[0].lines, [], 'dzień przygotowań nie jest dniem zdjęciowym')
+  assert.deepEqual(result.days[1].lines, [{ itemId: 'fx3', qty: 2 }, { itemId: 'amaran', qty: 2 }])
+  assert.deepEqual(result.days[2].lines, [{ itemId: 'lampa', qty: 1 }], 'dzień ze sprzętem nietknięty')
+  assert.equal(result.added, 2)
+  assert.equal(result.keptDays, 1)
+  assert.equal(result.missingDays, 1, 'trzeci dzień wyceny nie ma dnia zdjęciowego')
+})
+
+test('zestaw w dniu Realizacji: dopisuje brakujące, nie więcej sztuk niż mam', () => {
+  const catalog = [
+    { id: 'fx3', quantity: undefined, retiredAt: undefined },
+    { id: 'amaran', quantity: 2, retiredAt: undefined },
+    { id: 'gh5', quantity: undefined, retiredAt: '2025-01-01' },
+  ]
+  const days = [day('d1', [['fx3', 1]]), day('d2', [])]
+  const next = applyKitToGearDay(
+    days,
+    'd1',
+    [
+      { itemId: 'fx3', qty: 2 },
+      { itemId: 'amaran', qty: 5 },
+      { itemId: 'gh5', qty: 1 },
+      { itemId: 'nieznany', qty: 1 },
+    ],
+    catalog
+  )
+  assert.deepEqual(next[0].lines, [{ itemId: 'fx3', qty: 1 }, { itemId: 'amaran', qty: 2 }])
+  assert.equal(next[1], days[1], 'inne dni nietknięte')
 })

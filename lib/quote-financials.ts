@@ -35,6 +35,10 @@ export function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
       : null
   if (!Number.isFinite(merged.profitFuelPricePerLiter)) merged.profitFuelPricePerLiter = defaultQuoteData.profitFuelPricePerLiter
   if (!Number.isFinite(merged.profitFuelConsumption)) merged.profitFuelConsumption = defaultQuoteData.profitFuelConsumption
+  merged.gearDiscountPercent = Number.isFinite(merged.gearDiscountPercent)
+    ? Math.min(100, Math.max(0, merged.gearDiscountPercent))
+    : defaultQuoteData.gearDiscountPercent
+  if (typeof merged.gearValueInPdf !== 'boolean') merged.gearValueInPdf = defaultQuoteData.gearValueInPdf
   // Legacy snapshots (pre-crudeEditCount) only carried dniMontazu; the check must
   // look at the raw partial — after the spread, crudeEditCount is never undefined.
   if (partial.crudeEditCount === undefined && typeof partial.dniMontazu === 'number' && partial.dniMontazu > 0) {
