@@ -48,7 +48,9 @@ import {
   createProject,
   deleteProject,
   filterProjects,
+  listAllProjects,
   listProjects,
+  restoreProject,
   setProjectStatus,
   upsertProject,
   WEB_PROJECTS_KEY,
@@ -340,4 +342,41 @@ test('pola z nowszej wersji przeżywają zapis INNEGO projektu', async () => {
   const future = raw.find((p) => p.id === 'p-future')!
   assert.equal(future.gmailThreadId, 't-123')
   assert.deepEqual(future.contact, { name: 'Anna', email: 'a@example.com', phone: '', linkedin: 'anna-k' })
+})
+
+test('usunięcie projektu jest miękkie: znika z listy, zostaje w pliku, da się cofnąć', async () => {
+  const project = createProject({ name: 'Do usunięcia', client: 'ACME' })
+  const keep = createProject({ name: 'Zostaje' })
+  await upsertProject(project)
+  await upsertProject(keep)
+
+  const visible = await deleteProject(project.id, '2026-10-09T10:00:00.000Z')
+  assert.deepEqual(visible.map((p) => p.name), ['Zostaje'])
+  assert.deepEqual((await listProjects()).map((p) => p.name), ['Zostaje'])
+
+  const all = await listAllProjects()
+  assert.equal(all.length, 2, 'rekord zostaje w pliku')
+  assert.equal(all.find((p) => p.id === project.id)?.deletedAt, '2026-10-09T10:00:00.000Z')
+
+  // Zapis innego projektu nie gubi usuniętego.
+  const afterSave = await upsertProject({ ...keep, name: 'Zostaje (zmieniony)' })
+  assert.deepEqual(afterSave.map((p) => p.name), ['Zostaje (zmieniony)'], 'zapis zwraca tylko widoczne')
+  assert.equal((await listAllProjects()).length, 2)
+
+  await restoreProject(project.id)
+  assert.equal((await listProjects()).length, 2)
+  const stored = JSON.parse(storage.getItem(WEB_PROJECTS_KEY) ?? '{}').items as Record<string, unknown>[]
+  assert.equal('deletedAt' in stored.find((p) => p.id === project.id)!, false, 'przywrócenie czyści pole')
+})
+
+test('usunięta zmigrowana wycena nie wraca przy ponownej migracji', async () => {
+  seedQuotes(2)
+  await migrateQuotesToProjects()
+  const [first] = await listProjects()
+  await deleteProject(first.id)
+
+  const again = await migrateQuotesToProjects()
+  assert.equal(again.status, 'skipped-already-done')
+  assert.equal((await listProjects()).length, 1)
+  assert.equal((await listAllProjects()).length, 2)
 })

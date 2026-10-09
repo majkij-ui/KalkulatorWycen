@@ -11,17 +11,29 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { listAllEvents, restoreEvent, saveEvent, softDeleteEvent } from './events-store'
+import {
+  listAllEvents,
+  restoreEvent,
+  restoreEvents,
+  saveEvent,
+  softDeleteEvent,
+  softDeleteEvents,
+} from './events-store'
 import type { TimelineEvent } from './event-types'
 
 interface EventsContextValue {
   /** Wydarzenia bez usuniętych. */
   events: TimelineEvent[]
+  /** Wszystkie rekordy, z usuniętymi — do cofania usunięć. */
+  allEvents: TimelineEvent[]
   isLoading: boolean
   save: (event: TimelineEvent) => Promise<void>
   /** Miękkie usunięcie — `restore` je cofa. */
   remove: (id: string) => Promise<void>
   restore: (id: string) => Promise<void>
+  /** Wiele naraz, jednym zapisem (wątek usuwanego projektu). */
+  removeMany: (ids: string[], deletedAt: string) => Promise<void>
+  restoreMany: (ids: string[]) => Promise<void>
   reload: () => Promise<void>
 }
 
@@ -61,10 +73,20 @@ export function EventsProvider({ children }: { children: React.ReactNode }) {
     setAll(await restoreEvent(id))
   }, [])
 
+  const removeMany = useCallback(async (ids: string[], deletedAt: string) => {
+    if (ids.length) setAll(await softDeleteEvents(ids, deletedAt))
+  }, [])
+
+  const restoreMany = useCallback(async (ids: string[]) => {
+    if (ids.length) setAll(await restoreEvents(ids))
+  }, [])
+
   const events = useMemo(() => all.filter((e) => !e.deletedAt), [all])
 
   return (
-    <EventsContext.Provider value={{ events, isLoading, save, remove, restore, reload }}>
+    <EventsContext.Provider
+      value={{ events, allEvents: all, isLoading, save, remove, restore, removeMany, restoreMany, reload }}
+    >
       {children}
     </EventsContext.Provider>
   )

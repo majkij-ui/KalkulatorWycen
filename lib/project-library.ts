@@ -40,18 +40,58 @@ const store = createCollectionStore<Project>({
   sort: byDateDesc,
 })
 
-export const listProjects = store.list
-export const deleteProject = store.remove
-export const replaceAllProjects = store.replaceAll
+const visible = (projects: Project[]) => projects.filter((p) => !p.deletedAt)
+
+/**
+ * Wszystkie rekordy, łącznie z usuniętymi — dla migracji (idempotencja po
+ * `migratedFromQuoteId`) i zapisów całej kolekcji, które nie mogą ich zgubić.
+ */
+export const listAllProjects = store.list
 export const readProjectsRaw = store.readRaw
+
+/** Projekty widoczne w aplikacji (bez usuniętych). */
+export async function listProjects(): Promise<Project[]> {
+  return visible(await store.list())
+}
+
+/**
+ * Zapis całej kolekcji. Przekazuj PEŁNĄ listę z `listAllProjects` — czego tu
+ * nie ma, znika z pliku. Zwraca widoczne projekty.
+ */
+export async function replaceAllProjects(projects: Project[]): Promise<Project[]> {
+  return visible(await store.replaceAll(projects))
+}
 
 /**
  * Zapis projektu. Utrwala kolor: projekt bez `colorKey` dostaje slot wyliczony
  * ze swojego id, więc kolor w kalendarzu nie zmieni się już nigdy, nawet jeśli
- * paleta się kiedyś przebuduje.
+ * paleta się kiedyś przebuduje. Zwraca widoczne projekty.
  */
-export function upsertProject(project: Project): Promise<Project[]> {
-  return store.upsert(project.colorKey ? project : { ...project, colorKey: projectColorFor(project) })
+export async function upsertProject(project: Project): Promise<Project[]> {
+  return visible(await store.upsert(project.colorKey ? project : { ...project, colorKey: projectColorFor(project) }))
+}
+
+/**
+ * Usunięcie jest MIĘKKIE: projekt dostaje `deletedAt` i znika z widoków, ale
+ * zostaje w pliku (da się cofnąć). `deletedAt` jawnie — ten sam znacznik
+ * dostaje wątek projektu.
+ */
+export async function deleteProject(id: string, deletedAt: string = new Date().toISOString()): Promise<Project[]> {
+  return visible(await store.mutate((all) => all.map((p) => (p.id === id ? { ...p, deletedAt } : p))))
+}
+
+/** Cofnięcie usunięcia. */
+export async function restoreProject(id: string): Promise<Project[]> {
+  return visible(
+    await store.mutate((all) =>
+      all.map((p) => {
+        if (p.id !== id) return p
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { deletedAt, ...rest } = p
+        return rest as Project
+      })
+    )
+  )
 }
 
 /**

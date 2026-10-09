@@ -46,19 +46,32 @@ export async function saveEvent(event: TimelineEvent): Promise<TimelineEvent[]> 
   return store.upsert({ ...event, updatedAt: new Date().toISOString() })
 }
 
-async function patchEvent(id: string, patch: Partial<TimelineEvent>): Promise<TimelineEvent[]> {
-  const all = await store.list()
-  const current = all.find((e) => e.id === id)
-  if (!current) return all
-  return store.upsert({ ...current, ...patch, updatedAt: new Date().toISOString() })
+/** Ta sama zmiana dla wielu rekordów — jeden odczyt i jeden zapis pliku. */
+function patchEvents(ids: string[], patch: Partial<TimelineEvent>): Promise<TimelineEvent[]> {
+  const wanted = new Set(ids)
+  const updatedAt = new Date().toISOString()
+  return store.mutate((all) => all.map((e) => (wanted.has(e.id) ? { ...e, ...patch, updatedAt } : e)))
 }
 
 export function softDeleteEvent(id: string): Promise<TimelineEvent[]> {
-  return patchEvent(id, { deletedAt: new Date().toISOString() })
+  return patchEvents([id], { deletedAt: new Date().toISOString() })
 }
 
 export function restoreEvent(id: string): Promise<TimelineEvent[]> {
-  return patchEvent(id, { deletedAt: undefined })
+  return patchEvents([id], { deletedAt: undefined })
+}
+
+/**
+ * Miękkie usunięcie wielu wydarzeń naraz (np. wątku usuniętego projektu).
+ * `deletedAt` jawnie — ten sam znacznik co na projekcie pozwala potem
+ * przywrócić dokładnie te wydarzenia, które zniknęły razem z nim.
+ */
+export function softDeleteEvents(ids: string[], deletedAt: string): Promise<TimelineEvent[]> {
+  return patchEvents(ids, { deletedAt })
+}
+
+export function restoreEvents(ids: string[]): Promise<TimelineEvent[]> {
+  return patchEvents(ids, { deletedAt: undefined })
 }
 
 export function createEvent(params: {

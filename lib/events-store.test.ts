@@ -38,8 +38,10 @@ import {
   listEvents,
   listProjectEvents,
   restoreEvent,
+  restoreEvents,
   saveEvent,
   softDeleteEvent,
+  softDeleteEvents,
 } from './events-store'
 
 function seedRaw(items: unknown[]): void {
@@ -129,4 +131,35 @@ test('zapis odświeża updatedAt', async () => {
   await saveEvent(event)
   const [saved] = await listEvents()
   assert.notEqual(saved.updatedAt, '2000-01-01T00:00:00.000Z')
+})
+
+test('wiele wydarzeń naraz: jeden znacznik usunięcia, reszta nietknięta, przywrócenie po id', async () => {
+  const a = createEvent({ kind: 'lead_in', projectId: 'p-1', start: '2026-10-01' })
+  const b = createEvent({ kind: 'shoot_day', projectId: 'p-1', start: '2026-10-05' })
+  const other = createEvent({ kind: 'won', projectId: 'p-2', start: '2026-10-06' })
+  for (const e of [a, b, other]) await saveEvent(e)
+
+  await softDeleteEvents([a.id, b.id], '2026-10-09T10:00:00.000Z')
+  assert.deepEqual((await listEvents()).map((e) => e.id), [other.id])
+  const all = await listAllEvents()
+  assert.deepEqual(
+    all.filter((e) => e.deletedAt).map((e) => e.deletedAt),
+    ['2026-10-09T10:00:00.000Z', '2026-10-09T10:00:00.000Z']
+  )
+
+  await restoreEvents([a.id, b.id])
+  assert.equal((await listEvents()).length, 3)
+})
+
+test('zapisy naraz nie gubią się nawzajem (kolejka zapisów)', async () => {
+  const events = Array.from({ length: 5 }, (_, i) => createEvent({ kind: 'note', start: `2026-10-0${i + 1}` }))
+  await Promise.all(events.map((e) => saveEvent(e)))
+  assert.equal((await listAllEvents()).length, 5)
+
+  // Usunięcie i zapis innego rekordu w tej samej chwili — oba zostają.
+  const extra = createEvent({ kind: 'note', start: '2026-10-09' })
+  await Promise.all([softDeleteEvent(events[0].id), saveEvent(extra)])
+  const all = await listAllEvents()
+  assert.equal(all.length, 6)
+  assert.ok(all.find((e) => e.id === events[0].id)?.deletedAt)
 })

@@ -18,7 +18,7 @@
 import { isTauriRuntime, writeJsonFile } from './storage'
 import type { SavedQuoteRecord } from './quote-library'
 import { listImportableQuotes } from './legacy-app'
-import { listProjects, replaceAllProjects } from './project-library'
+import { listAllProjects, replaceAllProjects } from './project-library'
 import { pendingQuotes, quoteToProject } from './project-migration-core'
 import { toDateKey } from './project-types'
 
@@ -86,7 +86,8 @@ export async function migrateQuotesToProjects(): Promise<MigrationResult> {
     return { status: 'skipped-empty', migratedCount: 0, skippedCount: 0, backupLocation: null }
   }
 
-  const existing = await listProjects()
+  // Z usuniętymi: usunięta wycena nie wraca, a zapis całości jej nie gubi.
+  const existing = await listAllProjects()
   const pending = pendingQuotes(quotes, existing)
 
   if (pending.length === 0) {

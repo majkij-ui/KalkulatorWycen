@@ -24,6 +24,11 @@ export interface CollectionStore<T> {
   replaceAll: (items: T[]) => Promise<T[]>
   upsert: (item: T) => Promise<T[]>
   remove: (id: string) => Promise<T[]>
+  /**
+   * Odczyt–zmiana–zapis jako jedna operacja w kolejce (np. miękkie usunięcie
+   * wielu rekordów naraz). `change` dostaje świeżo odczytaną kolekcję.
+   */
+  mutate: (change: (items: T[]) => T[]) => Promise<T[]>
   /** Surowa zawartość pliku — na potrzeby migracji i kopii zapasowych. */
   readRaw: () => Promise<unknown>
 }
@@ -100,20 +105,33 @@ export function createCollectionStore<T>(config: CollectionConfig<T>): Collectio
     return sorted
   }
 
+  /**
+   * Zapisy jeden po drugim. Każdy zapis to „odczytaj plik → zmień → zapisz
+   * całość", więc dwa nakładające się zapisy (autozapis notatek tuż po zmianie
+   * statusu, kilka wydarzeń naraz) gubiłyby nawzajem swoje zmiany.
+   */
+  let queue: Promise<unknown> = Promise.resolve()
+  function exclusive<R>(operation: () => Promise<R>): Promise<R> {
+    const run = queue.then(operation, operation)
+    queue = run.catch(() => undefined)
+    return run
+  }
+
+  const mutate = (change: (items: T[]) => T[]) => exclusive(async () => write(change(await list())))
+
   return {
     list,
     readRaw,
-    replaceAll: write,
-    async upsert(item: T) {
-      const current = await list()
+    replaceAll: (items: T[]) => exclusive(() => write(items)),
+    mutate,
+    upsert(item: T) {
       const id = getId(item)
-      const idx = current.findIndex((existing) => getId(existing) === id)
-      const next = idx === -1 ? [...current, item] : current.map((e) => (getId(e) === id ? item : e))
-      return write(next)
+      return mutate((current) =>
+        current.some((e) => getId(e) === id) ? current.map((e) => (getId(e) === id ? item : e)) : [...current, item]
+      )
     },
-    async remove(id: string) {
-      const current = await list()
-      return write(current.filter((e) => getId(e) !== id))
+    remove(id: string) {
+      return mutate((current) => current.filter((e) => getId(e) !== id))
     },
   }
 }
