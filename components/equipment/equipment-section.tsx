@@ -13,11 +13,12 @@ import { motion } from 'framer-motion'
 import { Check, Loader2, Package, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { computeCatalogRoi, computeCatalogTotals } from '@/lib/equipment-roi'
+import { computeGearReport, type EquipmentRoi } from '@/lib/equipment-roi'
 import {
   EQUIPMENT_CATEGORIES,
   EQUIPMENT_CATEGORY_LABELS,
-  type EquipmentCategory,
+  equipmentCategoryLabel,
+  equipmentCategoryRank,
   type EquipmentItem,
 } from '@/lib/project-types'
 import { dayLabel } from '@/lib/pl-plural'
@@ -50,17 +51,11 @@ function PayoffBar({ pct }: { pct: number | null }) {
   )
 }
 
-function ItemRow({ item }: { item: EquipmentItem }) {
+function ItemRow({ item, roi }: { item: EquipmentItem; roi: EquipmentRoi | undefined }) {
   const { updateItem, removeItem } = useEquipment()
-  const { projects } = useProjectHub()
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [draft, setDraft] = useState(item)
-
-  const roi = useMemo(
-    () => computeCatalogRoi([item], projects)[0],
-    [item, projects]
-  )
 
   const save = async () => {
     await updateItem({
@@ -83,7 +78,7 @@ function ItemRow({ item }: { item: EquipmentItem }) {
         />
         <select
           value={draft.category}
-          onChange={(e) => setDraft({ ...draft, category: e.target.value as EquipmentCategory })}
+          onChange={(e) => setDraft({ ...draft, category: e.target.value })}
           aria-label="Kategoria"
           className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-200"
         >
@@ -148,15 +143,15 @@ function ItemRow({ item }: { item: EquipmentItem }) {
 
       <div className="shrink-0 text-right">
         <div className="text-xs text-zinc-500">
-          {roi.timesUsed === 0
+          {!roi || roi.projectsUsed === 0
             ? 'nieużywany'
-            : `${roi.timesUsed}× · ${roi.totalDays} ${dayLabel(roi.totalDays)}`}
+            : `${roi.projectsUsed}× · ${roi.daysUsed} ${dayLabel(roi.daysUsed)}`}
         </div>
-        <div className="tabular-nums text-sm font-semibold text-zinc-200">{pln(roi.earned)}</div>
+        <div className="tabular-nums text-sm font-semibold text-zinc-200">{pln(roi?.rentValue ?? 0)}</div>
       </div>
 
       <div className="w-32 shrink-0">
-        <PayoffBar pct={roi.roiPct} />
+        <PayoffBar pct={roi?.rentValuePct ?? null} />
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
@@ -211,7 +206,7 @@ function AddItemForm() {
   const { addItem } = useEquipment()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [category, setCategory] = useState<EquipmentCategory>('kamery')
+  const [category, setCategory] = useState<string>('kamery')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [rentalDayRate, setRentalDayRate] = useState('')
 
@@ -251,7 +246,7 @@ function AddItemForm() {
       />
       <select
         value={category}
-        onChange={(e) => setCategory(e.target.value as EquipmentCategory)}
+        onChange={(e) => setCategory(e.target.value)}
         aria-label="Kategoria"
         className="h-9 rounded-md border border-white/10 bg-black/40 px-2 text-sm text-zinc-200"
       >
@@ -294,13 +289,15 @@ export function EquipmentSection() {
   const { items, isLoading } = useEquipment()
   const { projects } = useProjectHub()
 
-  const totals = useMemo(
-    () => computeCatalogTotals(computeCatalogRoi(items, projects)),
-    [items, projects]
+  const report = useMemo(() => computeGearReport(items, projects), [items, projects])
+  const totals = report.totals
+  const roiById = useMemo(
+    () => new Map(report.items.map((roi) => [roi.item.id, roi])),
+    [report]
   )
 
   const grouped = useMemo(() => {
-    const map = new Map<EquipmentCategory, EquipmentItem[]>()
+    const map = new Map<string, EquipmentItem[]>()
     items.forEach((item) => {
       const bucket = map.get(item.category) ?? []
       bucket.push(item)
@@ -322,13 +319,13 @@ export function EquipmentSection() {
       {items.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: 'Zainwestowane', value: pln(totals.totalInvested) },
-            { label: 'Odpracowane', value: pln(totals.totalEarned) },
+            { label: 'Zainwestowane', value: pln(totals.invested) },
+            { label: 'Odpracowane', value: pln(totals.rentValue) },
             {
               label: 'Zwrot katalogu',
-              value: totals.roiPct === null ? '—' : `${Math.round(totals.roiPct)}%`,
+              value: totals.rentValuePct === null ? '—' : `${Math.round(totals.rentValuePct)}%`,
             },
-            { label: 'Spłacone', value: `${totals.paidOffCount}/${items.length}` },
+            { label: 'Spłacone', value: `${totals.paidOffByRentCount}/${items.length}` },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
               <div className="text-[11px] uppercase tracking-wide text-zinc-500">{stat.label}</div>
@@ -356,14 +353,16 @@ export function EquipmentSection() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {EQUIPMENT_CATEGORIES.filter((c) => grouped.has(c)).map((category) => (
+          {[...grouped.keys()]
+            .sort((a, b) => equipmentCategoryRank(a) - equipmentCategoryRank(b) || a.localeCompare(b, 'pl'))
+            .map((category) => (
             <section key={category}>
               <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                {EQUIPMENT_CATEGORY_LABELS[category]}
+                {equipmentCategoryLabel(category)}
               </h2>
               <div className="flex flex-col gap-2">
                 {(grouped.get(category) ?? []).map((item) => (
-                  <ItemRow key={item.id} item={item} />
+                  <ItemRow key={item.id} item={item} roi={roiById.get(item.id)} />
                 ))}
               </div>
             </section>

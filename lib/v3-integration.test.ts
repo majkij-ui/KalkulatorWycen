@@ -173,6 +173,25 @@ test('katalog sprzętu zapisuje i sortuje po kategorii, potem nazwie', async () 
   assert.equal(items[1].purchasePrice, 20000)
 })
 
+test('sprzęt dzień po dniu i sztuki przechodzą zapis oraz odczyt bez zmian', async () => {
+  const light = createEquipmentItem({ name: 'Aputure 300d', category: 'swiatlo', quantity: 2, rentalDayRate: 150 })
+  const single = createEquipmentItem({ name: 'FX3', category: 'kamery', quantity: 1 })
+  assert.equal(single.quantity, undefined, 'jedna sztuka nie zapisuje pola')
+  await upsertEquipment(light)
+  await upsertEquipment(single)
+  const savedLight = (await listEquipment()).find((i) => i.id === light.id)
+  assert.equal(savedLight?.quantity, 2)
+
+  const gearDays = [
+    { id: 'gd-1', label: '', date: '2026-03-02', lines: [{ itemId: light.id, qty: 2 }] },
+    { id: 'gd-2', label: 'Plener', date: '', lines: [{ itemId: single.id, qty: 1 }] },
+  ]
+  await upsertProject({ ...createProject({ name: 'Klip' }), gearDays })
+  const [saved] = await listProjects()
+  assert.deepEqual(saved.gearDays, gearDays)
+  assert.deepEqual(saved.equipment, [], 'stary kształt nie jest dopisywany')
+})
+
 test('koszty stałe zapisują się i dają się powielić na cały rok', async () => {
   const zus = createFixedCost({ month: '2026-01', type: 'zus', amount: 1600 })
   await upsertFixedCost(zus)

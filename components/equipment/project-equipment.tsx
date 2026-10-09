@@ -13,11 +13,10 @@ import { useReactToPrint } from 'react-to-print'
 import { Package, PackageOpen, Printer } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { buildPackingList, computeEquipmentRoi } from '@/lib/equipment-roi'
+import { buildPackingList } from '@/lib/gear-usage'
 import {
-  EQUIPMENT_CATEGORIES,
-  EQUIPMENT_CATEGORY_LABELS,
-  type EquipmentCategory,
+  equipmentCategoryLabel,
+  equipmentCategoryRank,
   type Project,
 } from '@/lib/project-types'
 import { dayLabel, itemLabel } from '@/lib/pl-plural'
@@ -54,7 +53,7 @@ export function ProjectEquipment() {
   }, [activeProject])
 
   const grouped = useMemo(() => {
-    const map = new Map<EquipmentCategory, typeof items>()
+    const map = new Map<string, typeof items>()
     items.forEach((item) => {
       const bucket = map.get(item.category) ?? []
       bucket.push(item)
@@ -108,7 +107,7 @@ export function ProjectEquipment() {
         {packing.map((group) => (
           <section key={group.category} className="mt-4 break-inside-avoid">
             <h2 className="text-xs font-bold uppercase tracking-widest">
-              {EQUIPMENT_CATEGORY_LABELS[group.category as EquipmentCategory] ?? group.category}
+              {equipmentCategoryLabel(group.category)}
             </h2>
             <ul className="mt-1">
               {group.items.map(({ item, days }) => (
@@ -158,16 +157,18 @@ export function ProjectEquipment() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            {EQUIPMENT_CATEGORIES.filter((c) => grouped.has(c)).map((category) => (
+            {[...grouped.keys()]
+              .sort((a, b) => equipmentCategoryRank(a) - equipmentCategoryRank(b) || a.localeCompare(b, 'pl'))
+              .map((category) => (
               <section key={category}>
                 <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                  {EQUIPMENT_CATEGORY_LABELS[category]}
+                  {equipmentCategoryLabel(category)}
                 </h3>
                 <div className="flex flex-col gap-1.5">
                   {(grouped.get(category) ?? []).map((item) => {
                     const days = usageMap.get(item.id) ?? 0
                     const checked = days > 0
-                    const roi = computeEquipmentRoi(item, [activeProject])
+                    const value = days * item.rentalDayRate
                     return (
                       <div
                         key={item.id}
@@ -209,9 +210,9 @@ export function ProjectEquipment() {
                               className="h-7 w-16 border-white/10 bg-black/40 text-center text-sm tabular-nums"
                             />
                             <span className="text-xs text-zinc-500">{dayLabel(days)}</span>
-                            {roi.earned > 0 && (
+                            {value > 0 && (
                               <span className="w-20 text-right tabular-nums text-xs text-emerald-400/80">
-                                {pln(roi.earned)}
+                                {pln(value)}
                               </span>
                             )}
                           </div>
@@ -239,7 +240,7 @@ export function ProjectEquipment() {
               {packing.map((group) => (
                 <div key={group.category}>
                   <div className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
-                    {EQUIPMENT_CATEGORY_LABELS[group.category as EquipmentCategory] ?? group.category}
+                    {equipmentCategoryLabel(group.category)}
                   </div>
                   <ul className="mt-1 flex flex-col gap-0.5">
                     {group.items.map(({ item, days }) => (
