@@ -357,7 +357,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
-| **T7a Marketing tab** ✅ (to install) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
+| **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
 
