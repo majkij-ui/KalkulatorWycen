@@ -351,10 +351,10 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 |---|---|---|
 | **Design pass** | Palette: ~12 project hues + 5 type-group accents that stay distinct when combined, dark theme, small sizes. Month-view mockup. | — |
 | **T1a Event foundation** ✅ | `event-types.ts` (lenient schema: only a missing `id` drops a record), `event-kinds.ts` (per-kind `data` schemas read without rewriting storage, forward-only `statusSuggestion`), `events-store.ts` (`events.json`, soft delete/restore), `thread-stats.ts` (numbers + Polish sentences; invoices paired by number, then by date; paid/open/planned). 37 tests incl. a newer-version round trip; 8/8 deliberate mutations caught. | — |
-| **T1b Project additions** ✅ | Status `lead` (first in thread order; counts toward nothing; sits in the "wyceny" filter until T3). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
-| **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy lead…" (creates a `lead` project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
+| **T1b Project additions** ✅ | ~~Status `lead`~~ (reverted 2026-10-08: a lead is the `lead_in` event; quote-less projects are `quote`, see §3.5). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
+| **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy projekt…" (creates a quote-less project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
 | **T3 Project thread** | Client picker + contact copy, client and year filters, project tabs (Oś czasu · Wycena · Realizacja · Notatki) replacing today's project bar (its name field is squeezed to ~145 px at 1400 px), quote prefill from the thread. List fixes and "+ Nowy projekt" from the calendar are already done. | T1 |
-| **T4 Gmail import v0** | Data script (`npm run data`), inbox format, review queue in app, refresh-on-focus, then retrofill 2026 via Claude Code + Gmail (§5a). | T1, T3, v3 desktop build |
+| **T4 Gmail import v0** (partly done) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). Left: inbox format + review queue in the app, then a recurring "sync my mail" from chat for new leads, replies and invoices. | T1, T3 |
 | **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
@@ -422,6 +422,17 @@ header asks for it, and months without a reading count as 0 zł (no estimate).
 
 ---
 
+### Done after T2 (2026-10-09)
+
+- Project list: "Ukryj nieprzyjęte" (default on), grey amounts for anything that doesn't count, paid
+  checkbox ("Zapłacone", stored as `invoice_paid` events; `lib/payments.ts`).
+- "Nowy projekt" always starts blank; quotes without their own PDF draft reset the PDF tab (this was
+  how S-AI inherited Morris & Lloyd as client).
+- PDF tab: the saved-draft prompt is replaced by a notice only when PDF prices differ from the
+  calculator, with "update prices" / "keep".
+- Finance: revenue split into paid / waiting; fixed-cost tile lists "inne"; 2026 fixed costs applied.
+- Quote-less projects keep imported financials on save (`lib/project-save.ts`).
+
 ### Follow-ups noticed during T1–T2
 
 - The Sprzęt screen has no field for `purchaseDate`; the calendar form is currently the only way to
@@ -433,10 +444,10 @@ header asks for it, and months without a reading count as 0 zł (no estimate).
 - `Project.date` still has no `.catch`, so a project with a malformed date is dropped on read and
   lost on the next collection write (pre-existing; an existing test asserts it). Worth relaxing
   the same way events were, once the finance views handle an undated project.
-- The project bar now wraps the status switcher onto a second row (5 statuses). Redesign as
-  part of T3's project tabs.
-- Opening a project whose snapshot has no `pdfDraft` keeps the previous project's PDF draft
-  (pre-existing calculator behaviour, now also hit by leads).
+- The project bar is overcrowded (name squeezed to ~145 px, origin dropdown, status, save). Redesign
+  as part of T3's project header + tabs; the paid checkbox moves there too.
+- ~~Opening a project without its own `pdfDraft` keeps the previous project's PDF draft~~ — fixed
+  2026-10-09.
 
 ## 7. Decisions
 
