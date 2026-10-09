@@ -104,7 +104,11 @@ Finance. They only answer "did this purchase pay off".
   G3 rewrote its body. `app-shell.tsx` got one line: `<EquipmentSection onOpenProject={goToProject} />`.
 - After T3: let "open project" from the Sprzęt screen land directly on the project's Sprzęt tab (today it
   opens the project on its default tab).
-- T5 (Realizacja) absorbs the Sprzęt tab as is; nothing in G changes that plan.
+- T5 (Realizacja) absorbs the Sprzęt tab as is; nothing in G changes that plan. **Done in T5a
+  (2026-10-09):** the grid lives in the project's Realizacja tab (`GearGrid`, controlled by
+  `ProjectRealization`); its columns are the realization days, whose dates come from the calendar
+  (`realization-days.ts`, plan §6c). Click behaviour is unchanged; a day's date is edited in the
+  calendar, and day removal is soft with "Cofnij".
 
 ## 7. Ideas, not planned
 
