@@ -130,8 +130,7 @@ Finance. They only answer "did this purchase pay off".
   calendar, and day removal is soft with "Cofnij".
 
 Follow-ups from G5/G6:
-- `scripts/data.mts` does not list `gear-kits.json` yet (kits are made in the app; add it when the T4
-  changes to that script are merged, to avoid a conflict).
+- ~~`scripts/data.mts` does not list `gear-kits.json` yet~~ — added after the T4 merge (2026-10-10).
 - Catalogue rental rates are still empty in the real data: until they are filled, catalogue gear
   prices at 0 zł in a quote (the panel warns about it).
 

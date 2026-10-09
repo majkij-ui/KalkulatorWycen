@@ -54,7 +54,13 @@ import {
 } from '../lib/inbox-types'
 import { describeProposal, validateInboxDraft } from '../lib/inbox-validate'
 import { campaignSchema } from '../lib/marketing-types'
-import { equipmentItemSchema, fixedCostSchema, projectSchema, PROJECT_SCHEMA_VERSION } from '../lib/project-types'
+import {
+  equipmentItemSchema,
+  fixedCostSchema,
+  gearKitSchema,
+  projectSchema,
+  PROJECT_SCHEMA_VERSION,
+} from '../lib/project-types'
 
 const HUB_DIR = join(homedir(), 'Library', 'Application Support', 'com.michal.nonoisehub')
 
@@ -65,6 +71,7 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'finances.json': fixedCostSchema,
   'campaigns.json': campaignSchema,
   'equipment.json': equipmentItemSchema,
+  'gear-kits.json': gearKitSchema,
 }
 
 type Item = Record<string, unknown> & { id: string }
