@@ -116,8 +116,8 @@ const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calcul
  * Montowany z `key` = id projektu, więc każdy projekt startuje od swojej
  * domyślnej zakładki (`defaultProjectTab`) i czystego stanu nagłówka.
  */
-function ProjectView({ project }: { project: Project }) {
-  const [tab, setTab] = useState<ProjectTab>(() => defaultProjectTab(project.status))
+function ProjectView({ project, initialTab }: { project: Project; initialTab?: ProjectTab }) {
+  const [tab, setTab] = useState<ProjectTab>(() => initialTab ?? defaultProjectTab(project.status))
 
   return (
     <>
@@ -164,6 +164,10 @@ function ShellContent() {
   // Kalendarz jest ekranem startowym — przegląd firmy zaczyna się od czasu.
   const [section, setSection] = useState<Section>('kalendarz')
   const { activeProject, openProject, closeProject } = useProjectHub()
+  // Zakładka, na której ma się otworzyć projekt wskazany z innego ekranu (np. z
+  // listy sprzętu prosto na „Sprzęt"). Trzymana razem z id, żeby nie przeszła
+  // na inny projekt otwarty potem z listy.
+  const [openTarget, setOpenTarget] = useState<{ id: string; tab: ProjectTab } | null>(null)
 
   // Klik w „Projekty" w pasku bocznym zawsze wraca do LISTY — także z otwartego
   // projektu (pasek boczny jest zawsze widoczny, przycisk „Projekty" w pasku
@@ -171,11 +175,13 @@ function ShellContent() {
   // finansów idzie przez `goToProject`, więc tego nie dotyczy.
   const changeSection = (next: Section) => {
     if (next === 'projekty') closeProject()
+    setOpenTarget(null)
     setSection(next)
     window.scrollTo({ top: 0 })
   }
 
-  const goToProject = (id: string) => {
+  const goToProject = (id: string, tab?: ProjectTab) => {
+    setOpenTarget(tab ? { id, tab } : null)
     void openProject(id)
     setSection('projekty')
     window.scrollTo({ top: 0 })
@@ -190,13 +196,21 @@ function ShellContent() {
         {section === 'kalendarz' && <CalendarSection onOpenProject={goToProject} />}
 
         {section === 'projekty' &&
-          (activeProject ? <ProjectView key={activeProject.id} project={activeProject} /> : <ProjectList />)}
+          (activeProject ? (
+            <ProjectView
+              key={activeProject.id}
+              project={activeProject}
+              initialTab={openTarget?.id === activeProject.id ? openTarget.tab : undefined}
+            />
+          ) : (
+            <ProjectList />
+          ))}
 
         {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
 
         {section === 'marketing' && <MarketingSection onOpenProject={goToProject} />}
 
-        {section === 'sprzet' && <EquipmentSection onOpenProject={goToProject} />}
+        {section === 'sprzet' && <EquipmentSection onOpenProject={(id) => goToProject(id, 'sprzet')} />}
 
         {section === 'ustawienia' && (
           <ComingSoon
