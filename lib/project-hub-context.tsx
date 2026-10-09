@@ -23,7 +23,7 @@ import {
 } from './project-library'
 import { listImportableQuotes } from './legacy-app'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
-import { backfillMissingFinancials, computeSnapshotFinancials } from './quote-financials'
+import { backfillMissingFinancials } from './quote-financials'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
 import { blankQuoteSnapshot, planProjectSave, type ProjectSavePlan } from './project-save'
 
@@ -53,8 +53,11 @@ interface ProjectHubValue {
   openProject: (id: string) => Promise<void>
   /** Wraca do listy bez zapisywania. */
   closeProject: () => void
-  /** Tworzy nowy projekt z BIEŻĄCEGO stanu kalkulatora. */
-  createFromCurrentQuote: (name: string) => Promise<Project | null>
+  /**
+   * Nowy, PUSTY projekt (bez wyceny), od razu otwarty w czystym kalkulatorze i
+   * z czystym szkicem PDF. Nic nie przechodzi z poprzednio otwartego projektu.
+   */
+  createBlankProject: (name: string) => Promise<Project | null>
   /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu albo leada). Nie otwiera go. */
   createProjectWithoutQuote: (params: {
     name: string
@@ -95,7 +98,7 @@ function readHideLost(): boolean {
 }
 
 export function ProjectHubProvider({ children }: { children: React.ReactNode }) {
-  const { data, buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
+  const { buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [filter, setFilter] = useState<ProjectFilter>('all')
@@ -143,16 +146,6 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [projects, filter, hideLost]
   )
 
-  /**
-   * Migawka finansowa liczona tak samo jak w zakładce Profit — tą samą czystą
-   * funkcją co backfill, więc projekt zapisany z kalkulatora i projekt
-   * uzupełniony hurtowo dają identyczne liczby.
-   */
-  const computeFinancials = useCallback(
-    () => computeSnapshotFinancials(buildQuoteSnapshot()),
-    [buildQuoteSnapshot]
-  )
-
   const openProject = useCallback(
     async (id: string) => {
       const project = projects.find((p) => p.id === id)
@@ -169,23 +162,20 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     setActiveProjectId(null)
   }, [])
 
-  const createFromCurrentQuote = useCallback(
+  // Dawniej „Nowy projekt" zapisywał BIEŻĄCY stan kalkulatora — a po otwarciu
+  // innego projektu był to tamten projekt (z klientem i szkicem PDF). Teraz
+  // nowy projekt zawsze startuje od zera; wycenę buduje się i zapisuje „Zapisz".
+  const createBlankProject = useCallback(
     async (name: string) => {
       const trimmed = name.trim()
       if (!trimmed) return null
-      const project = createProject({
-        name: trimmed,
-        quote: buildQuoteSnapshot(),
-        client: data.clientName ?? '',
-        existing: projects,
-      })
-      const withFinancials: Project = { ...project, financials: computeFinancials() }
-      const next = await upsertProject(withFinancials)
-      setProjects(next)
-      setActiveProjectId(withFinancials.id)
-      return withFinancials
+      const project = createProject({ name: trimmed, existing: projects })
+      setProjects(await upsertProject(project))
+      loadQuoteSnapshot(blankQuoteSnapshot('') as never)
+      setActiveProjectId(project.id)
+      return project
     },
-    [buildQuoteSnapshot, data.clientName, computeFinancials, projects]
+    [projects, loadQuoteSnapshot]
   )
 
   const createProjectWithoutQuote = useCallback<ProjectHubValue['createProjectWithoutQuote']>(
@@ -296,7 +286,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     isLoading,
     openProject,
     closeProject,
-    createFromCurrentQuote,
+    createBlankProject,
     createProjectWithoutQuote,
     saveActiveProject,
     updateActiveProject,

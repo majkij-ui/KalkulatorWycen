@@ -13,9 +13,15 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, FolderPlus, Loader2, PackageOpen, Search, Trash2 } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { useQuote } from '@/lib/quote-context'
-import { PROJECT_FILTERS, leadSourceLabel, type Project, type ProjectFilter } from '@/lib/project-types'
+import {
+  PROJECT_FILTERS,
+  countsTowardRevenue,
+  leadSourceLabel,
+  type Project,
+  type ProjectFilter,
+} from '@/lib/project-types'
 import { ProjectStatusBadge } from './project-status-badge'
+import { PaidToggle } from './paid-toggle'
 import { itemLabel } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -91,8 +97,18 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
   // nie „0 zł" — zero to konkretna informacja, a tu jej po prostu nie ma.
   const financials = project.financials
   const zysk = financials?.zysk ?? 0
-  // Nieprzyjęta wycena to archiwum: kwoty na szaro, żeby nie udawały wyniku.
-  const lost = project.status === 'lost'
+  // Pełny kolor i pogrubienie tylko dla kwot, które się liczą: projekt
+  // zatwierdzony („W realizacji") albo zrealizowany. Otwarta wycena to jeszcze
+  // obietnica (szara), nieprzyjęta — archiwum (jeszcze ciemniejsza).
+  const counts = countsTowardRevenue(project.status)
+  const amountTone = counts ? 'font-semibold text-zinc-100' : project.status === 'lost' ? 'text-zinc-600' : 'text-zinc-500'
+  const profitTone = counts
+    ? zysk >= 0
+      ? 'text-emerald-400/80'
+      : 'text-red-400/80'
+    : project.status === 'lost'
+      ? 'text-zinc-600'
+      : 'text-zinc-500'
 
   return (
     <motion.div
@@ -131,14 +147,8 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
         <div className="shrink-0 text-right">
           {financials ? (
             <>
-              <div className={`tabular-nums font-semibold ${lost ? 'text-zinc-600' : 'text-zinc-200'}`}>
-                {formatPln(financials.sumaNetto)}
-              </div>
-              <div
-                className={`text-[11px] tabular-nums ${
-                  lost ? 'text-zinc-600' : zysk >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                }`}
-              >
+              <div className={`tabular-nums ${amountTone}`}>{formatPln(financials.sumaNetto)}</div>
+              <div className={`text-[11px] tabular-nums ${profitTone}`}>
                 zysk {formatPln(zysk)}
               </div>
             </>
@@ -150,6 +160,9 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: () => void 
           )}
         </div>
       </button>
+
+      {/* Stała szerokość także bez przełącznika — kwoty zostają w jednej kolumnie. */}
+      <div className="flex w-[132px] shrink-0 justify-start">{counts && <PaidToggle project={project} />}</div>
 
       <div className="flex shrink-0 items-center gap-1">
         {confirmDelete ? (
@@ -205,11 +218,10 @@ export function ProjectList() {
     hideLost,
     setHideLost,
     openProject,
-    createFromCurrentQuote,
+    createBlankProject,
     isLoading,
   } = useProjectHub()
   const lostCount = projects.filter((p) => p.status === 'lost').length
-  const { totals } = useQuote()
   const [search, setSearch] = useState('')
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -225,7 +237,7 @@ export function ProjectList() {
   const handleCreate = async () => {
     const name = newName.trim()
     if (!name) return
-    await createFromCurrentQuote(name)
+    await createBlankProject(name)
     setNewName('')
     setCreating(false)
   }
@@ -284,7 +296,7 @@ export function ProjectList() {
         </div>
       </div>
 
-      {/* Tworzenie nowego projektu z bieżącego stanu kalkulatora */}
+      {/* Nowy projekt — zawsze pusty, niczego nie przejmuje z poprzednio otwartego */}
       <div className="mb-6 rounded-xl border border-white/5 bg-zinc-900/30 p-4">
         {creating ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -309,10 +321,7 @@ export function ProjectList() {
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-zinc-400">
-              Zapisz bieżący stan kalkulatora jako nowy projekt
-              {totals.sumaNetto > 0 && (
-                <span className="ml-2 tabular-nums text-zinc-500">({formatPln(totals.sumaNetto)} netto)</span>
-              )}
+              Nowy projekt startuje od pustej wyceny
             </div>
             <Button onClick={() => setCreating(true)} className="h-9 gap-2">
               <FolderPlus className="size-4" />

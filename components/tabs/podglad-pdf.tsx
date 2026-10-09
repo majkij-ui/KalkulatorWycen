@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
 import { GlassCard } from '@/components/glass-card'
-import { useQuote } from '@/lib/quote-context'
+import { PDF_DRAFT_STORAGE_KEY, useQuote } from '@/lib/quote-context'
 import { PrintableQuote } from '@/components/pdf/printable-quote'
 import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeArray, safeNum } from '@/lib/safe-numbers'
@@ -39,7 +39,6 @@ const item = {
 
 const VAT_RATE = 0.23
 
-const PDF_DRAFT_STORAGE_KEY = 'nonoise-pdf-draft'
 
 const PDF_ROW_KEYS: PdfRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
 
@@ -560,6 +559,9 @@ export function PodgladPdfTab() {
   // so a saved .json wycena round-trips toggles, opisy, terminy, etc.
   // Uses refs internally so the registered closures always see the latest state.
   const localPdfStateRef = useRef(localPdfState)
+  // „Wyczyść edytor" dla mostka (nowy projekt, wycena bez własnego szkicu).
+  // Ref, bo funkcja jest zdefiniowana niżej i zależy od bieżącego renderu.
+  const clearEditorRef = useRef<() => void>(() => {})
   useEffect(() => {
     localPdfStateRef.current = localPdfState
     syncPdfDraftSnapshot(localPdfState)
@@ -568,6 +570,7 @@ export function PodgladPdfTab() {
   useEffect(() => {
     registerPdfDraftBridge({
       snapshot: () => localPdfStateRef.current,
+      reset: () => clearEditorRef.current(),
       apply: (raw) => {
         const coerced = coerceLocalPdfDraft(raw, localPdfStateRef.current)
         setLocalPdfState(coerced)
@@ -707,6 +710,7 @@ export function PodgladPdfTab() {
     setShowDraftPrompt(false)
     setLocalPdfState(init)
   }
+  clearEditorRef.current = handleClearEditor
 
   const printRef = useRef<HTMLDivElement | null>(null)
   const originalDocumentTitleRef = useRef<string | null>(null)

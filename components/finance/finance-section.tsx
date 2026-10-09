@@ -378,6 +378,9 @@ function TrendChart({ trend, period }: { trend: PeriodSummary[]; period: Period 
 // ── Projekty okresu ──────────────────────────────────────────────────────────
 
 function ProjectRow({ project, onOpen }: { project: Project; onOpen: (id: string) => void }) {
+  // Jak na liście projektów: pełny kolor i pogrubienie tylko dla kwot, które
+  // się liczą do wyniku. Otwarta wycena jest szara.
+  const counts = countsTowardRevenue(project.status)
   return (
     <button
       type="button"
@@ -389,9 +392,13 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: (id: string
       <ProjectStatusBadge status={project.status} />
       {project.financials ? (
         <span className="w-44 shrink-0 text-right tabular-nums text-xs">
-          <span className="text-zinc-400">{pln(project.financials.sumaNetto)}</span>
+          <span className={counts ? 'text-zinc-300' : 'text-zinc-500'}>{pln(project.financials.sumaNetto)}</span>
           <span className="text-zinc-600"> · zysk </span>
-          <span className={project.financials.zysk < 0 ? 'text-red-300' : 'text-zinc-100'}>
+          <span
+            className={
+              !counts ? 'text-zinc-500' : project.financials.zysk < 0 ? 'font-semibold text-red-300' : 'font-semibold text-zinc-100'
+            }
+          >
             {pln(project.financials.zysk)}
           </span>
         </span>
@@ -433,7 +440,7 @@ function PeriodProjects({
           <h3 className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
             Wyceny (niewliczone)
           </h3>
-          <div className="flex flex-col opacity-70">
+          <div className="flex flex-col">
             {pipeline.map((p) => (
               <ProjectRow key={p.id} project={p} onOpen={onOpenProject} />
             ))}

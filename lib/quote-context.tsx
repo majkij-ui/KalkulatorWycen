@@ -110,7 +110,15 @@ export interface PdfDraftBridge {
   snapshot: () => unknown
   /** Applies a previously saved PDF draft snapshot, coercing missing fields. */
   apply: (raw: unknown) => void
+  /** Czysty szkic PDF — to samo co „Wyczyść edytor" w zakładce PDF. */
+  reset: () => void
 }
+
+/** Szkic PDF w localStorage — zakładka PDF odtwarza go przy otwarciu. */
+export const PDF_DRAFT_STORAGE_KEY = 'nonoise-pdf-draft'
+
+/** Znacznik „wyczyść szkic", gdy zakładka PDF nie jest jeszcze zamontowana. */
+const PDF_DRAFT_RESET = { __reset: true } as const
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
 
@@ -454,11 +462,32 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     pdfDraftBridgeRef.current = bridge
     if (bridge && pendingPdfDraftRef.current != null) {
       try {
-        bridge.apply(pendingPdfDraftRef.current)
+        if (pendingPdfDraftRef.current === PDF_DRAFT_RESET) bridge.reset()
+        else bridge.apply(pendingPdfDraftRef.current)
         pendingPdfDraftRef.current = null
       } catch {
         // ignore corrupted pending draft
       }
+    }
+  }, [])
+
+  /**
+   * Czysty szkic PDF dla wyceny, która nie ma własnego. Bez tego zakładka PDF
+   * odtworzyłaby szkic POPRZEDNIEGO projektu z localStorage — razem z jego
+   * klientem, który trafiał potem do kalkulatora (tak S-AI dostało klienta
+   * Morris & Lloyd).
+   */
+  const resetPdfDraft = useCallback(() => {
+    pdfDraftSnapshotRef.current = null
+    if (pdfDraftBridgeRef.current) {
+      pdfDraftBridgeRef.current.reset()
+      return
+    }
+    pendingPdfDraftRef.current = PDF_DRAFT_RESET
+    try {
+      localStorage.removeItem(PDF_DRAFT_STORAGE_KEY)
+    } catch {
+      // brak localStorage — zakładka PDF i tak dostanie znacznik przy montowaniu
     }
   }, [])
 
@@ -498,8 +527,12 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
       } else {
         pendingPdfDraftRef.current = snapshot.pdfDraft
       }
+    } else {
+      // Wycena bez własnego szkicu PDF (nowy projekt, starsze zapisy) dostaje
+      // czysty szkic, a nie szkic poprzednio otwartej wyceny.
+      resetPdfDraft()
     }
-  }, [])
+  }, [resetPdfDraft])
 
   // ── Biblioteka wycen (AppData / localStorage) ────────────────────────────────
   useEffect(() => {
