@@ -15,6 +15,7 @@ import {
   Calculator,
   CalendarDays,
   FolderKanban,
+  Inbox,
   Megaphone,
   NotebookPen,
   Package,
@@ -24,6 +25,7 @@ import {
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
 import { EquipmentProvider } from '@/lib/equipment-context'
 import { EventsProvider } from '@/lib/events-context'
+import { InboxProvider, useInbox } from '@/lib/inbox-context'
 import { QuoteCalculatorView } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectHeader } from '@/components/projects/project-header'
@@ -35,12 +37,14 @@ import { ProjectEquipment } from '@/components/equipment/project-equipment'
 import { FinanceSection } from '@/components/finance/finance-section'
 import { CalendarSection } from '@/components/calendar/calendar-section'
 import { MarketingSection } from '@/components/marketing/marketing-section'
+import { InboxSection } from '@/components/inbox/inbox-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
-type Section = 'kalendarz' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ustawienia'
+type Section = 'kalendarz' | 'skrzynka' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ustawienia'
 
 const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'kalendarz', label: 'Kalendarz', icon: CalendarDays },
+  { value: 'skrzynka', label: 'Skrzynka', icon: Inbox },
   { value: 'projekty', label: 'Projekty', icon: FolderKanban },
   { value: 'finanse', label: 'Finanse', icon: BarChart3 },
   { value: 'marketing', label: 'Marketing', icon: Megaphone },
@@ -65,6 +69,8 @@ function Sidebar({
   section: Section
   onChange: (next: Section) => void
 }) {
+  // Licznik propozycji z poczty, które czekają na decyzję.
+  const inboxCount = useInbox().pending.length
   return (
     <nav
       aria-label="Nawigacja główna"
@@ -96,6 +102,14 @@ function Sidebar({
             )}
             <Icon className="relative size-4 shrink-0" />
             <span className="relative hidden sm:inline">{label}</span>
+            {value === 'skrzynka' && inboxCount > 0 && (
+              <span
+                className="relative ml-auto rounded-full bg-primary px-1.5 py-px text-[10px] font-bold leading-4 text-primary-foreground"
+                aria-label={`${inboxCount} do przejrzenia`}
+              >
+                {inboxCount}
+              </span>
+            )}
           </button>
         )
       })}
@@ -189,6 +203,8 @@ function ShellContent() {
       <div className="relative min-w-0 flex-1">
         {section === 'kalendarz' && <CalendarSection onOpenProject={goToProject} />}
 
+        {section === 'skrzynka' && <InboxSection onOpenProject={goToProject} />}
+
         {section === 'projekty' &&
           (activeProject ? <ProjectView key={activeProject.id} project={activeProject} /> : <ProjectList />)}
 
@@ -214,7 +230,9 @@ export function AppShell() {
     <ProjectHubProvider>
       <EquipmentProvider>
         <EventsProvider>
-          <ShellContent />
+          <InboxProvider>
+            <ShellContent />
+          </InboxProvider>
         </EventsProvider>
       </EquipmentProvider>
     </ProjectHubProvider>
