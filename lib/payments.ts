@@ -27,7 +27,7 @@ export interface PaymentState {
   unpaidInvoices: number
   /** Aktywne wpłaty w wątku. */
   paymentIds: string[]
-  /** Ile z nich przyszło z importu — odznaczenie ich wymaga potwierdzenia. */
+  /** Ile z nich przyszło spoza aplikacji (import, poczta) — odznaczenie ich wymaga potwierdzenia. */
   importedPayments: number
 }
 
@@ -50,7 +50,7 @@ export function paymentState(events: PaymentEvent[], projectId: string, today: s
     paid: payments.length > 0 && unpaidInvoices === 0,
     unpaidInvoices,
     paymentIds: payments.map((e) => e.id),
-    importedPayments: payments.filter((e) => e.source?.type === 'import').length,
+    importedPayments: payments.filter((e) => !!e.source?.type && e.source.type !== 'manual').length,
   }
 }
 
