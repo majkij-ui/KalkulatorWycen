@@ -16,6 +16,8 @@ import { useQuote } from '@/lib/quote-context'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import type { CrewRoleKey, PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } from '@/lib/quote-types'
 import { computeShootingDayNet } from '@/lib/quote-calc'
+import { dayGearFigures, hasLegacyGear } from '@/lib/quote-gear'
+import { DayGearSection, GearQuotePanel } from './produkcja-gear'
 
 const DP = DEFAULT_PRICING
 
@@ -203,16 +205,20 @@ function DayCard({
   onRemove: () => void
   canRemove: boolean
 }) {
-  const { pricingConfig, updatePricingValue, marginMultiplier, formatCurrency } = useQuote()
+  const { data, pricingConfig, updatePricingValue, marginMultiplier, formatCurrency } = useQuote()
   const pc = pricingConfig.produkcja
   const crewNames = day.crewNames ?? {}
+  // Stare pola sprzętu (kamery, standard/rental…) tylko gdy dzień ich używa.
+  const [showLegacy, setShowLegacy] = useState(() => hasLegacyGear(day))
 
   function setCrewName(role: CrewRoleKey, name: string) {
     onUpdate('crewNames', { ...crewNames, [role]: name })
   }
 
-  // Live day subtotal displayed at the bottom of the card.
-  const dayBaseNetto = computeShootingDayNet(day, pc) * marginMultiplier
+  // Live day subtotal displayed at the bottom of the card. Sprzęt z katalogu i
+  // wypożyczalnia bez marży (lib/quote-gear.ts), tak jak w sumie wyceny.
+  const gear = dayGearFigures(day, data.gearDiscountPercent)
+  const dayBaseNetto = computeShootingDayNet(day, pc) * marginMultiplier + gear.charged + gear.external
   const adj = day.dayAdjustment ?? 0
   const dayFinalNetto = dayBaseNetto + adj
 
@@ -276,6 +282,16 @@ function DayCard({
         </div>
 
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Sprzęt</h4>
+        <DayGearSection day={day} onUpdate={onUpdate} />
+        <button
+          type="button"
+          onClick={() => setShowLegacy((v) => !v)}
+          aria-expanded={showLegacy}
+          className="mt-3 text-[11px] text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+        >
+          {showLegacy ? 'Ukryj stare pozycje sprzętu' : 'Stare pozycje sprzętu (kamery, standard / rental, dron)'}
+        </button>
+        {showLegacy && (
         <div className="space-y-0">
           <Row label="Kamera Sony Mirrorless">
             <InlinePrice value={pc.kameraSonyMirrorless} onChange={(v) => updatePricingValue('produkcja', 'kameraSonyMirrorless', v)} isModified={pc.kameraSonyMirrorless !== DP.produkcja.kameraSonyMirrorless} />
@@ -336,6 +352,7 @@ function DayCard({
             <PillGroup value={day.dron} options={DRON_OPCJE} onChange={(v) => onUpdate('dron', v as DronOpcja)} />
           </Row>
         </div>
+        )}
       </div>
 
       {/* Day subtotal + adjustment */}
@@ -613,6 +630,9 @@ export function ProdukcjaTab() {
               animate="show"
               className="space-y-5 pt-1 pb-1"
             >
+              <motion.div variants={item}>
+                <GearQuotePanel />
+              </motion.div>
               {days.map((day, index) => (
                 <motion.div key={day.id} variants={item}>
                   <DayCard

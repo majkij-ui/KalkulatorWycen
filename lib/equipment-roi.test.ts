@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { computeGearReport, itemUsageHistory, summarizeProjectGear } from './equipment-roi'
 import type { EquipmentItem, GearDay, Project, ProjectStatus } from './project-types'
+import { DEFAULT_PRICING } from './pricing-config'
 
 const NOW = new Date(2026, 6, 1, 12) // 1 lipca 2026, czas lokalny
 
@@ -311,4 +312,95 @@ test('historia pozycji: tylko zrealizowane projekty, od najnowszego użycia', ()
     itemUsageHistory('c1', projects, [camera]).map((h) => h.project.id),
     ['nowy', 'stary']
   )
+})
+
+test('z wydarzeniami data użycia pochodzi z kalendarza; usunięty dzień się nie liczy', () => {
+  const camera = item('c1', 'FX3', 20000, 500)
+  const p = project('p1', 'done', {
+    gearDays: [
+      { ...day('d1', [['c1', 1]], '2026-02-10'), eventId: 'ev1', eventDay: 1 },
+      { ...day('d2', [['c1', 1]], '2026-03-01'), deletedAt: '2026-03-02T00:00:00Z' },
+    ],
+  })
+  const moved = {
+    id: 'ev1',
+    kind: 'shoot_day',
+    projectId: 'p1',
+    start: '2026-05-04',
+    end: '2026-05-05',
+    deletedAt: undefined,
+  }
+  const withCalendar = roiOf(computeGearReport([camera], [p], { now: NOW, events: [moved] }), 'c1')
+  assert.equal(withCalendar.firstUsed, '2026-05-05', 'drugi dzień przesuniętego wydarzenia')
+  assert.equal(withCalendar.daysUsed, 1)
+
+  const without = roiOf(computeGearReport([camera], [p], { now: NOW }), 'c1')
+  assert.equal(without.firstUsed, '2026-02-10', 'bez wydarzeń — ostatnia znana data')
+  assert.equal(itemUsageHistory('c1', [p], [camera], { events: [moved] })[0].use.dates[0], '2026-05-05')
+})
+
+// ── G5: zapłata za pozycje z katalogu w wycenie ──────────────────────────────
+
+/** Szczegółowa wycena: jeden dzień z pozycjami katalogu. */
+function catalogQuote(gear: { itemId: string; name: string; rate: number; qty: number; gratis?: boolean }[], extra: Record<string, unknown> = {}): Project['quote'] {
+  return {
+    data: {
+      isDetailedProdukcja: true,
+      detailedShootingDays: [{ id: 'qd-1', rezOp: 0, asystent: 0, gafer: 0, dzwiekowiec: 0, mua: 0, aktor: 0, model: 0, statysta: 0, kameraSony: 0, kameraRed: 0, obiektywy: 'brak', stabilizacja: 'brak', podglad: 'brak', swiatlo: 'brak', dron: 'brak', dayAdjustment: 0, crewNames: {}, gear }],
+      ...extra,
+    },
+    marginMultiplier: 1,
+  } as unknown as Project['quote']
+}
+
+test('pozycja wyceniona z katalogu zarabia dokładnie, także bez zaznaczenia w Realizacji', () => {
+  const camera = item('c1', 'FX3', 20000, 400)
+  const light = item('l1', 'Amaran', 900, 60, { category: 'swiatlo', quantity: 2 })
+  const p = project('p1', 'done', {
+    quote: catalogQuote([
+      { itemId: 'c1', name: 'FX3', rate: 400, qty: 1 },
+      { itemId: 'l1', name: 'Amaran', rate: 60, qty: 2, gratis: true },
+    ]),
+  })
+  const report = computeGearReport([camera, light], [p], { now: NOW })
+  const summary = summarizeProjectGear(p, [camera, light])
+
+  assert.equal(roiOf(report, 'c1').clientPaid, 400)
+  assert.equal(roiOf(report, 'c1').rentValue, 0, 'odpracował liczy się z dni Realizacji')
+  assert.equal(roiOf(report, 'l1').clientPaid, 0, 'gratis')
+  assert.equal(summary.clientPaidExact, true)
+  assert.equal(report.totals.unassignedClientPaid, 0)
+})
+
+test('wycena mieszana: pozycje katalogu dokładnie, stary sprzęt rozłożony na użyte', () => {
+  const camera = item('c1', 'FX3', 20000, 400)
+  const light = item('l1', 'Aputure', 3000, 200, { category: 'swiatlo' })
+  const p = project('p1', 'done', {
+    quote: catalogQuote([{ itemId: 'c1', name: 'FX3', rate: 400, qty: 1 }], {}),
+    gearDays: [day('d1', [['c1', 1], ['l1', 1]])],
+  })
+  // stary sprzęt w tym samym dniu wyceny: światło „standard"
+  ;(p.quote as unknown as { data: { detailedShootingDays: { swiatlo: string }[] } }).data.detailedShootingDays[0].swiatlo = 'standard'
+  const legacy = DEFAULT_PRICING.produkcja.swiatloStandard
+  const summary = summarizeProjectGear(p, [camera, light])
+  const paid = (id: string) => summary.items.find((u) => u.itemId === id)?.clientPaid ?? 0
+
+  // reszta (stare światło) dzieli się 400:200 po wartości rentalowej użytych pozycji
+  assert.equal(paid('c1'), 400 + (legacy * 400) / 600)
+  assert.equal(paid('l1'), (legacy * 200) / 600)
+  assert.equal(summary.clientPaidExact, false, 'część to szacunek')
+  assert.equal(summary.clientPaidAssigned, 400 + legacy)
+})
+
+test('pozycja usunięta z katalogu: jej zapłata zostaje nieprzypisana', () => {
+  const camera = item('c1', 'FX3', 20000, 400)
+  const p = project('p1', 'won', {
+    quote: catalogQuote([
+      { itemId: 'c1', name: 'FX3', rate: 400, qty: 1 },
+      { itemId: 'usuniety', name: 'GH5', rate: 150, qty: 1 },
+    ]),
+  })
+  const report = computeGearReport([camera], [p], { now: NOW })
+  assert.equal(roiOf(report, 'c1').clientPaid, 400)
+  assert.equal(report.totals.unassignedClientPaid, 150)
 })

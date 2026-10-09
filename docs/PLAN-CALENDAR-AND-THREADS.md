@@ -355,8 +355,9 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy projekt…" (creates a quote-less project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
 | **T3 Project thread** ✅ (2026-10-09, §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing the crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes it together with its thread, with undo. Pure: `clients.ts`, `project-list.ts`, `project-deletion.ts`, header client rule in `project-save.ts`; collection writes are serialized. 27 new tests; 18/18 mutations caught; flows verified in the browser. | T1 |
 | **T4 Gmail import v0** (partly done) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). Left: inbox format + review queue in the app, then a recurring "sync my mail" from chat for new leads, replies and invoices. | T1, T3 |
-| **T5 Realizacja tab** | Profit pulled out of calculator, shoot days, crew, gear (merge Sprzęt tab), actual costs; then call sheet planner. | T1 |
-| **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance, days-to-payment, overdue list. | T5, phase 4 |
+| **T5a Realizacja tab** ✅ (2026-10-09, §6c) | The project's Sprzęt tab became Realizacja: shoot/prep days whose date lives in the calendar (variant A), gear per day (G3 grid), crew and other actual costs (`Project.costs`), Profit moved out of the calculator as the plan, planned vs actual margin. Pure: `realization-days.ts`, `project-costs.ts`, `realization-plan.ts`. 37 new tests; 20/20 mutations caught; flows verified in the browser and on the production export. | T1 |
+| **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`. | T5a |
+| **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance (actual costs: `totalActualCosts` / `actualCostsByCategory` on `Project.costs`, §6c), days-to-payment, overdue list. | T5a, phase 4 |
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
@@ -422,6 +423,77 @@ are not project events and stay.
 - **List:** client filter shows the client's revenue (same rule as Finance: W realizacji +
   Zrealizowane, `sumaNetto`), for the selected year if one is chosen; filter, client and year are
   remembered (`nonoise-projects-list-v1`); search ignores case and Polish letters.
+
+## 6c. T5a Realizacja *(agreed with M.J. 2026-10-09)*
+
+**Decision: one source of a "shoot day" — variant A, the calendar.** Before T5a there were two:
+`shoot_day` / `prep_day` events and `Project.gearDays` (with an optional date). Now a dated day *is*
+its calendar event; gear, crew and costs hang on the day record in the project, and the day record
+points at its event:
+
+```
+ProjectCost.dayId → Project.gearDays[].id → (eventId, eventDay) → events.json shoot_day / prep_day
+```
+
+`eventDay` says which day of a multi-day event it is (an event 28–30.10 is three days with their own
+crew). Considered and rejected: B (days live in the project and the calendar only projects them — would
+have changed the T4 inbox format, the month summary, thread stats and dropped multi-day bars) and C
+(keep both — dates drift). At decision time the hub data had no shoot/prep events and no `gearDays`, so
+nothing had to be matched or migrated. Also decided: undated days are allowed (they stay out of the
+calendar until they get a date), crew is per day with "same crew on every day" and "copy crew from the
+plan", and the actual margin uses the plan's revenue (transfer amount) until T6 brings invoices.
+
+**Data (all additive, passthrough, no version bump):**
+- `GearDay.eventId?`, `eventDay?`, `kind?` (`shoot_day` / `prep_day` for days without an event),
+  `deletedAt?`. `date` is only the last known date: for undated days, for older builds and when there is
+  no event record at all.
+- `Project.costs?: ProjectCost[]` — `{ id, category, unitCost, quantity?, label?, person?, role?, dayId?,
+  source?, createdAt?, deletedAt? }`, amount = quantity (default 1) × unitCost, PLN netto. Categories
+  are a free string with known keys `ekipa, wynajem, dojazd, catering, nocleg, sprzet, preprodukcja,
+  postprodukcja, inne`. Optional fields have no defaults, so `npm run data` accepts a minimal record
+  without "fixing" it. Costs never touch `financials` or Finance.
+
+**As built (2026-10-09):**
+- **Days** (`resolveRealizationDays`): every day of the project's shoot/prep events, plus stored days.
+  Stored links win; an unlinked stored day with a date takes a free event of that date (same kind
+  first); events without a stored day show up as days "from the calendar". Reading never writes: links
+  and calendar days are saved with the first change in the tab, like G3's suggestions. A day whose
+  event was deleted, shortened, moved to another project or turned into another kind keeps its gear,
+  crew and costs and takes its date from the event record (soft-deleted events stay in the file), with
+  "Przywróć w kalendarzu" / "Dodaj do kalendarza". Two days pointing at the same event day: the first
+  wins.
+- **Tab** (`components/realization/`): plan vs actual tiles (costs, profit, margin; delta vs plan with
+  a sign) and a per-category table; day cards (date and place from the calendar, "Edytuj w kalendarzu"
+  opens the calendar's event form in a side sheet, crew rows with name suggestions and the person's
+  last rate from won/done projects, day costs); the G3 grid unchanged in behaviour (its day popover
+  shows the calendar controls instead of a date field); project-level costs; "Plan z wyceny" = the
+  former Profit tab, open by default for quotes, folded for won/done, with a "zmieniony — kliknij
+  Zapisz" chip when the calculator differs from the saved quote.
+- **+ Dzień** with a date writes a `shoot_day` / `prep_day` event (the day appears from the calendar);
+  without a date it adds an undated day to the project. Removing a day soft-deletes it with its costs
+  and — for a one-day event — the event; "Cofnij" restores exactly those. A day of a multi-day event is
+  shortened in the calendar instead.
+- **Plan** (`realization-plan.ts`): from the live calculator for a project with a quote (or one being
+  built), otherwise the imported `financials` (retro imports: read-only, revenue and costs as imported).
+  Same numbers as `computeSnapshotFinancials`. Plan lines map onto cost categories (crew roles → ekipa,
+  "Rental sprzętu" → wynajem, fuel → dojazd, …) for the comparison. Copy crew from the plan: day N of
+  the quote → the N-th shoot day; roles marked "nie mój koszt" are skipped; days that already have crew
+  are left alone.
+- **Calculator**: the Profit tab is gone; its data still lives in the quote and "Zapisz" saves it.
+- **Gear stats** (Sprzęt screen, item history) take day dates from the calendar; soft-deleted days do
+  not count anywhere.
+
+**For T6:** actual costs of a project = `totalActualCosts(project.costs)`, split =
+`actualCostsByCategory(project.costs)` (both skip soft-deleted lines). Per day: `costsOfDay`. Planned
+costs stay in `financials.koszty`.
+
+**Known limits / follow-ups:**
+- An older hub build shows soft-deleted days as normal days (it does not know `deletedAt` on days).
+  The installed app is replaced by this build, so this only matters if an old build is opened again.
+- The event form opened from Realizacja still offers every kind; changing a shoot day into another
+  kind leaves the day "outside its event" (nothing is lost).
+- Crew suggestions come only from won/done projects (quote rates are hypotheses).
+- Day labels default to "Dzień N" over all days (prep included); an event title is used when set.
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 

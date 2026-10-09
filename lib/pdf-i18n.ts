@@ -85,6 +85,11 @@ interface PdfLabelSet {
   opisEquipmentClass: string
   opisDroneSurcharge: string
   opisDetailedEquipment: string
+  /** Mój sprzęt z katalogu w wycenie (G5). */
+  opisOwnGear: string
+  opisRentedGear: string
+  opisGearValue: string
+  opisGearDiscount: string
   opisTravel: string
   opisCatering: string
   opisLodging: string
@@ -176,6 +181,10 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     opisDroneSurcharge: 'Dopłata Dron',
     opisDetailedEquipment:
       'Szczegółowa wycena sprzętu (kamery, obiektywy, stabilizacja, podgląd, światło, dron) dla',
+    opisOwnGear: 'Sprzęt',
+    opisRentedGear: 'Z wypożyczalni',
+    opisGearValue: 'Wartość rynkowa sprzętu',
+    opisGearDiscount: 'rabat',
     opisTravel: 'Dojazd',
     opisCatering: 'Catering',
     opisLodging: 'Noclegi',
@@ -260,6 +269,10 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     opisDroneSurcharge: 'Drone surcharge',
     opisDetailedEquipment:
       'Detailed equipment pricing (cameras, lenses, stabilisation, monitoring, lighting, drone) for',
+    opisOwnGear: 'Equipment',
+    opisRentedGear: 'Rented',
+    opisGearValue: 'Market value of equipment',
+    opisGearDiscount: 'discount',
     opisTravel: 'Travel',
     opisCatering: 'Catering',
     opisLodging: 'Lodging',

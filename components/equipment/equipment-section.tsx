@@ -5,14 +5,17 @@
  *
  * Dwie liczby na pozycję (plan G, decyzja 3):
  *  - Odpracował: ile kosztowałby rental za każdy dzień, w którym był na planie,
- *  - Zarobił: ile zapłacili za niego klienci (szacunek z wycen do czasu G5).
+ *  - Zarobił: ile zapłacili za niego klienci. Dokładnie dla sprzętu wycenionego
+ *    z katalogu (G5), szacunek dla wycen po staremu.
  * Klik w pozycję otwiera panel z edycją, statystykami i historią projektów.
- * Samo zaznaczanie sprzętu dzieje się w zakładce Sprzęt projektu.
+ * Samo zaznaczanie sprzętu dzieje się w zakładce Realizacja projektu; daty
+ * dni pochodzą z kalendarza.
  */
 
 import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, ChevronDown, Loader2, Package, Plus, Search } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
+import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { computeGearReport, type EquipmentRoi, type MissingGearProject } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
@@ -21,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { EquipmentItemSheet, formatPayoff } from './equipment-item-sheet'
+import { GearKitsPanel } from './gear-kits-panel'
 
 function pln(amount: number): string {
   return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
@@ -175,8 +179,8 @@ function MissingGearBanner({
       {open && (
         <div className="border-t border-amber-500/10 px-4 pb-3 pt-2">
           <p className="mb-2 text-xs text-zinc-400">
-            Otwórz projekt i zaznacz sprzęt w jego zakładce Sprzęt. Kwota przy projekcie to zapłata klienta za
-            sprzęt, która czeka na przypisanie. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
+            Otwórz projekt i zaznacz sprzęt w jego zakładce Realizacja. Kwota przy projekcie to zapłata klienta za
+            sprzęt wyceniony po staremu, która czeka na przypisanie. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
             wyceny.
           </p>
           <ul className="flex flex-col gap-1">
@@ -196,9 +200,11 @@ function MissingGearBanner({
                   <span className="shrink-0 text-xs tabular-nums text-zinc-400">
                     {revenue === null
                       ? 'brak wyceny'
-                      : revenue.ownGear > 0
-                        ? `za sprzęt ${pln(revenue.ownGear)}`
-                        : 'bez sprzętu w wycenie'}
+                      : revenue.unitemized > 0
+                        ? `za sprzęt ${pln(revenue.unitemized)}`
+                        : revenue.itemized > 0
+                          ? 'sprzęt z katalogu w wycenie'
+                          : 'bez sprzętu w wycenie'}
                   </span>
                   {onOpenProject && (
                     <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
@@ -216,6 +222,7 @@ function MissingGearBanner({
 export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
   const { items, isLoading } = useEquipment()
   const { projects } = useProjectHub()
+  const { allEvents } = useEvents()
 
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('kategoria')
@@ -223,7 +230,10 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
   /** `undefined` = panel zamknięty, `null` = nowa pozycja, id = edycja. */
   const [sheetItemId, setSheetItemId] = useState<string | null | undefined>(undefined)
 
-  const report = useMemo(() => computeGearReport(items, projects), [items, projects])
+  const report = useMemo(
+    () => computeGearReport(items, projects, { events: allEvents }),
+    [items, projects, allEvents]
+  )
   const { totals } = report
 
   const active = items.filter((i) => !i.retiredAt)
@@ -261,7 +271,8 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         <p className="mt-1 max-w-2xl text-sm text-zinc-500">
           Twój sprzęt i to, jak na siebie zarabia. <span className="text-zinc-300">Odpracował</span>: ile
           kosztowałby rental za każdy dzień na planie. <span className="text-zinc-300">Zarobił</span>: ile zapłacili
-          za niego klienci (szacunek z wycen). Liczą się projekty w realizacji i zrealizowane.
+          za niego klienci (z wycen: dokładnie dla sprzętu z katalogu, szacunek dla starszych). Liczą się projekty
+          w realizacji i zrealizowane.
         </p>
       </header>
 
@@ -387,6 +398,8 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           )}
         </div>
       )}
+
+      {items.length > 0 && <GearKitsPanel />}
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && setSheetItemId(undefined)}>
         <SheetContent

@@ -14,6 +14,7 @@ import {
   BarChart3,
   Calculator,
   CalendarDays,
+  Clapperboard,
   FolderKanban,
   Megaphone,
   NotebookPen,
@@ -31,7 +32,7 @@ import { ProjectTimeline } from '@/components/projects/project-timeline'
 import { ProjectNotes } from '@/components/projects/project-notes'
 import { defaultProjectTab, type Project, type ProjectTab } from '@/lib/project-types'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
-import { ProjectEquipment } from '@/components/equipment/project-equipment'
+import { ProjectRealization } from '@/components/realization/project-realization'
 import { FinanceSection } from '@/components/finance/finance-section'
 import { CalendarSection } from '@/components/calendar/calendar-section'
 import { MarketingSection } from '@/components/marketing/marketing-section'
@@ -106,7 +107,8 @@ function Sidebar({
 const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calculator }[] = [
   { value: 'os', label: 'Oś czasu', icon: Waypoints },
   { value: 'wycena', label: 'Wycena', icon: Calculator },
-  { value: 'sprzet', label: 'Sprzęt', icon: Package },
+  // Klucz `sprzet` na stałe; od T5a to zakładka Realizacja (sprzęt jest jej częścią).
+  { value: 'sprzet', label: 'Realizacja', icon: Clapperboard },
   { value: 'notatki', label: 'Notatki', icon: NotebookPen },
 ]
 
@@ -154,7 +156,7 @@ function ProjectView({ project, initialTab }: { project: Project; initialTab?: P
 
       {tab === 'os' && <ProjectTimeline project={project} />}
       {tab === 'wycena' && <QuoteCalculatorView />}
-      {tab === 'sprzet' && <ProjectEquipment />}
+      {tab === 'sprzet' && <ProjectRealization />}
       {tab === 'notatki' && <ProjectNotes project={project} />}
     </>
   )
@@ -165,7 +167,7 @@ function ShellContent() {
   const [section, setSection] = useState<Section>('kalendarz')
   const { activeProject, openProject, closeProject } = useProjectHub()
   // Zakładka, na której ma się otworzyć projekt wskazany z innego ekranu (np. z
-  // listy sprzętu prosto na „Sprzęt"). Trzymana razem z id, żeby nie przeszła
+  // listy sprzętu prosto na „Realizację"). Trzymana razem z id, żeby nie przeszła
   // na inny projekt otwarty potem z listy.
   const [openTarget, setOpenTarget] = useState<{ id: string; tab: ProjectTab } | null>(null)
 

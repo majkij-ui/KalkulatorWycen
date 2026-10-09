@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowUpRight, RotateCcw, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
+import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { itemUsageHistory, type EquipmentRoi } from '@/lib/equipment-roi'
 import {
@@ -106,9 +107,10 @@ export function EquipmentItemSheet({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const { allEvents } = useEvents()
   const history = useMemo(
-    () => (item ? itemUsageHistory(item.id, projects, items) : []),
-    [item, projects, items]
+    () => (item ? itemUsageHistory(item.id, projects, items, { events: allEvents }) : []),
+    [item, projects, items, allEvents]
   )
 
   const set = (patch: Partial<Draft>) => {
@@ -323,7 +325,7 @@ export function EquipmentItemSheet({
           </h3>
           {history.length === 0 ? (
             <p className="text-xs text-zinc-600">
-              Jeszcze w żadnym zrealizowanym projekcie. Zaznacza się go w zakładce Sprzęt projektu.
+              Jeszcze w żadnym zrealizowanym projekcie. Zaznacza się go w zakładce Realizacja projektu.
             </p>
           ) : (
             <ul className="flex flex-col gap-1">

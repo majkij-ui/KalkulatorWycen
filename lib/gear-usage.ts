@@ -39,9 +39,15 @@ export function legacyToGearDays(equipment: ProjectEquipmentUsage[]): GearDay[] 
   }))
 }
 
-/** Dni sprzętu projektu: nowy kształt, a gdy go brak — przeliczony stary. */
+/**
+ * Dni sprzętu projektu: nowy kształt, a gdy go brak — przeliczony stary.
+ * Dni usunięte w Realizacji (`deletedAt`) zostają w pliku, ale nie liczą się
+ * nigdzie: ani w statystykach, ani na liście pakowania.
+ */
 export function projectGearDays(project: Pick<Project, 'gearDays' | 'equipment'>): GearDay[] {
-  return project.gearDays ?? legacyToGearDays(project.equipment ?? [])
+  return project.gearDays
+    ? project.gearDays.filter((day) => !day.deletedAt)
+    : legacyToGearDays(project.equipment ?? [])
 }
 
 /** Czy na projekcie zapisano jakikolwiek sprzęt. */
@@ -83,12 +89,14 @@ export function removeGearDay(days: GearDay[], dayId: string): GearDay[] {
 /**
  * Kopia dnia wstawiona zaraz za oryginałem — „drugi dzień, ten sam zestaw".
  * Data zostaje pusta: kolejny dzień zdjęciowy nie zawsze jest następnym dniem
- * kalendarza, a zła data byłaby gorsza niż żadna.
+ * kalendarza, a zła data byłaby gorsza niż żadna. Z tego samego powodu kopia
+ * nie jest powiązana z wydarzeniem oryginału.
  */
 export function duplicateGearDay(days: GearDay[], dayId: string): GearDay[] {
   const index = days.findIndex((day) => day.id === dayId)
   if (index === -1) return days
-  const source = days[index]
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { eventId, eventDay, deletedAt, ...source } = days[index]
   const copy: GearDay = {
     ...source,
     id: createGearDayId(),
@@ -259,4 +267,85 @@ export function buildPackingList(
         equipmentCategoryRank(a.category) - equipmentCategoryRank(b.category) ||
         a.category.localeCompare(b.category, 'pl')
     )
+}
+
+// ── Sprzęt z wyceny ──────────────────────────────────────────────────────────
+
+export interface GearFromQuoteResult {
+  days: GearDay[]
+  /** Ile pozycji dopisano (łącznie we wszystkich dniach). */
+  added: number
+  /** Dni zdjęciowe pominięte, bo mają już sprzęt. */
+  keptDays: number
+  /** Dni wyceny ze sprzętem, dla których nie ma dnia zdjęciowego. */
+  missingDays: number
+}
+
+/**
+ * „Sprzęt z wyceny" (G5): dzień N szczegółowej wyceny → N-ty dzień zdjęciowy
+ * Realizacji, tak jak „Przepisz ekipę z planu". Dzień, który ma już sprzęt,
+ * zostaje nietknięty — nic się nie dubluje. Pozycje „gratis" też jadą.
+ */
+export function gearFromQuote(
+  quoteDays: { gear?: { itemId: string; qty: number }[] }[],
+  days: GearDay[],
+  kindOf: (day: GearDay) => string
+): GearFromQuoteResult {
+  const shootDays = days.filter((day) => kindOf(day) === 'shoot_day')
+  const fill = new Map<string, GearLine[]>()
+  let added = 0
+  let keptDays = 0
+  let missingDays = 0
+
+  quoteDays.forEach((quoteDay, index) => {
+    const lines = (quoteDay.gear ?? []).filter((line) => line.itemId && line.qty > 0)
+    if (lines.length === 0) return
+    const target = shootDays[index]
+    if (!target) {
+      missingDays += 1
+      return
+    }
+    if (target.lines.length > 0) {
+      keptDays += 1
+      return
+    }
+    const merged = new Map<string, number>()
+    lines.forEach((line) => merged.set(line.itemId, (merged.get(line.itemId) ?? 0) + Math.floor(line.qty)))
+    fill.set(target.id, [...merged].map(([itemId, qty]) => ({ itemId, qty })))
+    added += merged.size
+  })
+
+  return {
+    days: days.map((day) => (fill.has(day.id) ? { ...day, lines: fill.get(day.id)! } : day)),
+    added,
+    keptDays,
+    missingDays,
+  }
+}
+
+// ── Zestawy (G6) ─────────────────────────────────────────────────────────────
+
+/**
+ * Zestaw dochodzi do dnia Realizacji: brakujące pozycje dostają sztuki z
+ * zestawu (nie więcej, niż mam), obecne zostają bez zmian. Wycofany sprzęt i
+ * pozycje usunięte z katalogu są pomijane.
+ */
+export function applyKitToGearDay(
+  days: GearDay[],
+  dayId: string,
+  kit: { itemId: string; qty: number }[],
+  catalog: Pick<EquipmentItem, 'id' | 'quantity' | 'retiredAt'>[]
+): GearDay[] {
+  const byId = new Map(catalog.map((item) => [item.id, item]))
+  return days.map((day) => {
+    if (day.id !== dayId) return day
+    let next = day
+    kit.forEach((entry) => {
+      const item = byId.get(entry.itemId)
+      if (!item || item.retiredAt || next.lines.some((l) => l.itemId === entry.itemId)) return
+      const owned = item.quantity && item.quantity > 0 ? item.quantity : 1
+      next = withLine(next, entry.itemId, Math.min(Math.max(1, entry.qty), owned))
+    })
+    return next
+  })
 }

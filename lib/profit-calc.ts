@@ -19,6 +19,7 @@ import type {
   ProfitSectionKey,
   ProfitLineOverride,
   ProfitCustomItem,
+  QuoteExternalRental,
 } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
@@ -86,6 +87,19 @@ function getFormatBasePrice(post: PricingConfigShape['postprodukcja'], formatKey
   const firstKey = Object.keys(post).find(k => k.startsWith('Format: '))
   const fallback = firstKey != null ? post[firstKey] : undefined
   return typeof fallback === 'number' ? fallback : 0
+}
+
+/** Klucz pozycji kosztowej sprzętu z wypożyczalni wpisanego w dniu wyceny (G5). */
+export function rentalLineKey(dayId: string, rentalId: string): string {
+  return `pro:${dayId}:rental:${rentalId}`
+}
+
+/**
+ * Czy pozycja planu to sprzęt dorentalowany: ręczny „Rental sprzętu" albo
+ * wypożyczalnia wpisana w dniu. Tę kwotę płacę dalej — nie zarabia mój sprzęt.
+ */
+export function isRentalCostKey(key: string): boolean {
+  return key === 'pro:rentalSprzetu' || /^pro:[^:]+:rental:/.test(key)
 }
 
 /**
@@ -195,6 +209,21 @@ export function buildDerivedCostLines(
       // Sprzęt (kamery, obiektywy, stabilizacja, podgląd, światło, dron) NIE jest
       // rozbijany na osobne koszty — zastępuje go jedna ręczna pozycja
       // "Rental sprzętu" (poniżej), żeby nie tworzyć ściany tekstu.
+      // Mój sprzęt z katalogu (G5) też nie jest kosztem. Kosztem jest za to
+      // sprzęt z wypożyczalni wpisany w dniu: ile klient płaci, tyle płacę ja.
+      safeArray<QuoteExternalRental>(day.externalRentals).forEach((rental) => {
+        const amount = safeNum(rental.amount, 0, 0)
+        if (amount <= 0) return
+        push({
+          key: rentalLineKey(day.id, rental.id),
+          section: 'produkcja',
+          label: rental.label?.trim() || 'Sprzęt z wypożyczalni',
+          detail,
+          unitLabel: 'kpl.',
+          defaultQuantity: 1,
+          defaultUnitCost: amount,
+        })
+      })
     })
   }
 
