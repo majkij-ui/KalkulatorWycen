@@ -34,7 +34,9 @@ import {
   type PeriodKind,
   type PeriodSummary,
 } from '@/lib/finance-calc'
-import { countsTowardRevenue, toYear, type Project } from '@/lib/project-types'
+import { countsTowardRevenue, toDateKey, toYear, type Project } from '@/lib/project-types'
+import { useEvents } from '@/lib/events-context'
+import { paymentSplit, paymentState, type PaymentEvent, type PaymentSplit } from '@/lib/payments'
 import { plural } from '@/lib/pl-plural'
 import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
 import { Button } from '@/components/ui/button'
@@ -215,7 +217,7 @@ function BackfillBanner() {
 
 // ── Kafle KPI ────────────────────────────────────────────────────────────────
 
-function KpiTiles({ summary }: { summary: PeriodSummary }) {
+function KpiTiles({ summary, split }: { summary: PeriodSummary; split: PaymentSplit }) {
   const negative = summary.netResult < 0
   const tone =
     summary.netResult === 0
@@ -231,6 +233,15 @@ function KpiTiles({ summary }: { summary: PeriodSummary }) {
         <div className="mt-1 text-xs text-zinc-500">
           {summary.projectCount} {plural(summary.projectCount, 'projekt', 'projekty', 'projektów')}
         </div>
+        {/* Odhaczenie „Zapłacone" na liście projektów — ta sama reguła. */}
+        {summary.projectCount > 0 && (
+          <div className="mt-0.5 text-xs tabular-nums">
+            <span className="text-emerald-400/80">wpłynęło {pln(split.paid.revenue)}</span>
+            {split.awaiting.count > 0 && (
+              <span className="text-amber-300/80"> · czeka {pln(split.awaiting.revenue)}</span>
+            )}
+          </div>
+        )}
       </div>
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Zysk z projektów</div>
@@ -243,7 +254,8 @@ function KpiTiles({ summary }: { summary: PeriodSummary }) {
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Koszty stałe</div>
         <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(summary.fixedCosts.total)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          ZUS {pln(summary.fixedCosts.zus)} · mark. {pln(summary.fixedCosts.marketing)}
+          ZUS {pln(summary.fixedCosts.zus)} · mark. {pln(summary.fixedCosts.marketing)} · inne{' '}
+          {pln(summary.fixedCosts.other)}
         </div>
       </div>
       <div className={`rounded-xl border p-4 ${tone.box}`}>
@@ -377,7 +389,16 @@ function TrendChart({ trend, period }: { trend: PeriodSummary[]; period: Period 
 
 // ── Projekty okresu ──────────────────────────────────────────────────────────
 
-function ProjectRow({ project, onOpen }: { project: Project; onOpen: (id: string) => void }) {
+function ProjectRow({
+  project,
+  onOpen,
+  paid,
+}: {
+  project: Project
+  onOpen: (id: string) => void
+  /** Tylko dla projektów, które się liczą; `undefined` = nie dotyczy (wycena). */
+  paid?: boolean
+}) {
   // Jak na liście projektów: pełny kolor i pogrubienie tylko dla kwot, które
   // się liczą do wyniku. Otwarta wycena jest szara.
   const counts = countsTowardRevenue(project.status)
@@ -390,6 +411,10 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: (id: string
       <span className="w-20 shrink-0 tabular-nums text-xs text-zinc-500">{formatDate(project.date)}</span>
       <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{project.name || 'Bez nazwy'}</span>
       <ProjectStatusBadge status={project.status} />
+      <span className="w-20 shrink-0 text-right text-[11px]">
+        {paid === true && <span className="text-emerald-400/80">zapłacone</span>}
+        {paid === false && <span className="text-amber-300/80">czeka</span>}
+      </span>
       {project.financials ? (
         <span className="w-44 shrink-0 text-right tabular-nums text-xs">
           <span className={counts ? 'text-zinc-300' : 'text-zinc-500'}>{pln(project.financials.sumaNetto)}</span>
@@ -412,11 +437,14 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen: (id: string
 
 function PeriodProjects({
   projects,
+  events,
   onOpenProject,
 }: {
   projects: Project[]
+  events: PaymentEvent[]
   onOpenProject: (id: string) => void
 }) {
+  const today = toDateKey(new Date())
   const realized = projects.filter((p) => countsTowardRevenue(p.status))
   const pipeline = projects.filter((p) => p.status === 'quote')
 
@@ -430,7 +458,7 @@ function PeriodProjects({
       ) : (
         <div className="flex flex-col">
           {realized.map((p) => (
-            <ProjectRow key={p.id} project={p} onOpen={onOpenProject} />
+            <ProjectRow key={p.id} project={p} onOpen={onOpenProject} paid={paymentState(events, p.id, today).paid} />
           ))}
         </div>
       )}
@@ -481,6 +509,11 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     () => monthlyTrend(projects, fixed.costs, period.year),
     [projects, fixed.costs, period.year]
   )
+  const { events } = useEvents()
+  const split = useMemo(
+    () => paymentSplit(projects.filter((p) => isInPeriod(p.date, period)), events, toDateKey(new Date())),
+    [projects, events, period]
+  )
   const periodProjects = useMemo(
     () => projects.filter((p) => isInPeriod(p.date, period)),
     [projects, period]
@@ -507,9 +540,9 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
         </div>
       ) : (
         <>
-          <KpiTiles summary={summary} />
+          <KpiTiles summary={summary} split={split} />
           <TrendChart trend={trend} period={period} />
-          <PeriodProjects projects={periodProjects} onOpenProject={onOpenProject} />
+          <PeriodProjects projects={periodProjects} events={events} onOpenProject={onOpenProject} />
           <FixedCostsPanel period={period} {...fixed} />
         </>
       )}

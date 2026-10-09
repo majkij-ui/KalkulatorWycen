@@ -368,7 +368,8 @@ export function PodgladPdfTab() {
 
   const [draftHydrationStatus, setDraftHydrationStatus] = useState<'loading' | 'ready'>('loading')
   const [isUsingDraft, setIsUsingDraft] = useState(false)
-  const [showDraftPrompt, setShowDraftPrompt] = useState(false)
+  // „Zostaw ceny z PDF" chowa ostrzeżenie do następnej zmiany cen w kalkulatorze.
+  const [dismissedPriceSignature, setDismissedPriceSignature] = useState<string | null>(null)
   const [previewResetKey, setPreviewResetKey] = useState(0)
 
   const [uwagiManualText, setUwagiManualText] = useState('')
@@ -531,8 +532,9 @@ export function PodgladPdfTab() {
       const parsed: unknown = JSON.parse(raw)
       const coerced = coerceLocalPdfDraft(parsed, localPdfState)
       setLocalPdfState(coerced)
+      // Szkic wraca po cichu. Pytamy tylko wtedy, gdy jego ceny naprawdę
+      // rozjechały się z kalkulatorem (ostrzeżenie niżej).
       setIsUsingDraft(true)
-      setShowDraftPrompt(true)
 
       // Ensure editor inputs (bound to global QuoteState) reflect the draft.
       updateField('clientName', coerced.clientName)
@@ -576,7 +578,6 @@ export function PodgladPdfTab() {
         setLocalPdfState(coerced)
         syncPdfDraftSnapshot(coerced)
         setIsUsingDraft(true)
-        setShowDraftPrompt(false)
         // Mark every row + opcjeDodatkowe as user-touched so the auto-rebuild
         // effect doesn't immediately overwrite the loaded values.
         PDF_ROW_KEYS.forEach((key) => {
@@ -631,6 +632,32 @@ export function PodgladPdfTab() {
     return ROWS.reduce((sum, r) => sum + safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0), 0)
   }, [localPdfState.rows])
 
+  // Ceny, które PDF miałby TERAZ z kalkulatora. Szkic (isUsingDraft) przestaje
+  // śledzić kalkulator, żeby nie nadpisać ręcznych tekstów — więc porównujemy
+  // wiersz po wierszu i ostrzegamy tylko, gdy ceny naprawdę się rozjechały.
+  const calculatorRows = useMemo(
+    () =>
+      buildInitialState({
+        lang: localPdfState.pdfLanguage,
+        currency: localPdfState.currency,
+        exchangeRate: localPdfState.exchangeRate,
+        terms,
+      }).rows,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [breakdown, totals?.sumaNetto, data, pricingConfig, marginMultiplier, terms, localPdfState.pdfLanguage, localPdfState.currency, localPdfState.exchangeRate]
+  )
+  const calculatorTotal = ROWS.reduce((sum, r) => sum + safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0), 0)
+  const priceSignature = ROWS.map((r) => Math.round(safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0))).join('|')
+  const pricesDiffer =
+    isUsingDraft &&
+    draftHydrationStatus === 'ready' &&
+    ROWS.some(
+      (r) =>
+        Math.round(safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0)) !==
+        Math.round(safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0))
+    )
+  const showStalePrices = pricesDiffer && dismissedPriceSignature !== priceSignature
+
   // Terms are always re-derived from the active language + current pdfTexts
   // templates — never read back from the stored draft snapshot. Otherwise a
   // PL-saved draft would render in PL even after toggling the PDF to English.
@@ -680,15 +707,10 @@ export function PodgladPdfTab() {
       return { ...prev, rows: nextRows }
     })
 
-    setShowDraftPrompt(false)
     setIsUsingDraft(true) // stay in draft so the sync effect doesn't rewrite preserved text
     setPreviewResetKey((k) => k + 1) // force the controlled price <input>s to repaint
   }
 
-  const handleContinueEditing = () => {
-    setShowDraftPrompt(false)
-    setIsUsingDraft(true)
-  }
 
   const handleClearEditor = () => {
     const init = buildInitialState({
@@ -707,7 +729,6 @@ export function PodgladPdfTab() {
     }
 
     setIsUsingDraft(false)
-    setShowDraftPrompt(false)
     setLocalPdfState(init)
   }
   clearEditorRef.current = handleClearEditor
@@ -923,21 +944,26 @@ export function PodgladPdfTab() {
         </div>
       </motion.div>
 
-      {showDraftPrompt && (
+      {showStalePrices && (
         <Alert
           variant="default"
-          className="border-white/10 bg-zinc-900/30 text-zinc-200 px-4 py-3 backdrop-blur-xl"
+          className="border-amber-500/20 bg-amber-500/5 text-zinc-200 px-4 py-3 backdrop-blur-xl"
         >
-          <AlertTitle className="text-zinc-100">Wykryto zapisaną wersję edytorską.</AlertTitle>
+          <AlertTitle className="text-amber-100">Ceny w PDF różnią się od kalkulatora</AlertTitle>
           <AlertDescription className="text-zinc-300">
-            Możesz zachować ręczne zmiany albo przywrócić aktualne przeliczenia z kalkulatora.
+            PDF: {formatCurrency(totalNetto)} netto, kalkulator: {formatCurrency(calculatorTotal)} netto. Aktualizacja
+            zmienia tylko ceny — opisy i teksty zostają.
           </AlertDescription>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button variant="outline" onClick={handleRestoreFromCalculator} className="w-full sm:w-auto">
-              Pobierz nowe dane z kalkulatora
+            <Button onClick={handleRestoreFromCalculator} className="w-full sm:w-auto">
+              Zaktualizuj ceny z kalkulatora
             </Button>
-            <Button onClick={handleContinueEditing} className="w-full sm:w-auto">
-              Kontynuuj bieżący PDF
+            <Button
+              variant="outline"
+              onClick={() => setDismissedPriceSignature(priceSignature)}
+              className="w-full sm:w-auto"
+            >
+              Zostaw ceny z PDF
             </Button>
           </div>
         </Alert>
@@ -1280,6 +1306,12 @@ export function PodgladPdfTab() {
               <FileDown className="size-5" />
               {isExportingPdf ? 'Generowanie…' : 'Pobierz PDF'}
             </Button>
+            {pricesDiffer && (
+              <Button variant="outline" onClick={handleRestoreFromCalculator} size="lg" className="w-full sm:w-auto gap-2">
+                <RefreshCcw className="size-4" />
+                Zaktualizuj ceny z kalkulatora
+              </Button>
+            )}
             <Button variant="outline" onClick={handleClearEditor} size="lg" className="w-full sm:w-auto">
               Wyczyść edytor
             </Button>

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { lastPaymentDay, paymentState, paymentsToAdd, type PaymentEvent } from './payments'
+import { lastPaymentDay, paymentSplit, paymentState, paymentsToAdd, type PaymentEvent } from './payments'
 
 const TODAY = '2026-10-09'
 let seq = 0
@@ -78,3 +78,22 @@ test('usunięte wpłaty i cudze projekty się nie liczą', () => {
   assert.equal(lastPaymentDay(events, 'p-2'), '2026-10-01')
   assert.equal(lastPaymentDay(events, 'p-1'), null)
 })
+
+test('Finanse: przychód realizacji dzieli się na zapłacony i czekający; wyceny się nie liczą', () => {
+  const fin = (n: number) => ({ sumaNetto: n, koszty: 0, podatek: 0, zysk: n, marzaPct: 100, computedAt: '' })
+  const projects = [
+    { id: 'p-paid', status: 'done' as const, financials: fin(10000) },
+    { id: 'p-wait', status: 'won' as const, financials: fin(4000) },
+    { id: 'p-nofin', status: 'done' as const, financials: null },
+    { id: 'p-quote', status: 'quote' as const, financials: fin(99999) },
+  ]
+  const events = [
+    ev('invoice_paid', '2026-09-01', { projectId: 'p-paid' }),
+    ev('invoice_paid', '2026-09-01', { projectId: 'p-quote' }),
+  ]
+  assert.deepEqual(paymentSplit(projects, events, TODAY), {
+    paid: { count: 1, revenue: 10000 },
+    awaiting: { count: 2, revenue: 4000 },
+  })
+})
+

@@ -13,6 +13,7 @@ import { dayKey } from './calendar-layout'
 import { eventData } from './event-kinds'
 import { isEventDate } from './event-types'
 import { threadStats, type ThreadEventInput } from './thread-stats'
+import { countsTowardRevenue, type Project } from './project-types'
 
 export type PaymentEvent = ThreadEventInput & {
   id: string
@@ -94,4 +95,33 @@ export function paymentAmount(event: Pick<PaymentEvent, 'kind' | 'data'>): numbe
 export function lastPaymentDay(events: PaymentEvent[], projectId: string): string | null {
   const days = activePayments(events, projectId).map((e) => dayKey(e.start)).sort()
   return days.at(-1) ?? null
+}
+
+// ── Finanse: ile wpłynęło, ile czeka ────────────────────────────────────────
+
+export interface PaymentSplit {
+  paid: { count: number; revenue: number }
+  awaiting: { count: number; revenue: number }
+}
+
+/**
+ * Przychód projektów, które się liczą (w realizacji + zrealizowane), podzielony
+ * na zapłacone i czekające na wpłatę — tą samą regułą co odhaczenie na liście.
+ * Projekt z dwiema fakturami, z których jedna czeka, liczy się w całości jako
+ * czekający: to sygnał „trzeba się upomnieć", a nie księgowość co do złotówki.
+ */
+export function paymentSplit(
+  projects: Pick<Project, 'id' | 'status' | 'financials'>[],
+  events: PaymentEvent[],
+  today: string
+): PaymentSplit {
+  const split: PaymentSplit = { paid: { count: 0, revenue: 0 }, awaiting: { count: 0, revenue: 0 } }
+  projects
+    .filter((p) => countsTowardRevenue(p.status))
+    .forEach((p) => {
+      const bucket = paymentState(events, p.id, today).paid ? split.paid : split.awaiting
+      bucket.count += 1
+      bucket.revenue += p.financials?.sumaNetto ?? 0
+    })
+  return split
 }
