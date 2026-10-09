@@ -181,7 +181,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
               <CampaignKpis summary={summary} />
               <div className="mb-4 grid gap-3 md:grid-cols-2">
                 <CampaignFunnel summary={summary} />
-                <CampaignTraffic summary={summary} />
+                <CampaignTraffic summary={summary} campaign={current} />
               </div>
               <CampaignMonths summary={summary} onSave={saveMonth} />
             </>

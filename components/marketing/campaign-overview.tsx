@@ -64,7 +64,13 @@ export function CampaignHeader({
             </span>
           )}
           {' · '}
-          budżet <span style={mono}>{pln(budgetNow)}</span>/dzień
+          {campaign.budgets.length === 0 ? (
+            <span className="text-amber-300/90">budżet dzienny do uzupełnienia</span>
+          ) : (
+            <>
+              budżet <span style={mono}>{pln(budgetNow)}</span>/dzień
+            </>
+          )}
           {campaign.budgets.length > 1 && (
             <span className="text-zinc-500"> ({campaign.budgets.length - 1} {plural(campaign.budgets.length - 1, 'zmiana', 'zmiany', 'zmian')})</span>
           )}
@@ -207,9 +213,12 @@ export function CampaignFunnel({ summary }: { summary: CampaignSummary }) {
 
 // ── Ruch i wnioski ───────────────────────────────────────────────────────────
 
-function insightsFor(summary: CampaignSummary): string[] {
+function insightsFor(summary: CampaignSummary, campaign: Campaign): string[] {
   const s = summary
   const out: string[] = []
+  if (campaign.budgets.length === 0) {
+    out.push('Wpisz budżet dzienny z panelu w ustawieniach kampanii — bez niego miesiące bez odczytu liczą się jako 0 zł.')
+  }
   if (s.estimatedMonths.length) {
     out.push(
       `Wydatki za ${s.estimatedMonths.map(monthShort).join(', ')} liczone z budżetu dziennego — wpisz kwoty z panelu w tabeli miesięcy.`
@@ -233,7 +242,7 @@ function insightsFor(summary: CampaignSummary): string[] {
   return out
 }
 
-export function CampaignTraffic({ summary }: { summary: CampaignSummary }) {
+export function CampaignTraffic({ summary, campaign }: { summary: CampaignSummary; campaign: Campaign }) {
   const s = summary
   const rows = [
     { label: 'Wyświetlenia', value: count(s.impressions) },
@@ -243,7 +252,7 @@ export function CampaignTraffic({ summary }: { summary: CampaignSummary }) {
     { label: 'Klik → realne zapytanie', value: pct(s.clickToLead, 1) },
     { label: 'Koszt zlecenia', value: pln(s.costPerWon) },
   ]
-  const insights = insightsFor(s)
+  const insights = insightsFor(s, campaign)
   return (
     <section className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
       <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">Ruch</h3>

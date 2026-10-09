@@ -58,7 +58,8 @@ export function CampaignForm({
   if (!name.trim()) problems.push('Nazwij kampanię.')
   if (!DATE.test(startDate)) problems.push('Podaj datę startu.')
   if (!ongoing && (!DATE.test(endDate) || endDate < startDate)) problems.push('Koniec nie może być przed startem.')
-  if (dailyValue === undefined) problems.push('Podaj budżet dzienny z panelu.')
+  // Pusty budżet = jeszcze nieznany (dozwolone); wpisany musi być liczbą.
+  if (daily.trim() && dailyValue === undefined) problems.push('Budżet dzienny musi być kwotą w zł.')
   if (steps.some((s) => !DATE.test(s.from) || parseAmount(s.daily) === undefined)) {
     problems.push('Uzupełnij datę i kwotę każdej zmiany budżetu.')
   }
@@ -69,7 +70,7 @@ export function CampaignForm({
       return
     }
     const budgets: BudgetStep[] = [
-      { from: startDate, daily: dailyValue ?? 0 },
+      ...(dailyValue !== undefined ? [{ from: startDate, daily: dailyValue }] : []),
       ...steps.map((s) => ({ from: s.from, daily: parseAmount(s.daily) ?? 0 })),
     ].sort((a, b) => a.from.localeCompare(b.from))
     const base = campaign ?? createCampaign({ name, startDate, dailyBudget: dailyValue ?? 0 })
@@ -169,7 +170,7 @@ export function CampaignForm({
           inputMode="decimal"
           value={daily}
           onChange={(e) => setDaily(e.target.value)}
-          placeholder="np. 75"
+          placeholder="np. 75 — puste, jeśli nie wiesz"
           className={inputClass}
         />
         {dailyValue !== undefined && dailyValue > 0 && (

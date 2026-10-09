@@ -402,6 +402,16 @@ Apr 9–Jul 7 Google Ads campaign, monthly spend/clicks/impressions split from t
 + the S-AI lead (phone, ~29.04, not in the sheet), and `leadSource: google_ads` on Morris & Lloyd,
 JHJ and S-AI.
 
+**Second import (2026-10-09, applied):** `imports/2026-10-09-google-ads-relaunch-jesien-2026.json`, the
+ongoing relaunch from 24.09.2026 (from `Nonoise_Kampania_Google_Ads_jesien_2026.xlsx` + panel screenshots).
+Panel reading for 1.09–7.10: 184 clicks, ~3,060 impressions, CPC 7.26 zł → 1,335.84 zł. September is
+776.90 zł from billing, October is the remainder up to 7.10 (558.94 zł). Clicks and impressions are split
+by spend share. Billing already showed 671.03 zł for October on 9.10; enter it together with the next
+click reading. Leads: Poznań university → "Uniwersytet Medyczny w Poznaniu", Tchibo → "Tchibo Event",
+S&A jewellery design and XL (no projects yet), 2 freelancer offers (fake), and `reply_sent` events for
+the university and Tchibo threads. The daily budget is unknown, so the campaign has `budgets: []`: the
+header asks for it, and months without a reading count as 0 zł (no estimate).
+
 **Known limits / next:**
 - "Quoted" counts only leads with a project; leads that got a quote outside the hub (most of the
   spring campaign) aren't in that step. Start projects for them if the funnel should show it.

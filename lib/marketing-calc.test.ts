@@ -231,6 +231,15 @@ test('trwająca kampania bez odczytu z panelu: wydatek szacowany z budżetu do d
   assert.equal(s.costPerRealLead, 640)
 })
 
+test('kampania bez znanego budżetu: miesiąc bez odczytu to 0 zł, nie szacunek', () => {
+  const c = campaign({ startDate: '2026-09-24', endDate: undefined, budgets: [] })
+  const s = summarizeCampaign(c, { costs: [cost('2026-09', 776.9, { clicks: 107, impressions: 1780 })], leads: [], projects: [], today: TODAY })
+  assert.equal(s.spend, 776.9, 'październik bez odczytu i bez budżetu nic nie dokłada')
+  assert.deepEqual(s.estimatedMonths, [])
+  assert.equal(s.budget, 0)
+  assert.equal(s.months.length, 2)
+})
+
 test('kampania aktywna w dniu: najnowsza pasująca', () => {
   const old = campaign()
   const current = campaign({ id: 'c2', startDate: '2026-10-01', endDate: undefined })
