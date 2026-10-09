@@ -148,7 +148,7 @@ test('skrócone wydarzenie, zmieniony typ albo projekt: dzień zostaje jako „z
   const { days, info } = resolveRealizationDays(project({ gearDays: stored }), events)
 
   assert.equal(info.get('third')!.link, 'event-changed')
-  assert.equal(days.find((d) => d.id === 'third')!.date, '2026-10-30', 'ostatnia znana data')
+  assert.equal(days.find((d) => d.id === 'third')!.date, '2026-10-30', 'trzeci dzień skróconego wydarzenia')
   assert.equal(info.get('post')!.link, 'event-changed')
   assert.equal(info.get('other')!.link, 'event-changed')
   assert.equal(days.filter((d) => d.eventId === 'ev1').length, 3, 'dwa żywe dni ev1 + skrócony')
@@ -275,4 +275,26 @@ test('starsza wersja: pola powiązania i usunięcia przechodzą przez schemat ni
   assert.deepEqual(parsed.gearDays![0], raw.gearDays[0])
   assert.equal(parsed.gearDays![1].eventDay, undefined, 'zły indeks dnia → brak, nie odrzucony dzień')
   assert.equal(parsed.gearDays![1].deletedAt, 'T1')
+})
+
+test('dzień poza wydarzeniem bierze datę z rekordu wydarzenia, nie z nieaktualnego zapisu', () => {
+  // Wydarzenie przesunięto o tydzień (zakładki nie otwierano), a potem skrócono do 1 dnia.
+  const stale = day('second', { date: '2026-10-29', eventId: 'ev1', eventDay: 1 })
+  const shortened = event('ev1', '2026-11-03')
+  const { days, info } = resolveRealizationDays(project({ gearDays: [stale] }), [shortened])
+  assert.equal(info.get('second')!.link, 'event-changed')
+  assert.equal(days.find((d) => d.id === 'second')!.date, '2026-11-04')
+
+  const deleted = { ...event('ev1', '2026-11-03', { end: '2026-11-04' }), deletedAt: 'T1' }
+  assert.equal(resolveRealizationDays(project({ gearDays: [stale] }), [deleted]).days[0].date, '2026-11-04')
+  assert.equal(
+    resolveRealizationDays(project({ gearDays: [stale] }), []).days[0].date,
+    '2026-10-29',
+    'bez rekordu wydarzenia — ostatnia zapisana data'
+  )
+  assert.deepEqual(
+    gearDaysWithCalendarDates(project({ gearDays: [stale] }), [deleted]).map((d) => d.date),
+    ['2026-11-04'],
+    'statystyki tak samo'
+  )
 })

@@ -177,7 +177,7 @@ function MissingGearBanner({
       {open && (
         <div className="border-t border-amber-500/10 px-4 pb-3 pt-2">
           <p className="mb-2 text-xs text-zinc-400">
-            Otwórz projekt i zaznacz sprzęt w jego zakładce Sprzęt. Kwota przy projekcie to zapłata klienta za
+            Otwórz projekt i zaznacz sprzęt w jego zakładce Realizacja. Kwota przy projekcie to zapłata klienta za
             sprzęt, która czeka na przypisanie. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
             wyceny.
           </p>

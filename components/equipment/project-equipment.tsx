@@ -1,9 +1,9 @@
 'use client'
 
 /**
- * Zakładka „Sprzęt" projektu: co pojechało na plan, dzień po dniu.
+ * Siatka „Sprzęt na planie" w zakładce Realizacja: co pojechało, dzień po dniu.
  *
- * Siatka: wiersze to sprzęt z katalogu, kolumny to dni zdjęciowe. Klik w
+ * Siatka: wiersze to sprzęt z katalogu, kolumny to dni realizacji. Klik w
  * komórkę zmienia jeden dzień, klik w nazwę wszystkie dni naraz (najczęstszy
  * przypadek: ten sam zestaw przez całe zdjęcia). Pozycje z kilkoma sztukami
  * przełączają się po kolei: komplet → o jedną mniej → … → brak.
@@ -11,31 +11,25 @@
  * Nic tu nie zmienia kwot wyceny ani finansów projektu (plan G, decyzja 1),
  * więc projektom z 2026 można dopisać sprzęt bez przebudowy wyceny.
  *
- * Zapis: lokalna kopia dni + zapis z krótkim opóźnieniem. Każdy zapis kopiuje
- * projekt z ostatniego renderu, więc bez lokalnej kopii szybkie klikanie
- * gubiłoby wcześniejsze zmiany.
+ * Komponent jest sterowany z zewnątrz (`ProjectRealization`): dni pochodzą z
+ * kalendarza (`realization-days.ts`), a zapis z opóźnieniem robi rodzic, bo te
+ * same dni niosą też ekipę i koszty. Data dnia z kalendarza zmienia się w
+ * kalendarzu — popover dnia dostaje ją od rodzica (`renderDayDate`).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import { Copy, Package, PackageOpen, Plus, Printer, Search, Trash2 } from 'lucide-react'
+import { Copy, Package, PackageOpen, Printer, Search, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
-import { useEvents } from '@/lib/events-context'
-import { useProjectHub } from '@/lib/project-hub-context'
 import {
-  addGearDay,
   buildPackingList,
   cycleGearQty,
   duplicateGearDay,
-  gearDayLabel,
-  projectShootDates,
-  quoteShootDayCount,
-  removeGearDay,
   setGearLine,
-  suggestGearDays,
   toggleGearItemAllDays,
   updateGearDay,
 } from '@/lib/gear-usage'
+import type { DayInfo, DaySuggestion } from '@/lib/realization-days'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
 import {
   countsTowardRevenue,
@@ -47,11 +41,10 @@ import {
   type Project,
 } from '@/lib/project-types'
 import { dayLabel, itemLabel, plural } from '@/lib/pl-plural'
+import { KindChip } from '@/components/calendar/calendar-bits'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-
-const SAVE_DELAY_MS = 250
 
 function pln(amount: number): string {
   return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
@@ -75,53 +68,42 @@ function normalize(text: string): string {
   return text.toLocaleLowerCase('pl').normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
 
-export function ProjectEquipment() {
-  const { activeProject } = useProjectHub()
-  if (!activeProject) return null
-  // Klucz = id projektu: przejście do innego projektu zaczyna od jego danych.
-  return <GearPlanner key={activeProject.id} project={activeProject} />
+/** Czy dzień da się usunąć z siatki; `confirm` = pytać drugi raz (co przepadnie). */
+export type DayRemoval = { ok: true; confirm: string | null } | { ok: false; reason: string }
+
+export interface GearGridProps {
+  project: Project
+  /** Dni realizacji w kolejności kolumn (`resolveRealizationDays`). */
+  days: GearDay[]
+  info: Map<string, DayInfo>
+  /** Skąd dni, gdy projekt nie ma ich zapisanych (`null` = zapisane). */
+  suggestion: DaySuggestion
+  /** Liczba dni z kalendarza (do opisu podpowiedzi). */
+  calendarDayCount: number
+  onCommit: (days: GearDay[]) => void
+  dayLabel: (day: GearDay, index: number) => string
+  /** Część popovera dnia z datą — w kalendarzu albo do dodania do niego. */
+  renderDayDate: (day: GearDay, close: () => void) => ReactNode
+  dayRemoval: (day: GearDay) => DayRemoval
+  onRemoveDay: (day: GearDay) => void
+  /** Przycisk „+ Dzień" (rodzic decyduje: z datą → kalendarz, bez daty → projekt). */
+  addDayButton: ReactNode
 }
 
-function GearPlanner({ project }: { project: Project }) {
+export function GearGrid({
+  project,
+  days,
+  info,
+  suggestion,
+  calendarDayCount,
+  onCommit: commit,
+  dayLabel: labelOf,
+  renderDayDate,
+  dayRemoval,
+  onRemoveDay,
+  addDayButton,
+}: GearGridProps) {
   const { items, isLoading } = useEquipment()
-  const { updateProject } = useProjectHub()
-  const { events } = useEvents()
-
-  // `null` = projekt nie ma jeszcze zapisanych dni; pokazujemy podpowiedź,
-  // która zapisze się dopiero przy pierwszej zmianie.
-  const [savedDays, setSavedDays] = useState<GearDay[] | null>(project.gearDays ?? null)
-  const suggested = useMemo(() => suggestGearDays(project, events), [project, events])
-  const days = savedDays ?? suggested
-
-  const saveRef = useRef(updateProject)
-  useEffect(() => {
-    saveRef.current = updateProject
-  }, [updateProject])
-  const pendingRef = useRef<GearDay[] | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const flush = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = null
-    const next = pendingRef.current
-    if (!next) return
-    pendingRef.current = null
-    // Stary kształt (`equipment`) czyścimy: od teraz liczą się tylko dni.
-    void saveRef.current(project.id, { gearDays: next, equipment: [] })
-  }, [project.id])
-
-  // Wyjście z zakładki albo projektu nie może zgubić ostatniej zmiany.
-  useEffect(() => flush, [flush])
-
-  const commit = useCallback(
-    (next: GearDay[]) => {
-      setSavedDays(next)
-      pendingRef.current = next
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(flush, SAVE_DELAY_MS)
-    },
-    [flush]
-  )
 
   const [query, setQuery] = useState('')
   const [onlyUsed, setOnlyUsed] = useState(false)
@@ -160,16 +142,14 @@ function GearPlanner({ project }: { project: Project }) {
   const qtyOf = (day: GearDay, itemId: string) => day.lines.find((l) => l.itemId === itemId)?.qty ?? 0
 
   // Skąd się wzięły podpowiedziane dni — żeby było wiadomo, czemu są 3, a nie 1.
-  const suggestionSource = useMemo(() => {
-    if (savedDays) return null
-    if (project.equipment.some((u) => u.days > 0)) return 'z wcześniej zaznaczonego sprzętu'
-    const dates = projectShootDates(project.id, events)
-    if (dates.length > 0) {
-      return `z kalendarza (${dates.length} ${plural(dates.length, 'dzień zdjęciowy', 'dni zdjęciowe', 'dni zdjęciowych')})`
-    }
-    if (quoteShootDayCount(project.quote) > 0) return 'z liczby dni w wycenie'
-    return null
-  }, [savedDays, project, events])
+  const suggestionSource =
+    suggestion === 'legacy'
+      ? 'z wcześniej zaznaczonego sprzętu'
+      : suggestion === 'calendar'
+        ? `z kalendarza (${calendarDayCount} ${plural(calendarDayCount, 'dzień', 'dni', 'dni')})`
+        : suggestion === 'quote'
+          ? 'z liczby dni w wycenie'
+          : null
 
   const packingDayExists = packingDay === 'all' || days.some((d) => d.id === packingDay)
   const packingDayId = packingDayExists && packingDay !== 'all' ? packingDay : undefined
@@ -178,7 +158,7 @@ function GearPlanner({ project }: { project: Project }) {
   const packingTitle =
     packingIndex === -1
       ? formatDate(project.date)
-      : `${gearDayLabel(days[packingIndex], packingIndex)}${days[packingIndex].date ? ` · ${formatDate(days[packingIndex].date)}` : ''}`
+      : `${labelOf(days[packingIndex], packingIndex)}${days[packingIndex].date ? ` · ${formatDate(days[packingIndex].date)}` : ''}`
 
   const printRef = useRef<HTMLDivElement>(null)
   // Ten sam mechanizm co wydruk oferty: react-to-print izoluje treść, więc nie
@@ -199,7 +179,7 @@ function GearPlanner({ project }: { project: Project }) {
   const gridColumns = `minmax(190px, 1fr) repeat(${days.length}, 64px) 84px`
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
+    <section aria-label="Sprzęt na planie">
       {/* Widok do druku — normalnie ukryty */}
       <div id="packing-list" ref={printRef} className="hidden">
         <h1 className="text-xl font-bold">Lista pakowania: {project.name}</h1>
@@ -291,15 +271,7 @@ function GearPlanner({ project }: { project: Project }) {
                 </button>
               ))}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => commit(addGearDay(days))}
-              className="h-8 gap-1.5 border-white/10 text-xs"
-            >
-              <Plus className="size-3.5" />
-              Dzień
-            </Button>
+            {addDayButton}
           </div>
 
           {suggestionSource && (
@@ -322,12 +294,14 @@ function GearPlanner({ project }: { project: Project }) {
                   <DayHeader
                     key={day.id}
                     day={day}
+                    info={info.get(day.id)}
+                    label={labelOf(day, index)}
                     index={index}
-                    canRemove={days.length > 1}
+                    removal={days.length > 1 ? dayRemoval(day) : { ok: false, reason: '' }}
+                    renderDate={(close) => renderDayDate(day, close)}
                     onRename={(label) => commit(updateGearDay(days, day.id, { label }))}
-                    onDate={(date) => commit(updateGearDay(days, day.id, { date }))}
                     onDuplicate={() => commit(duplicateGearDay(days, day.id))}
-                    onRemove={() => commit(removeGearDay(days, day.id))}
+                    onRemove={() => onRemoveDay(day)}
                   />
                 ))}
                 <div className="text-right text-[11px] text-zinc-500">Odpracował</div>
@@ -335,7 +309,7 @@ function GearPlanner({ project }: { project: Project }) {
 
               {days.length === 0 && (
                 <div className="px-3 pt-4 text-center text-sm text-zinc-500">
-                  Projekt nie ma dni zdjęciowych. Dodaj dzień przyciskiem „Dzień", żeby zaznaczać sprzęt.
+                  Projekt nie ma dni realizacji. Dodaj dzień przyciskiem „Dzień" albo dzień zdjęciowy w kalendarzu.
                 </div>
               )}
 
@@ -391,7 +365,7 @@ function GearPlanner({ project }: { project: Project }) {
                               <button
                                 type="button"
                                 aria-pressed={on}
-                                aria-label={`${item.name}, ${gearDayLabel(day, index)}: ${on ? `${qty} szt.` : 'nie jedzie'}`}
+                                aria-label={`${item.name}, ${labelOf(day, index)}: ${on ? `${qty} szt.` : 'nie jedzie'}`}
                                 title={owned > 1 ? 'Kliknij, żeby zmienić liczbę sztuk' : undefined}
                                 onClick={() => commit(setGearLine(days, day.id, item.id, cycleGearQty(qty, owned)))}
                                 className={`flex size-8 items-center justify-center rounded-lg border text-xs font-semibold tabular-nums transition-colors ${
@@ -457,7 +431,7 @@ function GearPlanner({ project }: { project: Project }) {
                   <option value="all">Cały projekt</option>
                   {days.map((day, index) => (
                     <option key={day.id} value={day.id}>
-                      {gearDayLabel(day, index)}
+                      {labelOf(day, index)}
                       {day.date ? ` · ${shortDate(day.date)}` : ''}
                     </option>
                   ))}
@@ -505,7 +479,7 @@ function GearPlanner({ project }: { project: Project }) {
           )}
         </section>
       ) : null}
-    </div>
+    </section>
   )
 }
 
@@ -556,26 +530,45 @@ function EarnedTile({ summary }: { summary: ReturnType<typeof summarizeProjectGe
   )
 }
 
+/** Krótki opis, czemu dzień nie jest w kalendarzu (podpis pod datą w nagłówku kolumny). */
+function linkHint(info: DayInfo | undefined): string | null {
+  switch (info?.link) {
+    case 'not-in-calendar':
+      return 'Tego dnia nie ma w kalendarzu'
+    case 'event-gone':
+      return 'Wydarzenie usunięto z kalendarza'
+    case 'event-changed':
+      return 'Wydarzenie w kalendarzu się zmieniło'
+    default:
+      return null
+  }
+}
+
 function DayHeader({
   day,
+  info,
+  label,
   index,
-  canRemove,
+  removal,
+  renderDate,
   onRename,
-  onDate,
   onDuplicate,
   onRemove,
 }: {
   day: GearDay
+  info: DayInfo | undefined
+  label: string
   index: number
-  canRemove: boolean
+  removal: DayRemoval
+  renderDate: (close: () => void) => ReactNode
   onRename: (label: string) => void
-  onDate: (date: string) => void
   onDuplicate: () => void
   onRemove: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
-  const label = gearDayLabel(day, index)
+  const hint = linkHint(info)
+  const close = () => setOpen(false)
 
   return (
     <Popover
@@ -590,9 +583,14 @@ function DayHeader({
           type="button"
           className="flex min-w-0 flex-col items-center rounded-md px-1 py-1 text-center transition-colors hover:bg-white/5"
           aria-label={`${label}: zmień nazwę, datę albo usuń`}
+          title={hint ?? undefined}
         >
+          {info?.kind === 'prep_day' && <KindChip kind="prep_day" />}
           <span className="w-full truncate text-xs font-semibold text-zinc-200">{label}</span>
-          <span className="text-[10px] tabular-nums text-zinc-500">{day.date ? shortDate(day.date) : 'bez daty'}</span>
+          <span className={`text-[10px] tabular-nums ${hint ? 'text-amber-300/80' : 'text-zinc-500'}`}>
+            {day.date ? shortDate(day.date) : 'bez daty'}
+            {hint && ' •'}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="center" className="w-64 border-white/10 bg-zinc-950 p-3 text-white">
@@ -601,20 +599,12 @@ function DayHeader({
             Nazwa dnia
             <Input
               value={day.label}
-              placeholder={`Dzień ${index + 1}`}
+              placeholder={info?.event?.title?.trim() || `Dzień ${index + 1}`}
               onChange={(e) => onRename(e.target.value)}
               className="mt-1 h-8 border-white/10 bg-black/40 text-sm"
             />
           </label>
-          <label className="text-[11px] text-zinc-500">
-            Data
-            <Input
-              type="date"
-              value={day.date}
-              onChange={(e) => onDate(e.target.value)}
-              className="mt-1 h-8 border-white/10 bg-black/40 text-sm [color-scheme:dark]"
-            />
-          </label>
+          {renderDate(close)}
           <div className="mt-1 flex gap-2">
             <Button
               variant="outline"
@@ -628,7 +618,7 @@ function DayHeader({
               <Copy className="size-3.5" />
               Powiel
             </Button>
-            {canRemove &&
+            {removal.ok &&
               (confirm ? (
                 <Button
                   variant="destructive"
@@ -646,7 +636,7 @@ function DayHeader({
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    if (day.lines.length > 0) {
+                    if (removal.confirm) {
                       setConfirm(true)
                       return
                     }
@@ -660,10 +650,9 @@ function DayHeader({
                 </Button>
               ))}
           </div>
-          {confirm && (
-            <p className="text-[11px] text-zinc-500">
-              W tym dniu jest {day.lines.length} {itemLabel(day.lines.length)}. Kliknij jeszcze raz, żeby usunąć.
-            </p>
+          {!removal.ok && removal.reason && <p className="text-[11px] text-zinc-500">{removal.reason}</p>}
+          {confirm && removal.ok && removal.confirm && (
+            <p className="text-[11px] text-zinc-500">{removal.confirm} Kliknij jeszcze raz, żeby usunąć.</p>
           )}
         </div>
       </PopoverContent>

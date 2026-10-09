@@ -86,6 +86,14 @@ export function eventSpanDays(event: Pick<TimelineEvent, 'start' | 'end'>): numb
   return Math.max(0, daysBetween(start, end)) + 1
 }
 
+/**
+ * Data N-tego dnia wydarzenia — także usuniętego albo skróconego (rekord
+ * wydarzenia zostaje w pliku). `null` = wydarzenie bez poprawnej daty.
+ */
+export function eventDayDate(event: Pick<TimelineEvent, 'start'>, eventDay = 0): string | null {
+  return isEventDate(event.start) ? addDays(event.start.slice(0, 10), eventDay) : null
+}
+
 /** Wydarzenia dni realizacji projektu (bez usuniętych i bez poprawnej daty). */
 export function projectRealizationEvents<E extends DayEvent>(projectId: string, events: E[]): E[] {
   return events.filter(
@@ -202,9 +210,13 @@ export function resolveRealizationDays<E extends DayEvent>(
       rest.push({ record, seq })
       return
     }
+    // Wydarzenie usunięte, skrócone albo zmienione: dopóki jego rekord jest w
+    // pliku, data dnia liczy się z niego (zapisana data mogła się zestarzeć,
+    // jeśli wydarzenie przesunięto, a zakładki potem nie otwierano).
     const event = eventById.get(record.eventId) ?? null
     const gone = !event || !!event.deletedAt
-    entries.push(unlinked(record, seq, gone ? 'event-gone' : 'event-changed', event))
+    const date = event ? eventDayDate(event, record.eventDay ?? 0) : null
+    entries.push(unlinked(date ? { ...record, date } : record, seq, gone ? 'event-gone' : 'event-changed', event))
   })
 
   // 2. Dni z datą, ale bez (ważnego) powiązania: wolne wydarzenie tego dnia.
@@ -301,19 +313,19 @@ export function linkDayToEvent(days: GearDay[], dayId: string, event: Pick<Timel
 
 /**
  * Dni sprzętu projektu z datami z kalendarza — dla statystyk (pierwsze i
- * ostatnie użycie, tempo). Dzień bez żywego wydarzenia ma swoją ostatnią
- * znaną datę, tak jak dotąd.
+ * ostatnie użycie, tempo). `events` = wszystkie wydarzenia, także usunięte:
+ * data idzie za rekordem wydarzenia tak samo jak w zakładce. Dzień bez
+ * wydarzenia ma swoją ostatnią znaną datę, tak jak dotąd.
  */
 export function gearDaysWithCalendarDates<E extends DayEvent>(
   project: Pick<Project, 'id' | 'gearDays' | 'equipment'>,
   events: E[]
 ): GearDay[] {
-  const slots = new Map(
-    slotsOf(projectRealizationEvents(project.id, events)).map((s) => [slotKey(s.event.id, s.eventDay), s])
-  )
+  const byId = new Map(events.map((e) => [e.id, e]))
   return projectGearDays(project).map((day) => {
-    const slot = day.eventId ? slots.get(slotKey(day.eventId, day.eventDay ?? 0)) : undefined
-    return slot ? { ...day, date: slot.date } : day
+    const event = day.eventId ? byId.get(day.eventId) : undefined
+    const date = event ? eventDayDate(event, day.eventDay ?? 0) : null
+    return date ? { ...day, date } : day
   })
 }
 

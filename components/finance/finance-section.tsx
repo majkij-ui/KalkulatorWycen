@@ -202,7 +202,7 @@ function BackfillBanner() {
             </p>
             <p className="mt-0.5 text-xs text-sky-200/70">
               Zwykle to przeniesione wyceny. Policzymy je z ich własnego, zapisanego cennika —
-              tak jak w zakładce Profit. Już policzone projekty zostają nietknięte.
+              tak jak plan w zakładce Realizacja. Już policzone projekty zostają nietknięte.
             </p>
           </div>
           <Button onClick={run} disabled={busy} className="shrink-0 gap-2">

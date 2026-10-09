@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, Clapperboard, Scissors, PlusCircle, PiggyBank, FileDown } from 'lucide-react'
+import { ClipboardList, Clapperboard, Scissors, PlusCircle, FileDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StickyHeader } from '@/components/sticky-header'
 import { CalculatingOverlay } from '@/components/calculating-overlay'
@@ -10,17 +10,14 @@ import { PreprodukcjaTab } from '@/components/tabs/preprodukcja'
 import { ProdukcjaTab } from '@/components/tabs/produkcja'
 import { PostprodukcjaTab } from '@/components/tabs/postprodukcja'
 import { DodatkoweTab } from '@/components/tabs/dodatkowe'
-import { ProfitTab } from '@/components/tabs/profit'
 import { PodgladPdfTab } from '@/components/tabs/podglad-pdf'
 import { useQuote } from '@/lib/quote-context'
-import { resolveProfitSections, computeProfitSummary } from '@/lib/profit-calc'
 
 const tabs = [
   { value: 'preprodukcja', label: 'Preprodukcja', icon: ClipboardList },
   { value: 'produkcja', label: 'Produkcja', icon: Clapperboard },
   { value: 'postprodukcja', label: 'Postprodukcja', icon: Scissors },
   { value: 'dodatkowe', label: 'Dodatkowe', icon: PlusCircle },
-  { value: 'profit', label: 'Profit', icon: PiggyBank },
   { value: 'podglad', label: 'Podglad i PDF', icon: FileDown },
 ]
 
@@ -34,20 +31,19 @@ const CATEGORY_TO_TAB: Record<string, string> = {
 /**
  * Widok kalkulatora bez własnego opakowania strony — tło i poświatę dostarcza
  * `AppShell`, dzięki czemu ten sam komponent renderuje się wewnątrz projektu.
+ *
+ * Zakładka Profit przeszła do zakładki projektu „Realizacja" jako plan (T5a);
+ * jej dane dalej żyją w wycenie, więc „Zapisz" utrwala je jak dotąd.
  */
 export function QuoteCalculatorView() {
   const [activeTab, setActiveTab] = useState('preprodukcja')
-  const { isCalculating, breakdown, totals, data, pricingConfig, calculateTotalCrewDays } = useQuote()
+  const { isCalculating, breakdown } = useQuote()
 
   const phaseNetMap: Record<string, number> = {}
   for (const phase of breakdown) {
     const key = CATEGORY_TO_TAB[phase.category]
     if (key) phaseNetMap[key] = phase.phaseNetto
   }
-
-  const { totalCost } = resolveProfitSections(data, pricingConfig, calculateTotalCrewDays())
-  const profitTransferAmount = data.profitTransferAmount ?? totals.sumaNetto
-  const profitSummary = computeProfitSummary(profitTransferAmount, data.profitTaxRatePercent, totalCost)
 
   return (
     <>
@@ -69,22 +65,10 @@ export function QuoteCalculatorView() {
                     <Icon className="size-4 shrink-0" />
                     <span className="hidden sm:flex flex-col items-start leading-[1.15]">
                       <span>{tab.label}</span>
-                      {tab.value === 'profit' ? (
-                        profitTransferAmount > 0 && (
-                          <span
-                            className={`text-[10px] tabular-nums font-normal ${
-                              profitSummary.zysk >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'
-                            }`}
-                          >
-                            {Math.round(profitSummary.zysk).toLocaleString('pl-PL')} zł
-                          </span>
-                        )
-                      ) : (
-                        phaseNetto > 0 && (
-                          <span className="text-[10px] tabular-nums font-normal text-amber-400/70">
-                            {Math.round(phaseNetto).toLocaleString('pl-PL')} zł
-                          </span>
-                        )
+                      {phaseNetto > 0 && (
+                        <span className="text-[10px] tabular-nums font-normal text-amber-400/70">
+                          {Math.round(phaseNetto).toLocaleString('pl-PL')} zł
+                        </span>
                       )}
                     </span>
                     <span className="text-[10px] leading-tight sm:hidden">{tab.label.split(' ')[0]}</span>
@@ -117,9 +101,6 @@ export function QuoteCalculatorView() {
                 </TabsContent>
                 <TabsContent value="dodatkowe" className="mt-0">
                   <DodatkoweTab />
-                </TabsContent>
-                <TabsContent value="profit" className="mt-0">
-                  <ProfitTab />
                 </TabsContent>
                 <TabsContent value="podglad" className="mt-0">
                   <PodgladPdfTab />

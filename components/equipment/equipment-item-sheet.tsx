@@ -325,7 +325,7 @@ export function EquipmentItemSheet({
           </h3>
           {history.length === 0 ? (
             <p className="text-xs text-zinc-600">
-              Jeszcze w żadnym zrealizowanym projekcie. Zaznacza się go w zakładce Sprzęt projektu.
+              Jeszcze w żadnym zrealizowanym projekcie. Zaznacza się go w zakładce Realizacja projektu.
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
