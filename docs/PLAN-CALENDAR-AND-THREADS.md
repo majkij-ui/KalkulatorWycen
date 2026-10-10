@@ -632,12 +632,12 @@ projects grow or shrink, revenue brought in by that client.
 - **Only if needed later:** a small `clients.json` keyed by `clientKey` for facts that can't be
   derived (NIP and address for invoices, notes). That would revisit decision 3 in §7.
 
-### Open questions for M.J.
-1. Client price in the quote comes from the **role** and the person only changes my cost
-   (recommended), or each person has their own client price?
-2. Contractors who aren't on set (editor, colourist, motion designer): same database with a `post`
-   role group (recommended), or a separate list?
-3. Klienci and Ekipa as two new sidebar sections (9 items), or Ekipa and Sprzęt grouped as "Zasoby"?
+### Decided (M.J. 2026-10-10)
+1. **The client price comes from the role.** The person only changes my cost (plan line), never the
+   client price.
+2. **Contractors go in the same people list,** with roles in the `post` group (editor, colourist,
+   motion designer).
+3. **Two new sidebar sections, „Klienci" and „Ekipa".** No „Zasoby" grouping.
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
@@ -747,6 +747,12 @@ Confirmed 2026-10-08:
 
 6. **Gmail and AI stay in the chat** (route A). Claude writes to the app's local files through the
    bridge in §5a; no in-app Gmail login or API key. T8 is dropped unless that changes.
+
+Confirmed 2026-10-10 (T9 / T10, §6d):
+7. **Crew pricing:** the role sets the client price; the person sets my cost.
+8. **One people list** for crew on set and contractors off set (role groups ekipa / obsada / post).
+9. **Sidebar** gets „Klienci" and „Ekipa" as their own sections. Klienci stays derived (decision 3
+   holds).
 
 ## 8. Coordination with the phase-4 agent
 
