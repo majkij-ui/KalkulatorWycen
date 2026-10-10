@@ -475,19 +475,20 @@ pending, every `event_update` target exists).
 T5b lives in Realizacja, T6 in Finance. T9c waits until the new crew and gear pickers have been used on
 real quotes. T7 after T6.
 
-**Glue left between tracks (no single session owned these):**
-- **Role rates on the Ekipa screen follow the last opened quote.** Opening a project loads that quote's
-  own price list (`loadQuoteSnapshot` → `setPricingConfigState`), and `CrewProvider` resolves the
-  built-in roles from it. Inside a quote that is right (the quote prices from its own list, like the
-  old counters); on the Ekipa screen „z cennika" rates change with whichever project was opened last.
-  Fix: resolve built-ins from the default price list (`quote-gen-user-default-pricing`, falling back to
-  the current one) everywhere except the calculator.
-- **Project header → client page** (`goToClient(key)` in the shell; T10 note).
-- **Crew per client** on the client page, now that T9 exists (`crew-stats` filtered by the client's
-  projects).
-- **„+ Nowa osoba" in the quote's person select** (generalise T9a's `PersonPicker`; T9b note).
-- Dodatkowe's actor-count button still reads the old `aktor` counter of day 1, not obsada lines (T9b).
-- PDF descriptions are built once, so later crew changes don't rewrite them (as before T9b).
+**Glue between tracks — done 2026-10-10 (main session):**
+- ✅ **Price list for new quotes and for Ekipa.** Loading a quote swaps the calculator's price list for
+  the quote's own, and a blank quote didn't set one, so „Nowy projekt" (and opening a project without a
+  quote) inherited the last opened project's prices; Ekipa's built-in role rates followed the same list.
+  Now `blankQuoteSnapshot` carries the saved default („Zapisz stawki jako domyślne"; without one nothing
+  changes), and `CrewProvider` exposes `roles` (saved default: Ekipa, Realizacja, kits) and `quoteRoles`
+  (the open quote's list: calculator only, so new crew lines price like the old counters).
+- ✅ **Project header → client page** (button next to the client; `goToClient` in the shell).
+- ✅ **Crew per client:** „Ekipa przy zleceniach" on the client page (`crewOnProjects`).
+- ✅ **„+ Nowa osoba" in the quote's crew lines** (name + optional rate, saved with the line's role).
+- ✅ Dodatkowe's actor count reads crew lines with the Aktor role too (`dayActorCount`).
+- ✅ **Calendar remembers** month and selected day for the session, hidden layers for good
+  (`calendar-prefs.ts`).
+- Still open: PDF descriptions are built once, so later crew changes don't rewrite them (as before T9b).
 
 **Waiting for M.J.:**
 - **Skrzynka:** 42 proposals (35 from the pilot, 7 from T4b).
