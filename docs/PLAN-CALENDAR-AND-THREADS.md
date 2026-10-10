@@ -376,8 +376,11 @@ M.J.'s call.
 - Amounts are PLN netto; a quote in EUR keeps the amount in notes.
 - The group target applies to every proposal in the group — keep a contact update for a *different*
   project out of the thread (no `threadId`).
-- `readDir` on `$APPDATA/inbox` relies on `fs:default` (`read-app-specific-dirs-recursive`); check on the
-  production build.
+- ~~`readDir` on `$APPDATA/inbox` relies on `fs:default`~~ — it didn't work: the plugin's
+  `read-app-specific-dirs-recursive` lists its scope as a command name, so `read_dir` had no path scope
+  and the desktop Skrzynka stayed empty (the preview reads localStorage and never showed it). Fixed
+  2026-10-10 with `fs:allow-read-dir` scoped to `$APPDATA`; a read error now shows as a notice.
+  **Lesson:** anything that goes through Tauri APIs must be checked in the desktop build.
 - An installed build older than T4b drops `event_update` proposals as unreadable (the file stays and they
   appear after the update).
 - `event_update` cannot unlink, move between projects (unless `ifMissing: false`), change the day or the
@@ -488,8 +491,11 @@ real quotes. T7 after T6.
 
 **Waiting for M.J.:**
 - **Skrzynka:** 42 proposals (35 from the pilot, 7 from T4b).
-- **Funnel:** 19 spring leads have no project. Several got a PDF quote by mail; create lost projects for
-  them so the funnel's „wycena" step counts them? (§5d, lead links)
+- ~~**Funnel:** spring leads without a project~~ — done 2026-10-10: 7 lost projects (`p-ads2026-*`) for the
+  leads that got a PDF quote by mail (Slow Face, METAL-FACH, SME Banking, FSWO, CKS Ossa, PBO Śląsk / Stare
+  Babice, UM Ostrowiec), each with its `quote_sent` (date, PDF name; amounts are only in the PDFs) and the
+  9.07 follow-ups, leads linked. Spring funnel: 22 real leads → 9 quotes → 3 won. Leads that got only
+  questions or no reply stay without a project (they never reached a quote).
 - **Gear:** purchase prices, dates and rental rates (catalogue gear prices at 0 zł until then).
 
 ## 6b. T3 spec *(agreed with M.J. 2026-10-09)*
