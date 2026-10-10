@@ -36,7 +36,12 @@ interface EquipmentContextValue {
   /** Zestawy sprzętu (G6), alfabetycznie. */
   kits: GearKit[]
   /** Zapisuje nowy zestaw z pozycji dnia; pusta nazwa albo brak pozycji = nic. */
-  addKit: (name: string, lines: { itemId: string; qty: number }[]) => Promise<GearKit | null>
+  /** Zestaw z dnia: sprzęt i (T9b) ekipa; wystarczy jedno z dwojga. */
+  addKit: (
+    name: string,
+    lines: { itemId: string; qty: number }[],
+    crew?: { roleId: string; personId?: string; qty: number }[]
+  ) => Promise<GearKit | null>
   updateKit: (kit: GearKit) => Promise<void>
   removeKit: (id: string) => Promise<void>
 }
@@ -57,9 +62,9 @@ export function EquipmentProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const addKit = useCallback<EquipmentContextValue['addKit']>(async (name, lines) => {
-    const kit = createGearKit(name, lines)
-    if (!kit.name || kit.lines.length === 0) return null
+  const addKit = useCallback<EquipmentContextValue['addKit']>(async (name, lines, crew) => {
+    const kit = createGearKit(name, lines, crew)
+    if (!kit.name || (kit.lines.length === 0 && !kit.crew?.length)) return null
     setKits(await upsertGearKit(kit))
     return kit
   }, [])

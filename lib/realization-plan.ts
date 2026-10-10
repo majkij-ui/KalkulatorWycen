@@ -10,12 +10,12 @@
  * SAMYM przychodzie i ryczałcie co plan. Przychód z faktur policzy T6.
  */
 
-import { isRentalCostKey, resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
+import { crewLineKey, isRentalCostKey, resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
 import { computeQuoteTotals, computeTotalCrewDays, resolveSnapshot, type FinancialsSource } from './quote-financials'
 import { isBlankQuoteData } from './project-save'
 import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts } from './project-costs'
 import type { Project, ProjectCost, ProjectFinancials } from './project-types'
-import type { QuoteData } from './quote-types'
+import type { QuoteCrewLine, QuoteData } from './quote-types'
 import { safeArray, safeNum } from './safe-numbers'
 
 export type PlanSource = 'quote' | 'import' | 'none'
@@ -203,6 +203,10 @@ export interface PlannedCrewMember {
   quoteDay: number | null
   role: string
   unitCost: number
+  /** Osoba z bazy Ekipa, gdy wycena ją obsadziła (T9b); brak = miejsce do obsadzenia. */
+  personId?: string
+  /** Imię zamrożone w wycenie (razem z `personId`). */
+  person?: string
 }
 
 const CREW_LINE = /^pro:(.+):(rezOp|asystent|gafer|dzwiekowiec|mua|aktor|model|statysta)$/
@@ -210,7 +214,10 @@ const CREW_LINE = /^pro:(.+):(rezOp|asystent|gafer|dzwiekowiec|mua|aktor|model|s
 /**
  * Ekipa z planu (Profit): osoby, które kosztują — pozycja odznaczona jako
  * „nie mój koszt" (robię sam) nie trafia do ekipy. Szczegółowa wycena: role ×
- * liczba osób w każdym dniu wyceny; szybka: wielkość ekipy na każdy dzień.
+ * liczba osób w każdym dniu wyceny (stare liczniki i ekipa z bazy, T9b);
+ * szybka: wielkość ekipy na każdy dzień. Pozycja ekipy z bazy z osobą niesie
+ * tę osobę (pierwsza kopia, gdy plan podniósł liczbę); bez osoby — puste
+ * miejsce do obsadzenia w Realizacji.
  */
 export function plannedCrew(snapshot: FinancialsSource | null | undefined): PlannedCrewMember[] {
   const resolved = resolveSnapshot(snapshot)
@@ -226,8 +233,26 @@ export function plannedCrew(snapshot: FinancialsSource | null | undefined): Plan
     return Array.from({ length: crew }, () => ({ quoteDay: null, role: 'Operator', unitCost: line.unitCost }))
   }
 
-  const dayIndex = new Map(safeArray<{ id: string }>(data.detailedShootingDays).map((d, i) => [d.id, i]))
+  const quoteDays = safeArray<{ id: string; crew?: QuoteCrewLine[] }>(data.detailedShootingDays)
+  const dayIndex = new Map(quoteDays.map((d, i) => [d.id, i]))
+  const crewByKey = new Map<string, { index: number; line: QuoteCrewLine }>()
+  quoteDays.forEach((day, index) =>
+    safeArray<QuoteCrewLine>(day.crew).forEach((line) => crewByKey.set(crewLineKey(day.id, line.id), { index, line }))
+  )
   return lines.flatMap((line) => {
+    const fromDatabase = crewByKey.get(line.key)
+    if (fromDatabase) {
+      const { index, line: crewLine } = fromDatabase
+      const count = Math.max(0, Math.round(line.quantity))
+      return Array.from({ length: count }, (_, copy) => {
+        const member: PlannedCrewMember = { quoteDay: index, role: crewLine.roleName, unitCost: line.unitCost }
+        if (copy === 0 && crewLine.personId) {
+          member.personId = crewLine.personId
+          member.person = crewLine.personName ?? ''
+        }
+        return member
+      })
+    }
     const match = line.key.match(CREW_LINE)
     const index = match ? dayIndex.get(match[1]) : undefined
     if (index === undefined) return []
@@ -248,7 +273,8 @@ export interface CrewFromPlanResult {
 /**
  * „Przepisz ekipę z planu": dzień N wyceny → N-ty dzień zdjęciowy Realizacji
  * (chronologicznie). Dzień, który ma już ekipę, zostaje nietknięty — nic się
- * nie dubluje. Osoba zostaje pusta (wycena zna role, nie nazwiska).
+ * nie dubluje. Osoba z wyceny (T9b) przechodzi z `personId` i imieniem;
+ * miejsca do obsadzenia i stare liczniki zostają z pustą osobą.
  */
 export function crewCostsFromPlan(
   plan: PlannedCrewMember[],
@@ -269,7 +295,16 @@ export function crewCostsFromPlan(
     }
     added.push(
       makeCost(
-        { category: 'ekipa', person: '', role: member.role, quantity: 1, unitCost: member.unitCost, dayId: day.id, source: 'plan' },
+        {
+          category: 'ekipa',
+          person: member.person ?? '',
+          ...(member.personId ? { personId: member.personId } : {}),
+          role: member.role,
+          quantity: 1,
+          unitCost: member.unitCost,
+          dayId: day.id,
+          source: 'plan',
+        },
         now
       )
     )

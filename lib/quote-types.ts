@@ -67,6 +67,32 @@ export interface QuoteGearLine {
 }
 
 /**
+ * Pozycja ekipy w dniu wyceny (T9b, plan §6d): rola z bazy Ekipa, opcjonalnie
+ * konkretna osoba. Nazwy i stawki ZAMROŻONE w chwili dodania, jak w
+ * `QuoteGearLine`. Bez `personId` to miejsce do obsadzenia („operator").
+ *
+ * Decyzja 7: cenę dla klienta wyznacza ROLA (`clientRate`, potem marża z
+ * nagłówka); osoba zmienia tylko mój koszt (`costRate`: stawka osoby → koszt
+ * roli → stawka dla klienta).
+ */
+export interface QuoteCrewLine {
+  id: string
+  /** Id roli z bazy Ekipa (`crew-roles.json`; wbudowane mają klucze `CrewRoleKey`). */
+  roleId: string
+  roleName: string
+  /** Grupa roli w chwili dodania (`ekipa` / `obsada` / `post`) — wiersz PDF i podział kwot. */
+  group?: string
+  personId?: string
+  personName?: string
+  /** Stawka dla klienta za osobę-dzień (PLN netto, przed marżą). */
+  clientRate: number
+  /** Mój koszt za osobę-dzień (PLN netto) — pozycja planu. */
+  costRate: number
+  /** Ile osób w tej roli tego dnia. */
+  qty: number
+}
+
+/**
  * Sprzęt dorentalowany na ten dzień z wypożyczalni: kwota dla klienta = mój
  * koszt (pozycja kosztowa w planie, kategoria „wynajem").
  */
@@ -104,6 +130,11 @@ export interface ShootingDay {
   gear?: QuoteGearLine[]
   /** Sprzęt z wypożyczalni (G5): cena dla klienta = koszt, bez marży i rabatu. */
   externalRentals?: QuoteExternalRental[]
+  /**
+   * Ekipa z bazy (T9b): role i ludzie. Cena = stawka roli × osoby × marża;
+   * stare liczniki (`rezOp` … `statysta`) liczą się obok, jak dotąd.
+   */
+  crew?: QuoteCrewLine[]
 }
 
 function createShootingDayId(): string {
@@ -142,7 +173,12 @@ export function cloneShootingDay(source: ShootingDay): ShootingDay {
     ...(source.externalRentals
       ? { externalRentals: source.externalRentals.map((r) => ({ ...r, id: createExternalRentalId() })) }
       : {}),
+    ...(source.crew ? { crew: source.crew.map((line) => ({ ...line, id: createQuoteCrewLineId() })) } : {}),
   }
+}
+
+export function createQuoteCrewLineId(): string {
+  return `qc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 export function createExternalRentalId(): string {
@@ -279,6 +315,8 @@ export interface QuoteData {
   gearDiscountPercent: number
   /** Czy opis sprzętu w PDF pokazuje wartość rynkową i rabat. */
   gearValueInPdf: boolean
+  /** T9b: czy opisy ekipy i obsady w PDF podają imiona (domyślnie tylko role). */
+  crewPeopleInPdf: boolean
 }
 
 export const defaultQuoteData: QuoteData = {
@@ -332,6 +370,7 @@ export const defaultQuoteData: QuoteData = {
   profitFuelConsumption: 8,
   gearDiscountPercent: 0,
   gearValueInPdf: true,
+  crewPeopleInPdf: false,
 }
 
 /** User-saved quote template (persisted in localStorage) */

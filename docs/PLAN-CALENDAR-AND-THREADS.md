@@ -423,7 +423,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
 | **T9a Ekipa: people + Realizacja** ✅ (2026-10-10, §6d) | `crew-roles.json` (built-in roles from the price list until edited), `crew.json` (people, contact, rate), screen „Ekipa" with derived stats (days together, projects, paid, average rate, history, ranking), person picker with „+ Nowa osoba" in Realizacja crew rows (`ProjectCost.personId`), "Dodaj do bazy" for names already used. Pure: `crew-types.ts`, `crew-stats.ts`; store `crew-store.ts`, context `crew-context.tsx`. 21 new tests; 20/20 mutations caught; flows verified in the browser preview. | T5a |
-| **T9b Ekipa in the quote** (idea, §6d) | Per-day crew lines: role placeholder or person, **+** new role, rates frozen; old counters under "Stare pozycje ekipy"; plan cost from person or role; "Przepisz ekipę z planu" carries the person; crew kits. | T9a, G5 |
+| **T9b Ekipa in the quote** ✅ (2026-10-10, §6d "T9b as built") | Per-day crew lines (`ShootingDay.crew`): role placeholder or person from the T9a database, **+ Nowa rola**, names and rates frozen; client price from the role × header margin, person changes only my cost; old counters folded under „Stare pozycje ekipy" and priced exactly as before (golden tests on old-app quotes); one plan cost line per crew line; "Przepisz ekipę z planu" carries the person; crew in G6 kits (quote and Realizacja); PDF Ekipa/Obsada rows list roles, names only on request. Pure: `quote-crew.ts`. 15 new tests + 4 golden; 14/14 mutations caught; flows verified on the production build. | T9a, G5 |
 | **T9c Retire the old rows** (idea, §6d) | New quotes stop offering fixed crew counters and old gear fields; quick-mode packages become kits. Old quotes unchanged. | T9b, use in practice |
 | **T10 Klienci** (idea, §6d) | Sidebar list + page per client, all derived: revenue (total, per year, share), return rhythm, size trend, win rate, first lead source, merge spellings. Days to payment after T6, crew after T9. | T3 |
 
@@ -681,13 +681,66 @@ database.
   the active role names. Above the day cards, names in this project that aren't in the database can be
   added with one click; that also links this project's rows.
 
-**Not in T9a (left for T9b):** the calculator, `quote-calc`, `profit-calc` and
+**Not in T9a (left for T9b, done there — see "T9b as built" below):** the calculator, `quote-calc`, `profit-calc` and
 `plannedCrew` / `crewCostsFromPlan` are untouched — the quote still prices crew from the price list and
 "Przepisz ekipę z planu" still copies roles with an empty person.
 
 **Known limits:** a person soft-deleted from Ekipa no longer gets stats, and rows linked to them keep
 the frozen name (they show up again under "spoza bazy"). Two people with the same name: name matching
 picks the oldest record; link rows explicitly to tell them apart.
+
+### T9b as built *(2026-10-10)*
+
+**Data (all additive, on top of T9a's role and people schemas, used as they are):**
+- `ShootingDay.crew?: QuoteCrewLine[]` = `{ id, roleId, roleName, group?, personId?, personName?,
+  clientRate, costRate, qty }`. Names, group and rates are frozen when the line is added (or the
+  person changes). **Addition to the spec: `group`**, frozen from the role, decides the PDF row and
+  the price split: `obsada` → Obsada, everything else (incl. `post`) → Ekipa.
+- `QuoteData.crewPeopleInPdf` (default false). `GearKit.crew?: { roleId, personId?, qty }[]` (G6 kits;
+  kits without crew read as before, a kit may now be crew-only).
+
+**Pricing (`lib/quote-crew.ts`, `quote-calc.ts`):** client price = role `clientRate` × qty × header
+margin, inside the day line and `ekipaNetto` / `castNetto`. My cost (`costRate`) = person's rate →
+role's `costRate` → role's `clientRate`; picking or removing a person changes only the cost (decision
+7) and a staffed line is one person (qty 1). **Addition:** crew lines count as person-days for the
+default catering and lodging, like the counters. Quick mode ignores detailed days, crew included.
+
+**Old counters** (`rezOp` … `statysta`, `crewNames`) are folded under „Stare pozycje ekipy", open
+automatically on days that use them, and price exactly as before. `lib/quote-crew-legacy.test.ts`
+pins sumaNetto, costs, profit, the PDF split, person-days, plan lines and `plannedCrew` to values
+taken from the code before T9b, for an old-app v2 snapshot (its price list, margin, renamed roles,
+plan overrides), a very old snapshot with missing fields and a partial price list, a quick quote and a
+hub quote with G5 gear.
+
+**Produkcja** (detailed mode), per day „Ekipa i obsada": role dropdown grouped by role group, with
+prices and „＋ Nowa rola…" (name, group, client rate, optional cost; saved through T9a `addRole`);
+per line a person select (people with that role first, then the rest, „— do obsadzenia —"; a person
+who left the list stays shown with the frozen name), people count for placeholders, price with
+margin, my cost, remove. Above the days: switch „W PDF podaj imiona ekipy" and „N pozycji ekipy ma
+inne stawki niż baza · zaktualizuj" (roles update client price and cost, people only the cost; a
+person deleted from the database keeps the frozen cost).
+
+**Plan (former Profit):** one cost line per crew line, key `pro:<dayId>:crew:<lineId>`, label
+„Rola · Osoba", unit cost = `costRate`, category `ekipa`. `plannedCrew` reads these lines after plan
+overrides („nie mój koszt" skipped, unit cost and quantity overrides respected); the person goes with
+the first copy. `crewCostsFromPlan` writes `personId` and the name; placeholders and old counters stay
+empty to be filled in Realizacja.
+
+**Kits:** a quote day („Zapisz jako zestaw") or a Realizacja day (day menu; crew rows whose role text
+matches a role in the database) saves its crew too. Applying a kit adds missing role/person pairs to
+a quote day at today's database rates, and crew cost rows at my cost to a Realizacja day (a person
+already in that day is not doubled; retired roles are skipped; retired or deleted people become
+placeholders). Sprzęt › Zestawy lists a kit's crew.
+
+**PDF:** Ekipa and Obsada descriptions add „Rola: N os.-dni." per role; names only with the switch.
+
+**Left / follow-ups:**
+- Quick mode unchanged (T9c), and new quotes still offer the old counters behind the fold (T9c).
+- The quote's person select has no inline „+ Nowa osoba" (people are added on the Ekipa screen or in
+  Realizacja); T9a's `PersonPicker` is built around a cost row and could be generalised.
+- Dodatkowe's actor-count button still copies the old `aktor` counter of day 1, not obsada lines.
+- PDF descriptions are generated when the PDF state is first built (as before); changing crew or the
+  names switch afterwards does not rewrite an existing description.
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
