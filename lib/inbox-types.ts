@@ -9,17 +9,25 @@
  * odrzucona) aplikacja zapamiętuje we własnym pliku `inbox-decisions.json`.
  * Pliki w `inbox/` zostają nietknięte — to ślad, co i kiedy zaproponowano.
  *
- * Trzy rodzaje propozycji (`type`):
+ * Cztery rodzaje propozycji (`type`):
  *  - `event`          — nowe wydarzenie w wątku (lead, odpowiedź, wycena
  *                       wysłana, akceptacja, faktura wysłana/opłacona…),
+ *  - `event_update`   — zmiana ISTNIEJĄCEGO wydarzenia: przypięcie do projektu,
+ *                       godzina w `start`, uzupełnienie pól `data`. Nigdy typ,
+ *                       data, status ani usunięcie,
  *  - `project_update` — uzupełnienie projektu (kontakt, pochodzenie, klient),
  *  - `project_new`    — nowy projekt (bez wyceny).
  *
  * `ref` to klucz deduplikacji: `gmail:<id wiadomości>`, a gdy jedna wiadomość
  * daje kilka faktów — z przyrostkiem (`gmail:<id>#contact`, `#reply`). Ten
- * sam `ref` ląduje w `source.ref` przyjętego wydarzenia, więc propozycja nie
+ * sam `ref` ląduje w `source.ref` przyjętego wydarzenia (przy `event_update` —
+ * w jego `updatedFrom`, bo `source` zostaje oryginalne), więc propozycja nie
  * wraca ani po akceptacji, ani po usunięciu wydarzenia (usunięcie jest
  * miękkie), ani po odrzuceniu (decyzja w `inbox-decisions.json`).
+ *
+ * Projekt, który dopiero powstanie z propozycji `project_new`: `newProject`
+ * (jej `id` w tym samym pliku) albo `newProjectRef` (jej `ref`, z dowolnego
+ * pliku — np. kolejny przegląd poczty dopina się do projektu z poprzedniego).
  *
  * Schematy celowo wyrozumiałe przy ODCZYCIE (passthrough, `.catch`), jak cała
  * reszta danych v3. Ścisła walidacja — w `inbox-validate.ts`, przy zapisie.
@@ -47,6 +55,11 @@ export const INBOX_FORMAT = 'nonoise-hub-inbox'
 export const INBOX_VERSION = 1
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/
+/** `HH:mm` — godzina dopisywana do daty wydarzenia. */
+export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** Pola wydarzenia, które `event_update` może zmienić. Typ, data i status celowo nie. */
+export const EVENT_UPDATE_FIELDS = ['linkProject', 'time', 'data'] as const
 
 /** Pola projektu, które propozycja może uzupełnić. Status celowo nie. */
 export const PROJECT_UPDATE_FIELDS = ['contact', 'leadSource', 'client'] as const
@@ -108,6 +121,8 @@ export const eventProposalSchema = z
     projectId: z.string().min(1).nullable().optional().catch(undefined),
     /** Id propozycji `project_new` z tego samego pliku. */
     newProject: optionalText,
+    /** `ref` propozycji `project_new` z dowolnego pliku skrzynki. */
+    newProjectRef: optionalText,
     event: proposedEventSchema,
   })
   .passthrough()
@@ -128,6 +143,7 @@ export const projectUpdateProposalSchema = z
     type: z.literal('project_update'),
     projectId: z.string().min(1).optional().catch(undefined),
     newProject: optionalText,
+    newProjectRef: optionalText,
     set: projectFieldsSchema,
     /** Domyślnie uzupełnia tylko puste pola — nie nadpisuje decyzji użytkownika. */
     ifMissing: z.boolean().catch(true),
@@ -156,13 +172,61 @@ export const projectNewProposalSchema = z
   .passthrough()
 export type ProjectNewProposal = z.infer<typeof projectNewProposalSchema>
 
+export const eventUpdateSetSchema = z
+  .object({
+    /** Przypnij wydarzenie do projektu wybranego dla grupy (podpowiedź: `projectId`). */
+    linkProject: z.boolean().optional().catch(undefined),
+    /** Godzina do dopisania w `start` (`HH:mm`); dzień się nie zmienia. */
+    time: z.string().regex(TIME_PATTERN).optional().catch(undefined),
+    /** Pola `data` do uzupełnienia (np. kontakt, kanał leada). */
+    data: z.record(z.unknown()).optional().catch(undefined),
+  })
+  .passthrough()
+export type EventUpdateSet = z.infer<typeof eventUpdateSetSchema>
+
+export const eventUpdateProposalSchema = z
+  .object({
+    ...proposalBase,
+    type: z.literal('event_update'),
+    /** Id istniejącego wydarzenia w `events.json`. */
+    eventId: z.string().min(1),
+    /** Podpowiedź projektu dla `linkProject` (jak przy innych propozycjach). */
+    projectId: z.string().min(1).optional().catch(undefined),
+    newProject: optionalText,
+    newProjectRef: optionalText,
+    set: eventUpdateSetSchema,
+    /** Domyślnie tylko puste pola: wydarzenie już przypięte zostaje przy swoim projekcie. */
+    ifMissing: z.boolean().catch(true),
+  })
+  .passthrough()
+export type EventUpdateProposal = z.infer<typeof eventUpdateProposalSchema>
+
 export const proposalSchema = z.discriminatedUnion('type', [
   eventProposalSchema,
+  eventUpdateProposalSchema,
   projectUpdateProposalSchema,
   projectNewProposalSchema,
 ])
 export type Proposal = z.infer<typeof proposalSchema>
 export type ProposalType = Proposal['type']
+
+/**
+ * Okno przeglądu poczty zapisane w nagłówku pliku. Najpóźniejsze `to` ze
+ * wszystkich plików = punkt, od którego zaczyna się następny przegląd
+ * (`npm run data -- inbox-status`).
+ */
+export const inboxSyncSchema = z
+  .object({
+    source: z.string().min(1),
+    /** Początek okna (ISO z godziną i strefą albo `YYYY-MM-DD`). */
+    from: z.string().min(1),
+    /** Koniec okna — do tej chwili poczta jest przejrzana. */
+    to: z.string().min(1),
+    /** Zapytania Gmaila użyte w przeglądzie (dla powtarzalności). */
+    queries: z.array(z.string()).optional(),
+  })
+  .passthrough()
+export type InboxSync = z.infer<typeof inboxSyncSchema>
 
 /** Nagłówek pliku; propozycje czytane pojedynczo (`parseInboxFile`). */
 export const inboxFileSchema = z
@@ -172,6 +236,7 @@ export const inboxFileSchema = z
     createdAt: z.string().catch(''),
     /** Co i skąd (np. „Gmail 1.09–9.10.2026"). */
     note: z.string().catch(''),
+    sync: inboxSyncSchema.optional().catch(undefined),
     proposals: z.array(z.unknown()).catch([]),
   })
   .passthrough()
@@ -214,6 +279,7 @@ export type ParsedInboxFile =
       status: 'ok'
       note: string
       createdAt: string
+      sync?: InboxSync
       proposals: Proposal[]
       /** Propozycje, których nie dało się odczytać (pominięte, nie zgubione — plik zostaje). */
       unreadable: number
@@ -240,7 +306,15 @@ export function parseInboxFile(name: string, raw: unknown): ParsedInboxFile {
     if (parsed.success) proposals.push(parsed.data)
     else unreadable += 1
   })
-  return { name, status: 'ok', note: header.data.note, createdAt: header.data.createdAt, proposals, unreadable }
+  return {
+    name,
+    status: 'ok',
+    note: header.data.note,
+    createdAt: header.data.createdAt,
+    ...(header.data.sync ? { sync: header.data.sync } : {}),
+    proposals,
+    unreadable,
+  }
 }
 
 /** Część `ref` przed `#` bez prefiksu źródła: `gmail:abc#reply` → `abc`. */

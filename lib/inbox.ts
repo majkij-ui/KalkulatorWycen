@@ -2,11 +2,12 @@
  * Skrzynka propozycji — logika ekranu „Skrzynka" (format: `inbox-types.ts`).
  *
  *  - co jeszcze czeka (`pendingProposals`): propozycja znika, gdy jej `ref`
- *    jest w `source.ref` jakiegokolwiek wydarzenia — także usuniętego — albo
- *    ma ostateczną decyzję (przyjęta / odrzucona),
+ *    jest w `source.ref` albo `updatedFrom` jakiegokolwiek wydarzenia — także
+ *    usuniętego — albo ma ostateczną decyzję (przyjęta / odrzucona),
  *  - grupy po wątku Gmaila / kliencie (`groupProposals`),
  *  - podpowiedź projektu (`suggestProjects`, `defaultTarget`),
- *  - akceptacja: wydarzenie z propozycji, uzupełnienie projektu tylko w
+ *  - akceptacja: wydarzenie z propozycji, zmiana istniejącego wydarzenia
+ *    (`planEventUpdate` / `applyEventUpdate`), uzupełnienie projektu tylko w
  *    pustych polach, nowy projekt, status wyłącznie jako podpowiedź.
  *
  * Moduł czysty — testy w `inbox.test.ts`. Zapisy robi `inbox-context.tsx`
@@ -22,6 +23,7 @@ import {
   PROJECT_UPDATE_FIELDS,
   refMessageId,
   type EventProposal,
+  type EventUpdateProposal,
   type InboxDecision,
   type InboxDecisionValue,
   type NewProjectFields,
@@ -45,11 +47,36 @@ export interface PendingProposal {
 
 type SourcedEvent = Pick<TimelineEvent, 'source'>
 
+/**
+ * Ślad zmiany wydarzenia ze skrzynki (`TimelineEvent.updatedFrom[]`, pole
+ * passthrough). `source` wydarzenia zostaje oryginalne — tu widać, kto i
+ * kiedy je potem zmienił, a `ref` deduplikuje propozycję `event_update`.
+ */
+export interface EventUpdateTrace {
+  type: string
+  ref: string
+  threadId?: string
+  inboxFile: string
+  at: string
+  /** Zmienione pola: `projectId`, `start`, `data.<klucz>`. */
+  fields: string[]
+}
+
+/** Refy zmian zapisanych w `updatedFrom` wydarzenia (czytane ostrożnie — to pole spoza schematu). */
+export function eventUpdateRefs(event: object): string[] {
+  const trail = (event as { updatedFrom?: unknown }).updatedFrom
+  if (!Array.isArray(trail)) return []
+  return trail
+    .map((entry) => (entry && typeof entry === 'object' ? (entry as { ref?: unknown }).ref : undefined))
+    .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0)
+}
+
 /** Refy, które są już „załatwione": w wydarzeniach (z usuniętymi) albo w decyzjach. */
 export function knownRefs(allEvents: SourcedEvent[], decisions: InboxDecision[]): Set<string> {
   const refs = new Set<string>()
   allEvents.forEach((e) => {
     if (e.source?.ref) refs.add(e.source.ref)
+    eventUpdateRefs(e).forEach((ref) => refs.add(ref))
   })
   decisions.forEach((d) => {
     if (isFinalDecision(d)) refs.add(d.ref)
@@ -108,8 +135,26 @@ export function proposalDate(proposal: Proposal): string {
 
 const FIELD_LABELS: Record<string, string> = { contact: 'kontakt', leadSource: 'pochodzenie', client: 'klient' }
 
-export function proposalTitle(proposal: Proposal): string {
+/** Co zmienia `event_update`, po polsku: „przypięcie do projektu, godzina, dane". */
+export function eventUpdateSummary(proposal: EventUpdateProposal): string {
+  const { linkProject, time, data } = proposal.set
+  return (
+    [
+      linkProject ? 'przypięcie do projektu' : '',
+      time ? 'godzina' : '',
+      data && Object.keys(data).length ? 'dane' : '',
+    ]
+      .filter(Boolean)
+      .join(', ') || 'brak zmian'
+  )
+}
+
+/** `eventTitle` — tytuł zmienianego wydarzenia, gdy jest znany (lista „Rozpatrzone"). */
+export function proposalTitle(proposal: Proposal, eventTitle?: string): string {
   if (proposal.type === 'event') return proposal.event.title.trim() || eventKind(proposal.event.kind).label
+  if (proposal.type === 'event_update') {
+    return `${eventTitle?.trim() || 'Zmiana wydarzenia'}: ${eventUpdateSummary(proposal)}`
+  }
   if (proposal.type === 'project_new') return `Nowy projekt: ${proposal.project.name}`
   const fields = PROJECT_UPDATE_FIELDS.filter((key) => proposal.set[key] !== undefined).map((key) => FIELD_LABELS[key])
   return `Uzupełnienie projektu: ${fields.join(', ') || 'brak pól'}`
@@ -124,6 +169,7 @@ export function proposalEmails(proposal: Proposal): string[] {
   }
   add(proposal.email)
   if (proposal.type === 'event') add(proposal.event.data?.email)
+  if (proposal.type === 'event_update') add(proposal.set.data?.email)
   if (proposal.type === 'project_update') add(proposal.set.contact?.email)
   if (proposal.type === 'project_new') add(proposal.project.contact?.email)
   return [...out]
@@ -186,19 +232,28 @@ function itemOrder(a: PendingProposal, b: PendingProposal): number {
   )
 }
 
+/** Propozycja `project_new`, którą wskazuje propozycja (`newProject` w tym pliku albo `newProjectRef`). */
+function newProjectOwner(item: PendingProposal, pending: PendingProposal[]): PendingProposal | undefined {
+  const p = item.proposal
+  if (p.type === 'project_new') return undefined
+  return pending.find(
+    (other) =>
+      other.proposal.type === 'project_new' &&
+      ((!!p.newProject && other.file === item.file && other.proposal.id === p.newProject) ||
+        (!!p.newProjectRef && other.key === p.newProjectRef))
+  )
+}
+
 /**
  * Grupy po wątku (a bez wątku — po kliencie / mailu). Propozycja wskazująca
- * nowy projekt (`newProject`) ląduje w grupie tej propozycji projektu.
+ * nowy projekt (`newProject` / `newProjectRef`) ląduje w grupie tej
+ * propozycji projektu — także z innego pliku.
  */
 export function groupProposals(pending: PendingProposal[]): ProposalGroup[] {
   const keyOf = new Map<PendingProposal, string>()
   pending.forEach((item) => keyOf.set(item, rawGroupKey(item.proposal)))
   pending.forEach((item) => {
-    const p = item.proposal
-    if (p.type === 'project_new' || !p.newProject) return
-    const owner = pending.find(
-      (other) => other.file === item.file && other.proposal.type === 'project_new' && other.proposal.id === p.newProject
-    )
+    const owner = newProjectOwner(item, pending)
     if (owner) keyOf.set(item, keyOf.get(owner)!)
   })
 
@@ -344,6 +399,10 @@ export function acceptedNewProjectId(
   decisions: InboxDecision[]
 ): string | null {
   const accepted = (ref: string) => decisions.find((d) => d.ref === ref && d.decision === 'accepted')?.projectId ?? null
+  for (const { proposal } of group.items) {
+    const projectId = proposal.type !== 'project_new' && proposal.newProjectRef ? accepted(proposal.newProjectRef) : null
+    if (projectId) return projectId
+  }
   for (const { file, proposal } of group.items) {
     if (proposal.type === 'project_new' || !proposal.newProject) continue
     const source = files.find((f) => f.name === file)
@@ -401,6 +460,16 @@ export function newProjectFieldsFor(
 }
 
 /**
+ * Czy propozycja potrzebuje projektu wybranego dla grupy. Zmiana samej
+ * godziny albo danych istniejącego wydarzenia — nie (wybór projektu się chowa).
+ */
+export function usesTarget(proposal: Proposal): boolean {
+  if (proposal.type === 'event') return eventKind(proposal.event.kind).scope !== 'business'
+  if (proposal.type === 'event_update') return !!proposal.set.linkProject
+  return true
+}
+
+/**
  * Domyślny cel grupy. Kolejność: projekt założony już z tej grupy → projekt
  * wskazany przez Claude'a → proponowany nowy projekt → JEDYNY projekt z tego
  * samego wątku albo z tym samym e-mailem → „bez projektu", gdy Claude tak
@@ -413,6 +482,7 @@ export function defaultTarget(
   acceptedProjectId: string | null,
   campaigns: { id: string; platform: string }[] = []
 ): InboxTarget {
+  if (!group.items.some((i) => usesTarget(i.proposal))) return { type: 'none' }
   if (acceptedProjectId) return { type: 'existing', projectId: acceptedProjectId }
 
   const claude = suggestions.filter((s) => s.reason === 'claude')
@@ -436,7 +506,7 @@ export function defaultTarget(
 
 // ── Akceptacja ───────────────────────────────────────────────────────────────
 
-export type ProposalProblem = 'kind' | 'date' | 'end' | 'project' | 'projectName'
+export type ProposalProblem = 'kind' | 'date' | 'end' | 'project' | 'projectName' | 'event' | 'time'
 
 export const PROPOSAL_PROBLEM_TEXT: Record<ProposalProblem, string> = {
   kind: 'Tego typu wydarzenia nie da się przyjąć ze skrzynki.',
@@ -444,16 +514,32 @@ export const PROPOSAL_PROBLEM_TEXT: Record<ProposalProblem, string> = {
   end: 'Koniec nie może być przed początkiem.',
   project: 'Wybierz projekt albo „Nowy projekt".',
   projectName: 'Nadaj nazwę nowemu projektowi.',
+  event: 'Tego wydarzenia już nie ma (usunięte) — odrzuć propozycję.',
+  time: 'Ten typ wydarzenia nie ma godziny.',
 }
 
 /** Typy, których nie przyjmujemy ze skrzynki: zakup sprzętu żyje w katalogu (plan §3.4). */
 const NOT_FROM_INBOX = new Set(['gear_purchase'])
 
-export function proposalProblems(proposal: Proposal, target: InboxTarget): ProposalProblem[] {
+/**
+ * Co blokuje akceptację. `event` = wydarzenie zmieniane przez `event_update`
+ * (z pliku, z usuniętymi); brak albo usunięte → problem.
+ */
+export function proposalProblems(
+  proposal: Proposal,
+  target: InboxTarget,
+  event?: Pick<TimelineEvent, 'kind' | 'deletedAt'> | null
+): ProposalProblem[] {
   const problems: ProposalProblem[] = []
   const hasProject = target.type === 'existing' || target.type === 'new'
-  if (target.type === 'new' && !target.fields.name.trim()) problems.push('projectName')
-  if (proposal.type === 'event') {
+  if (target.type === 'new' && usesTarget(proposal) && !target.fields.name.trim()) problems.push('projectName')
+  if (proposal.type === 'event_update') {
+    if (!event || event.deletedAt) return ['event']
+    const kind = eventKind(event.kind)
+    if (proposal.set.time && !kind.timed) problems.push('time')
+    if (proposal.set.linkProject && kind.scope === 'business') problems.push('kind')
+    if (proposal.set.linkProject && !hasProject) problems.push('project')
+  } else if (proposal.type === 'event') {
     const { kind, start, end } = proposal.event
     if (!isKnownKind(kind) || NOT_FROM_INBOX.has(kind)) problems.push('kind')
     if (!isEventDate(start)) problems.push('date')
@@ -556,7 +642,7 @@ export function statusAfter(current: ProjectStatus, kinds: string[]): ProjectSta
 export function decisionRecord(
   item: PendingProposal,
   decision: InboxDecisionValue,
-  extra: { projectId?: string; eventId?: string } = {},
+  extra: { projectId?: string; eventId?: string; eventTitle?: string } = {},
   now: Date = new Date()
 ): InboxDecision {
   return {
@@ -565,12 +651,91 @@ export function decisionRecord(
     decision,
     at: now.toISOString(),
     type: item.proposal.type,
-    title: proposalTitle(item.proposal),
+    title: proposalTitle(item.proposal, extra.eventTitle),
     file: item.file,
     proposalId: item.proposal.id,
     ...(extra.projectId ? { projectId: extra.projectId } : {}),
     ...(extra.eventId ? { eventId: extra.eventId } : {}),
   }
+}
+
+// ── Zmiana istniejącego wydarzenia ───────────────────────────────────────────
+
+export interface EventFieldChange {
+  /** `projectId`, `start` albo `data.<klucz>`. */
+  field: string
+  before: unknown
+  after: unknown
+}
+
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
+}
+
+/**
+ * Co zmieni `event_update` w tym wydarzeniu. `projectId` = projekt wybrany
+ * dla grupy (dla `linkProject`). `ifMissing` (domyślnie): projekt tylko gdy
+ * wydarzenie go nie ma, godzina tylko gdy jej nie ma, pola `data` tylko puste.
+ * Dzień, typ, tytuł i status nigdy się nie zmieniają. Pusta lista = nic do zmiany.
+ */
+export function planEventUpdate(
+  event: Pick<TimelineEvent, 'kind' | 'projectId' | 'start' | 'data'>,
+  proposal: EventUpdateProposal,
+  projectId: string | null
+): EventFieldChange[] {
+  const changes: EventFieldChange[] = []
+  const { linkProject, time, data } = proposal.set
+  const kind = eventKind(event.kind)
+  if (linkProject && projectId && kind.scope !== 'business' && event.projectId !== projectId) {
+    if (!proposal.ifMissing || !event.projectId) changes.push({ field: 'projectId', before: event.projectId, after: projectId })
+  }
+  if (time && kind.timed && isEventDate(event.start)) {
+    const hasTime = event.start.length > 10
+    const next = `${event.start.slice(0, 10)}T${time}`
+    if (next !== event.start && (!proposal.ifMissing || !hasTime)) changes.push({ field: 'start', before: event.start, after: next })
+  }
+  Object.entries(data ?? {}).forEach(([key, value]) => {
+    if (isEmptyValue(value)) return
+    const current = event.data?.[key]
+    const next = typeof value === 'string' ? value.trim() : value
+    if (JSON.stringify(current) === JSON.stringify(next)) return
+    if (!proposal.ifMissing || isEmptyValue(current)) changes.push({ field: `data.${key}`, before: current, after: next })
+  })
+  return changes
+}
+
+/**
+ * Wydarzenie po zmianie albo `null`, gdy nic się nie zmienia. Startuje od
+ * oryginału: nieznane pola i `source` zostają, a ślad zmiany trafia na koniec
+ * `updatedFrom`. `now` jawnie — testy.
+ */
+export function applyEventUpdate(
+  event: TimelineEvent,
+  proposal: EventUpdateProposal,
+  projectId: string | null,
+  file: string,
+  now: Date = new Date()
+): TimelineEvent | null {
+  const changes = planEventUpdate(event, proposal, projectId)
+  if (!changes.length) return null
+  const nowIso = now.toISOString()
+  const data: Record<string, unknown> = { ...event.data }
+  let next: TimelineEvent = { ...event }
+  changes.forEach(({ field, after }) => {
+    if (field === 'projectId') next = { ...next, projectId: after as string }
+    else if (field === 'start') next = { ...next, start: after as string }
+    else data[field.slice('data.'.length)] = after
+  })
+  const trace: EventUpdateTrace = {
+    type: proposal.ref.startsWith('gmail:') ? 'gmail' : 'inbox',
+    ref: proposal.ref,
+    ...(proposal.threadId ? { threadId: proposal.threadId } : {}),
+    inboxFile: file,
+    at: nowIso,
+    fields: changes.map((c) => c.field),
+  }
+  const previous = Array.isArray(event.updatedFrom) ? event.updatedFrom : []
+  return { ...next, data, updatedFrom: [...previous, trace], updatedAt: nowIso }
 }
 
 // ── Edycja przed akceptacją ──────────────────────────────────────────────────

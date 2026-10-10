@@ -289,18 +289,20 @@ banner can be re-run any time. Settings the old app kept only in WebView storage
 WebKit LocalStorage (a copy) and wrote `carryover-from-quotegen.json` to the hub folder, plus a copy of
 `settings.json`; `applyCarryOver()` applies known keys once at start-up and never overwrites.
 
-## 5d. Skrzynka — proposals from mail *(T4, built 2026-10-09)*
+## 5d. Skrzynka — proposals from mail *(T4 2026-10-09, T4b 2026-10-10)*
 
 Everything that comes from mail enters the app as a **proposal** you accept. Nothing Gmail-derived
 is written straight into the data files.
 
 **Format** (`lib/inbox-types.ts`, `format: "nonoise-hub-inbox"`, `version: 1`, passthrough everywhere).
 One file per sync in `<hub folder>/inbox/`, named `<local time>-<slug>.json` so name order = time order.
-Three proposal types:
+Optional header `sync: { source, from, to, queries? }` records the mailbox window the file covers
+(T4b). Four proposal types:
 
 | `type` | Means | Accepting does |
 |---|---|---|
 | `event` | a new thread event (lead, reply, quote sent, won, shoot day, invoice sent/paid…) with `kind`, `start`, `end?`, `title`, `notes`, `data` | `saveEvent` with `source: { type: 'gmail', ref, threadId, inboxFile }` |
+| `event_update` (T4b) | change an **existing** event by `eventId`: `set.linkProject` (to the group's project; `projectId` is the hint), `set.time` (`HH:mm` added to `start`, the day never changes), `set.data` (fields checked by the kind's schema). `ifMissing` (default): only an unlinked event gets a project, only a missing time or empty field is filled. Never kind, day, title, status or deletion | `saveEvent` on the stored event: unknown fields and the original `source` stay, a trace `{ type, ref, threadId, inboxFile, at, fields }` is appended to `updatedFrom[]`; a no-op only records the decision |
 | `project_update` | fill `contact` / `leadSource` / `client` on a project; `ifMissing` (default) fills only empty fields, contact field by field | `updateProject` (a no-op is still recorded as accepted) |
 | `project_new` | a new quote-less project (`name`, `client`, `date`, `leadSource`, `contact`) | `createProjectWithoutQuote`; with an existing project chosen instead it fills that project's empty fields |
 
@@ -308,12 +310,14 @@ Every proposal has a `ref` = **dedupe key**: `gmail:<message id>`, with a `#fact
 gives several facts (`#contact`, `#project`, `#shoot`). Hints for grouping and matching: `threadId`,
 `client`, `email`; `reason` (one sentence, why) and `evidence` (`from`, `to`, `subject`, `date` with the
 local offset, `snippet`) for the preview. Events may point at `projectId` (existing), `null` (deliberately
-no project, e.g. a fake lead) or `newProject` (a `project_new` in the same file). **Status is never part of
+no project, e.g. a fake lead), `newProject` (a `project_new` in the same file) or `newProjectRef` (the
+`ref` of a `project_new` in **any** inbox file, T4b): the proposal joins that group and lands in the
+project once it exists, so a later sync can continue a thread whose new project is still waiting. **Status is never part of
 a proposal**: the script rejects it; status changes stay the confirm-first suggestion (`statusAfter`, the
 furthest forward step over all accepted kinds).
 
-**When a proposal stops coming back** (`pendingProposals`): its `ref` is in `source.ref` of any event —
-**including soft-deleted ones** — or it has a final decision in `inbox-decisions.json` (`accepted` /
+**When a proposal stops coming back** (`pendingProposals`): its `ref` is in `source.ref` or
+`updatedFrom[].ref` of any event — **including soft-deleted ones** — or it has a final decision in `inbox-decisions.json` (`accepted` /
 `rejected`; `reopened` = rejection undone). The app writes only that decisions file; it never edits or
 deletes anything in `inbox/`, so Claude can write a new file while the hub is open. The same `ref` in two
 files counts once (earlier file wins).
@@ -321,27 +325,52 @@ files counts once (earlier file wins).
 **`npm run data -- inbox <draft.json> [--name <slug>] [--dir] [--dry-run]`** (`scripts/data.mts`, rules in
 `lib/inbox-validate.ts`): strict — a schema error or any field a `.catch` would rewrite stops the write;
 unknown kinds, `gear_purchase` (lives in the catalogue), time on a non-timed kind, `end` on a one-day kind,
-missing project / campaign / `newProject` target, `status` anywhere → error. Known refs (events incl.
-deleted, decisions, other inbox files) are skipped, so re-running a sync is a no-op. Warnings (don't block):
+missing project / campaign / `newProject` / `newProjectRef` target, `status` anywhere → error. For
+`event_update`: missing event, `kind` / `start` / `status` / any other field in `set`, `linkProject: false`,
+a project without `linkProject`, time on a non-timed kind, data the kind's schema would rewrite → error; a
+deleted event or a change that would do nothing is skipped. Known refs (events incl. deleted and their
+`updatedFrom`, decisions, other inbox files) are skipped, so re-running a sync is a no-op. A draft with a
+`sync` header is written even with zero proposals: it is the next sync's starting point. Warnings (don't block):
 likely duplicates (`similarEvents`: same kind + project + day, same invoice number, same lead e-mail within
-7 days), sales/money dates in the future, proposals without any hint. Writes `.tmp` then renames, so the app
-never reads half a file.
+7 days), sales/money dates in the future, proposals without any hint, an `event_update` link on an event that
+already has a project. Writes `.tmp` then renames, so the app never reads half a file.
+
+**`npm run data -- inbox-status [--dir]`** (read-only, T4b): files with their sync windows and pending counts,
+„Ostatni przegląd gmail: do …" (latest `sync.to`), pending by type, decisions so far.
+
+**Runbook „przejrzyj moją pocztę"**: the project skill `.claude/skills/przejrzyj-poczte/SKILL.md` (start
+point from `inbox-status`, read-only hub snapshot, four Gmail queries, the facts → proposals table, time
+zones, dry-run → sample → write, report). Since T5a, accepted `shoot_day` / `prep_day` events become
+Realizacja days, so the runbook proposes them only for confirmed dates and uses a `note` range for holds.
 
 **Screen „Skrzynka"** (`components/inbox/`, sidebar badge = pending count): groups by Gmail thread (a
 `newProject` reference joins its project's group), newest activity first. Per group one **target**: an
 existing project (suggestions in order: named by Claude → same thread → same e-mail → same company domain
 → same client; free-mail domains never count), **+ Nowy projekt…** (prefilled from `project_new` or the
-lead), or *Bez projektu*. Default target only when it's unambiguous (one project from the thread or
+lead), or *Bez projektu*; hidden when no proposal in the group needs a project (only times / data of
+existing events). Default target only when it's unambiguous (one project from the thread or
 e-mail); a returning client with several projects asks. Per proposal: preview of the mail, edit (same draft
 as the calendar form: `draftFromProposal` / `proposalWithDraft`; lead quality picker), duplicate warning,
-accept / reject; per group „Zaakceptuj wszystkie z wątku" (accepts what has no problems) and „Odrzuć
+accept / reject; an `event_update` shows the event's chip + „zmiana" and a before → after list (or
+„wybierz projekt powyżej" while the thread has none), with its own small editor (link, time, data,
+ifMissing); per group „Zaakceptuj wszystkie z wątku" (accepts what has no problems) and „Odrzuć
 wszystkie". A new project is created once, on the first accept; its `project_new` is marked accepted even if
 you accept only one event. „Rozpatrzone" lists decisions with „Przywróć" for rejections. Reloads on window
 focus.
 
+**Lead links (T4b, 2026-10-10).** Of 31 leads, 5 had a project. Going through the 26 others with mail
+evidence: the S&A lead → the pilot's S&A project (`newProjectRef`); UAM lead + reply get their times
+(11:44 / 14:19 → a real response time) and contact; XL Energy gets time, channel and e-mail (no project
+exists); Dräger — a project without any lead — gets its `lead_in`, `reply_sent` and `quote_sent`. The 19
+spring leads have **no project in the hub** (the old quote library is fully migrated), so there was nothing
+to link: mail shows a PDF quote for Slow Face (×2), METAL-FACH, SME Banking, FSWO, CKS Ossa (×2), Stare
+Babice and Ostrowiec, and a brief M.J. declined (HFG); a first reply with questions or a preliminary range
+(no PDF) for SMOLAR, VIMAX, Omen Pizza, DTA and Interprint; no reply found to the forms of Elevanta,
+RZEcommerce, Żekało, TuSprawność, Emilia Krawczyk, Fundacja and Erecepty24.
+Whether to create (lost) projects for the quoted ones — so the funnel's „wycena" step counts them — is
+M.J.'s call.
+
 **Known limits / next:**
-- No proposal type changes an **existing event** (e.g. link the S&A lead to its new project, add the time
-  to the UAM lead). Do it in Marketing / the calendar, or add an `event_update` type later.
 - Edits made in the screen live in memory until accepted.
 - Undoing an accepted proposal = delete the event in the calendar; by design it won't come back.
 - Amounts are PLN netto; a quote in EUR keeps the amount in notes.
@@ -349,6 +378,10 @@ focus.
   project out of the thread (no `threadId`).
 - `readDir` on `$APPDATA/inbox` relies on `fs:default` (`read-app-specific-dirs-recursive`); check on the
   production build.
+- An installed build older than T4b drops `event_update` proposals as unreadable (the file stays and they
+  appear after the update).
+- `event_update` cannot unlink, move between projects (unless `ifMissing: false`), change the day or the
+  title. Those stay manual in the calendar.
 
 ## 5c. Calendar design system *(design pass, 2026-10-08)*
 
@@ -415,7 +448,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T1b Project additions** ✅ | ~~Status `lead`~~ (reverted 2026-10-08: a lead is the `lead_in` event; quote-less projects are `quote`, see §3.5). Optional `colorKey` (new projects get the least-used slot; older ones a stable slot hashed from id, frozen by their first save; reading never writes), `contact`, `leadSource` (`LEAD_SOURCES` as suggestions; the message channel stays on the `lead_in` event, so contact and source live only on the project). `quote` nullable: opening a lead loads a clean calculator with the client prefilled; backfill and the "missing financials" banner ignore leads. `projectSchema` is now `.passthrough()`. 9 new tests; 8/8 mutations caught. | — |
 | **T2 Calendar tab** ✅ | `components/calendar/`: landing section „Kalendarz"; month grid (variant A), month summary incl. gear spend, layer toggles, thread focus with derived numbers, day panel. Add/edit form with per-kind fields, time for sales events, ranges, „+ Nowy projekt…" (creates a quote-less project), forward-only status suggestion with confirm, soft delete with „Cofnij". Gear purchases are written to the **catalogue** (purchase date) and projected, never stored as events. `EventsProvider` reloads on window focus (bridge-ready, §5a). Pure: `calendar-entries.ts`, `event-draft.ts` (edits keep unknown fields, `data` keys and import source). 11 + palette tests; 8/8 mutations caught; full flow verified in the browser. | — |
 | **T3 Project thread** ✅ (2026-10-09, §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing the crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes it together with its thread, with undo. Pure: `clients.ts`, `project-list.ts`, `project-deletion.ts`, header client rule in `project-save.ts`; collection writes are serialized. 27 new tests; 18/18 mutations caught; flows verified in the browser. | T1 |
-| **T4 Gmail import v0** ✅ (2026-10-09, §5d) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). ✅ Inbox format (`inbox-types.ts`), `npm run data -- inbox`, „Skrzynka" screen with sidebar counter, Gmail pilot 1.09–9.10. 22 tests (+1 extended payments test); 19/19 mutations caught. Next: a recurring "sync my mail" from chat. | T1, T3 |
+| **T4 Gmail import v0** ✅ (2026-10-09/10, §5d) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). ✅ Inbox format (`inbox-types.ts`), `npm run data -- inbox`, „Skrzynka" screen with sidebar counter, Gmail pilot 1.09–9.10 (35 proposals). 22 tests (+1 extended payments test); 19/19 mutations caught. ✅ **T4b**: `event_update` (link a lead, add a time, fill data; trace in `updatedFrom`), `newProjectRef`, `sync` window + `inbox-status`, runbook skill `przejrzyj-poczte`, lead links + sync 9–10.10 (7 proposals). 7 more tests; 19/19 mutations caught. | T1, T3 |
 | **T5a Realizacja tab** ✅ (2026-10-09, §6c) | The project's Sprzęt tab became Realizacja: shoot/prep days whose date lives in the calendar (variant A), gear per day (G3 grid), crew and other actual costs (`Project.costs`), Profit moved out of the calculator as the plan, planned vs actual margin. Pure: `realization-days.ts`, `project-costs.ts`, `realization-plan.ts`. 37 new tests; 20/20 mutations caught; flows verified in the browser and on the production export. | T1 |
 | **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`, phone numbers from the crew database (T9a). | T5a, T9a |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance (actual costs: `totalActualCosts` / `actualCostsByCategory` on `Project.costs`, §6c), days-to-payment, overdue list. | T5a, phase 4 |

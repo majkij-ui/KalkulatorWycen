@@ -4,6 +4,7 @@
  *
  *   npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]
  *   npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]
+ *   npm run data -- inbox-status [--dir <folder>]
  *
  * Patch:
  *   {
@@ -49,10 +50,13 @@ import {
   INBOX_FORMAT,
   INBOX_VERSION,
   inboxDecisionSchema,
+  type ParsedInboxFile,
   parseInboxFile,
   type InboxDecision,
 } from '../lib/inbox-types'
 import { describeProposal, validateInboxDraft } from '../lib/inbox-validate'
+import { pendingProposals } from '../lib/inbox'
+import { plural } from '../lib/pl-plural'
 import { campaignSchema } from '../lib/marketing-types'
 import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
 import {
@@ -238,27 +242,39 @@ function localStamp(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
 }
 
+/** Pliki skrzynki, jak je czyta aplikacja (po nazwie = po czasie zapisu). */
+function readInboxDir(dir: string): ParsedInboxFile[] {
+  const inboxDir = join(dir, INBOX_DIR)
+  if (!existsSync(inboxDir)) return []
+  return readdirSync(inboxDir)
+    .filter((file) => file.endsWith('.json') && !file.startsWith('.'))
+    .sort()
+    .map((file) => {
+      let content: unknown = null
+      try {
+        content = JSON.parse(readFileSync(join(inboxDir, file), 'utf8'))
+      } catch {
+        console.warn(`! ${INBOX_DIR}/${file}: nieczytelny JSON`)
+      }
+      return parseInboxFile(file, content)
+    })
+}
+
 function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | undefined) {
   if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
   const raw = JSON.parse(readFileSync(draftPath, 'utf8')) as unknown
 
   const inboxDir = join(dir, INBOX_DIR)
+  const files = readInboxDir(dir)
   const pendingRefs = new Map<string, string>()
-  if (existsSync(inboxDir)) {
-    readdirSync(inboxDir)
-      .filter((file) => file.endsWith('.json') && !file.startsWith('.'))
-      .sort()
-      .forEach((file) => {
-        let content: unknown = null
-        try {
-          content = JSON.parse(readFileSync(join(inboxDir, file), 'utf8'))
-        } catch {
-          console.warn(`! ${INBOX_DIR}/${file}: nieczytelny JSON — pomijam przy deduplikacji`)
-        }
-        const parsed = parseInboxFile(file, content)
-        if (parsed.status === 'ok') parsed.proposals.forEach((p) => pendingRefs.has(p.ref) || pendingRefs.set(p.ref, file))
-      })
-  }
+  const projectNewRefs = new Map<string, string>()
+  files.forEach((parsed) => {
+    if (parsed.status !== 'ok') return
+    parsed.proposals.forEach((p) => {
+      if (!pendingRefs.has(p.ref)) pendingRefs.set(p.ref, parsed.name)
+      if (p.type === 'project_new' && !projectNewRefs.has(p.ref)) projectNewRefs.set(p.ref, parsed.name)
+    })
+  })
 
   const projects = readParsed(dir, 'projects.json', projectSchema)
   const events: TimelineEvent[] = readParsed(dir, 'events.json', eventSchema)
@@ -272,6 +288,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     campaigns: readParsed(dir, 'campaigns.json', campaignSchema),
     decisions,
     pendingRefs,
+    projectNewRefs,
     today: localStamp(new Date()).slice(0, 10),
   })
 
@@ -282,7 +299,8 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     fail(`${result.errors.length} błędów — nic nie zapisano`)
   }
   const projectName = (id: string) => projects.find((p) => p.id === id)?.name
-  result.proposals.forEach((p) => console.log(`+ ${describeProposal(p, projectName)}`))
+  const eventTitle = (id: string) => events.find((e) => e.id === id)?.title
+  result.proposals.forEach((p) => console.log(`+ ${describeProposal(p, projectName, eventTitle)}`))
   result.skipped.forEach((s) => console.log(`= pominięta ${s.ref} (${s.title}): ${s.why}`))
   result.warnings.forEach((w) => console.log(`! ${w}`))
   console.log(`\n${result.proposals.length} nowych propozycji, ${result.skipped.length} pominiętych.`)
@@ -292,8 +310,12 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     return
   }
   if (result.proposals.length === 0) {
-    console.log('Nic nowego — skrzynka bez zmian.')
-    return
+    // Okno przeglądu i tak warto zapamiętać — inaczej następny przegląd zacząłby od starego miejsca.
+    if (!result.sync) {
+      console.log('Nic nowego — skrzynka bez zmian.')
+      return
+    }
+    console.log('Nic nowego — zapisuję sam znacznik przeglądu (sync).')
   }
 
   const now = new Date()
@@ -303,6 +325,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     version: INBOX_VERSION,
     createdAt: now.toISOString(),
     note: result.note,
+    ...(result.sync ? { sync: result.sync } : {}),
     proposals: result.proposals,
   }
   mkdirSync(inboxDir, { recursive: true })
@@ -315,11 +338,63 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
   }
 }
 
+/**
+ * Stan skrzynki (tylko odczyt): pliki, okna przeglądu poczty, co czeka, co
+ * rozpatrzono. Najpóźniejsze `sync.to` = od kiedy zacząć następny przegląd.
+ */
+function inboxStatus(dir: string) {
+  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
+  const files = readInboxDir(dir)
+  const events: TimelineEvent[] = readParsed(dir, 'events.json', eventSchema)
+  const decisions: InboxDecision[] = readParsed(dir, INBOX_DECISIONS_FILE, inboxDecisionSchema)
+  const { pending, handled, duplicates } = pendingProposals(files, events, decisions)
+
+  console.log(`folder: ${dir}\n`)
+  if (!files.length) console.log('Skrzynka pusta (brak plików w inbox/).')
+  files.forEach((f) => {
+    if (f.status !== 'ok') {
+      console.log(`  ${f.name}: ${f.status === 'newer' ? `nowszy format v${f.version}` : f.error}`)
+      return
+    }
+    const waiting = pending.filter((p) => p.file === f.name).length
+    const window = f.sync ? ` · przegląd ${f.sync.source} ${f.sync.from} → ${f.sync.to}` : ''
+    const count = `${f.proposals.length} ${plural(f.proposals.length, 'propozycja', 'propozycje', 'propozycji')}`
+    console.log(`  ${f.name}: ${count}, czeka ${waiting}${window}${f.note ? ` · ${f.note}` : ''}`)
+  })
+
+  const lastBySource = new Map<string, string>()
+  files.forEach((f) => {
+    if (f.status !== 'ok' || !f.sync) return
+    const current = lastBySource.get(f.sync.source)
+    if (!current || Date.parse(f.sync.to) > Date.parse(current)) lastBySource.set(f.sync.source, f.sync.to)
+  })
+  console.log('')
+  if (lastBySource.size) lastBySource.forEach((to, source) => console.log(`Ostatni przegląd ${source}: do ${to}`))
+  else console.log('Brak znacznika przeglądu (sync) — następny przegląd zacznij od daty ostatniego pliku albo od pilota.')
+
+  const byType = new Map<string, number>()
+  pending.forEach((p) => byType.set(p.proposal.type, (byType.get(p.proposal.type) ?? 0) + 1))
+  const counts = [...byType.entries()].map(([type, n]) => `${type} ${n}`).join(', ')
+  const decided = new Map<string, number>()
+  decisions.forEach((d) => decided.set(d.decision, (decided.get(d.decision) ?? 0) + 1))
+  console.log(`Czeka: ${pending.length}${counts ? ` (${counts})` : ''}`)
+  console.log(`Rozpatrzone: ${handled}${decided.size ? ` · decyzje: ${[...decided.entries()].map(([k, n]) => `${k} ${n}`).join(', ')}` : ''}`)
+  if (duplicates) console.log(`Powtórzone refy w plikach: ${duplicates} (liczy się pierwszy plik)`)
+}
+
 const USAGE = [
   'Użycie:',
   '  npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]',
   '  npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]',
+  '  npm run data -- inbox-status [--dir <folder>]',
 ].join('\n')
+
+if (process.argv[2] === 'inbox-status') {
+  const args = process.argv.slice(3)
+  const dirIndex = args.indexOf('--dir')
+  inboxStatus(dirIndex >= 0 ? args[dirIndex + 1] : HUB_DIR)
+  process.exit(0)
+}
 
 const [command, inputPath, ...rest] = process.argv.slice(2)
 const flag = (name: string) => {

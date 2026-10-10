@@ -2,8 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  applyEventUpdate,
   decisionRecord,
   defaultTarget,
+  planEventUpdate,
+  proposalTitle,
+  usesTarget,
   draftFromProposal,
   proposalWithDraft,
   eventFromProposal,
@@ -396,6 +400,7 @@ const ctx = (extra: Partial<StrictContext> = {}): StrictContext => ({
   campaigns: [{ id: 'cmp-1' }],
   decisions: [],
   pendingRefs: new Map(),
+  projectNewRefs: new Map(),
   today: '2026-10-09',
   ...extra,
 })
@@ -478,4 +483,178 @@ test('walidacja: ostrzeżenia nie blokują (duplikat, przyszła data, brak podpo
   assert.ok(result.warnings.some((w) => /przyszłości/.test(w)))
   assert.ok(result.warnings.some((w) => /podobne wydarzenie/.test(w)))
   assert.ok(result.warnings.some((w) => /wybierzesz w aplikacji/.test(w)))
+})
+
+
+// ── event_update: zmiana istniejącego wydarzenia (T4b) ───────────────────────
+
+const update = (set: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+  const p = proposalSchema.parse({ type: 'event_update', id: 'u1', ref: 'gmail:upd', eventId: 'ev-lead', set, ...extra })
+  if (p.type !== 'event_update') throw new Error('typ')
+  return p
+}
+
+const leadEvent = (extra: Record<string, unknown> = {}): TimelineEvent =>
+  ev({
+    id: 'ev-lead',
+    kind: 'lead_in',
+    start: '2026-06-24',
+    title: 'Interprint Polska',
+    data: { quality: 'good', campaignId: 'cmp-1', email: 'w@interprint.pl', futureKey: 1 },
+    source: { type: 'import', ref: 'xlsx#2' },
+    importedBy: 'claude',
+    ...extra,
+  })
+
+test('event_update: plan zmian — projekt, godzina i dane tylko w pustych polach', () => {
+  const p = update({ linkProject: true, time: '09:30', data: { contactName: 'Weronika', email: 'inny@x.pl', channel: ' ' } })
+  assert.deepEqual(planEventUpdate(leadEvent(), p, 'p-1'), [
+    { field: 'projectId', before: null, after: 'p-1' },
+    { field: 'start', before: '2026-06-24', after: '2026-06-24T09:30' },
+    { field: 'data.contactName', before: undefined, after: 'Weronika' },
+  ])
+  // Już przypięty / już z godziną → przy ifMissing nic.
+  assert.deepEqual(planEventUpdate(leadEvent({ projectId: 'p-9', start: '2026-06-24T08:00' }), update({ linkProject: true, time: '09:30' }), 'p-1'), [])
+  // ifMissing: false nadpisuje, ale dzień zostaje.
+  assert.deepEqual(
+    planEventUpdate(leadEvent({ projectId: 'p-9', start: '2026-06-24T08:00' }), update({ linkProject: true, time: '09:30' }, { ifMissing: false }), 'p-1'),
+    [
+      { field: 'projectId', before: 'p-9', after: 'p-1' },
+      { field: 'start', before: '2026-06-24T08:00', after: '2026-06-24T09:30' },
+    ]
+  )
+  // Ten sam projekt, brak wybranego projektu, typ bez godziny → nic.
+  assert.deepEqual(planEventUpdate(leadEvent({ projectId: 'p-1' }), update({ linkProject: true }), 'p-1'), [])
+  assert.deepEqual(planEventUpdate(leadEvent(), update({ linkProject: true }), null), [])
+  assert.deepEqual(planEventUpdate(leadEvent({ kind: 'invoice_sent' }), update({ time: '09:30' }), null), [])
+  // Sprawy firmy (zakup sprzętu, marketing) nie należą do projektu.
+  assert.deepEqual(planEventUpdate(leadEvent({ kind: 'marketing' }), update({ linkProject: true }), 'p-1'), [])
+})
+
+test('event_update: zastosowanie zachowuje nieznane pola i source, dopisuje ślad zmiany', () => {
+  const original = leadEvent({ updatedFrom: [{ type: 'gmail', ref: 'gmail:old', inboxFile: 'a.json', at: 'x', fields: ['start'] }] })
+  const p = update({ linkProject: true, data: { contactName: 'Weronika' } }, { threadId: 't-1' })
+  const next = applyEventUpdate(original, p, 'p-1', 'b.json', NOW)
+  assert.ok(next)
+  if (!next) return
+  assert.equal(next.projectId, 'p-1')
+  assert.equal(next.start, '2026-06-24')
+  assert.equal(next.kind, 'lead_in')
+  assert.deepEqual(next.source, { type: 'import', ref: 'xlsx#2' })
+  assert.equal((next as Record<string, unknown>).importedBy, 'claude')
+  assert.deepEqual(next.data, { quality: 'good', campaignId: 'cmp-1', email: 'w@interprint.pl', futureKey: 1, contactName: 'Weronika' })
+  assert.equal(next.updatedAt, NOW.toISOString())
+  assert.deepEqual((next as Record<string, unknown>).updatedFrom, [
+    { type: 'gmail', ref: 'gmail:old', inboxFile: 'a.json', at: 'x', fields: ['start'] },
+    { type: 'gmail', ref: 'gmail:upd', threadId: 't-1', inboxFile: 'b.json', at: NOW.toISOString(), fields: ['projectId', 'data.contactName'] },
+  ])
+  assert.ok(eventSchema.safeParse(next).success)
+  assert.equal(original.projectId, null, 'oryginał nietknięty')
+  assert.equal(applyEventUpdate(leadEvent({ projectId: 'p-1' }), update({ linkProject: true }), 'p-1', 'b.json', NOW), null)
+})
+
+test('event_update: ref w updatedFrom (także usuniętego wydarzenia) zamyka propozycję', () => {
+  const files = [file('a.json', [{ type: 'event_update', id: 'u', ref: 'gmail:upd', eventId: 'ev-lead', set: { time: '09:30' } }])]
+  const done = [leadEvent({ deletedAt: '2026-10-01', updatedFrom: [{ ref: 'gmail:upd' }] })]
+  assert.equal(pendingProposals(files, done, []).pending.length, 0)
+  assert.equal(pendingProposals(files, [leadEvent()], []).pending.length, 1)
+})
+
+test('event_update: problemy i potrzeba projektu', () => {
+  const none = { type: 'none' } as const
+  const time = update({ time: '09:30' })
+  const link = update({ linkProject: true })
+  assert.deepEqual(proposalProblems(time, none, leadEvent()), [])
+  assert.deepEqual(proposalProblems(time, none, null), ['event'])
+  assert.deepEqual(proposalProblems(time, none, leadEvent({ deletedAt: 'x' })), ['event'])
+  assert.deepEqual(proposalProblems(time, none, leadEvent({ kind: 'invoice_sent' })), ['time'])
+  assert.deepEqual(proposalProblems(link, none, leadEvent()), ['project'])
+  assert.deepEqual(proposalProblems(link, { type: 'existing', projectId: 'p-1' }, leadEvent()), [])
+  assert.deepEqual(proposalProblems(link, { type: 'existing', projectId: 'p-1' }, leadEvent({ kind: 'gear_purchase' })), ['kind'])
+
+  assert.equal(usesTarget(time), false)
+  assert.equal(usesTarget(link), true)
+  const [onlyTime] = groupProposals([pending(time)])
+  assert.deepEqual(defaultTarget(onlyTime, [], null), { type: 'none' })
+  const picked = update({ linkProject: true }, { projectId: 'p-1' })
+  const [linked] = groupProposals([pending(picked)])
+  assert.deepEqual(defaultTarget(linked, suggestProjects(linked, [project()], []), null), { type: 'existing', projectId: 'p-1' })
+  assert.equal(proposalTitle(link, 'Interprint Polska'), 'Interprint Polska: przypięcie do projektu')
+})
+
+test('newProjectRef: propozycja z innego pliku trafia do grupy nowego projektu i do niego po akceptacji', () => {
+  const files = [
+    file('a.json', [{ type: 'project_new', id: 'n', ref: 'gmail:sa#project', threadId: 't-sa', project: { name: 'S&A' } }]),
+    file('b.json', [
+      { type: 'event_update', id: 'u', ref: 'gmail:sa-lead#link', eventId: 'ev-lead', newProjectRef: 'gmail:sa#project', set: { linkProject: true } },
+    ]),
+  ]
+  const groups = groupProposals(pendingProposals(files, [], []).pending)
+  assert.equal(groups.length, 1)
+  assert.deepEqual(
+    groups[0].items.map((i) => i.key),
+    ['gmail:sa#project', 'gmail:sa-lead#link']
+  )
+  const accepted = [decision('gmail:sa#project', 'accepted', { projectId: 'p-sa' })]
+  const [rest] = groupProposals(pendingProposals(files, [], accepted).pending)
+  assert.equal(acceptedNewProjectId(rest, files, accepted), 'p-sa')
+})
+
+test('walidacja event_update: poprawna zmiana, błędy i pominięcia', () => {
+  const base = { type: 'event_update', id: 'u1', ref: 'gmail:upd', eventId: 'ev-lead', threadId: 't' }
+  const events = [leadEvent(), leadEvent({ id: 'ev-gone', deletedAt: '2026-10-01' }), leadEvent({ id: 'ev-fv', kind: 'invoice_sent', start: '2026-07-01' })]
+  const run = (entry: Record<string, unknown>, extra: Partial<StrictContext> = {}) =>
+    validateInboxDraft(draft([{ ...base, ...entry }]), ctx({ events, ...extra }))
+
+  const ok = run({ projectId: 'p-1', set: { linkProject: true, time: '09:30', data: { contactName: 'Weronika' } } })
+  assert.deepEqual(ok.errors, [])
+  assert.equal(ok.proposals.length, 1)
+
+  const cases: [Record<string, unknown>, RegExp][] = [
+    [{ eventId: 'ev-x', set: { time: '09:30' } }, /nie ma wydarzenia/],
+    [{ set: { kind: 'reply_sent', time: '09:30' } }, /event_update nie zmienia: kind/],
+    [{ set: { status: 'won', time: '09:30' } }, /event_update nie zmienia: status/],
+    [{ set: { start: '2026-06-25', time: '09:30' } }, /event_update nie zmienia: start/],
+    [{ set: { title: 'Nowy tytuł', time: '09:30' } }, /pola spoza listy: title/],
+    [{ set: { linkProject: false } }, /tylko true/],
+    [{ set: {} }, /niczego nie zmienia/],
+    [{ projectId: 'p-1', set: { time: '09:30' } }, /bez linkProject/],
+    [{ eventId: 'ev-fv', set: { time: '09:30' } }, /nie ma godziny/],
+    [{ set: { data: { quality: 'super' } } }, /poprawiłby pole „set.data.quality"/],
+    [{ set: { data: { campaignId: 'cmp-x' } } }, /nie ma kampanii/],
+    [{ set: { time: '9:30' } }, /time/],
+    [{ newProjectRef: 'gmail:nic#project', set: { linkProject: true } }, /nie wskazuje propozycji project_new/],
+  ]
+  cases.forEach(([entry, pattern]) => {
+    const result = run(entry)
+    assert.ok(result.errors.some((e) => pattern.test(e)), `${pattern}: ${result.errors.join(' | ')}`)
+  })
+
+  assert.match(run({ eventId: 'ev-gone', set: { time: '09:30' } }).skipped[0].why, /usunięte/)
+  assert.match(
+    run({ projectId: 'p-1', set: { linkProject: true } }, { events: [leadEvent({ projectId: 'p-9' })] }).skipped[0].why,
+    /nic do zmiany/
+  )
+  assert.match(run({ set: { time: '09:30' } }, { events: [leadEvent({ updatedFrom: [{ ref: 'gmail:upd' }] })] }).skipped[0].why, /już jest/)
+  // Projekt do wyboru w aplikacji: wydarzenie bez projektu → zmiana jest.
+  assert.equal(run({ client: 'Interprint', set: { linkProject: true } }).proposals.length, 1)
+
+  // newProjectRef: czeka w innym pliku → OK; odrzucony → błąd; przyjęty → ostrzeżenie.
+  const ref = { newProjectRef: 'gmail:sa#project', set: { linkProject: true } }
+  assert.deepEqual(run(ref, { projectNewRefs: new Map([['gmail:sa#project', 'a.json']]) }).errors, [])
+  assert.match(run(ref, { decisions: [decision('gmail:sa#project', 'rejected')] }).errors.join(), /odrzucono/)
+  assert.match(
+    run(ref, { decisions: [decision('gmail:sa#project', 'accepted', { projectId: 'p-sa' })] }).warnings.join(),
+    /już założony/
+  )
+})
+
+test('walidacja: nagłówek sync (okno przeglądu poczty)', () => {
+  const sync = { source: 'gmail', from: '2026-10-09T23:43:52+02:00', to: '2026-10-10T12:00:00+02:00', queries: ['after:2026/10/09'] }
+  assert.deepEqual(validateInboxDraft({ ...draft([]), sync }, ctx()).sync, sync)
+  assert.match(validateInboxDraft({ ...draft([]), sync: { ...sync, to: '2026-10-01' } }, ctx()).errors.join(), /po „to"/)
+  assert.match(validateInboxDraft({ ...draft([]), sync: { ...sync, from: 'wczoraj' } }, ctx()).errors.join(), /datami/)
+  assert.match(validateInboxDraft({ ...draft([]), sync: { from: 'x' } }, ctx()).errors.join(), /sync/)
+  const parsed = file('s.json', [], { sync })
+  assert.equal(parsed.status === 'ok' && parsed.sync?.to, sync.to)
 })
