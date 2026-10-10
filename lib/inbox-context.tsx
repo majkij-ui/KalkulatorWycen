@@ -4,8 +4,9 @@
  * Kontekst skrzynki propozycji (ekran „Skrzynka" + licznik w pasku bocznym).
  *
  * Czyta `inbox/` i decyzje, liczy, co czeka (`inbox.ts`), a akceptację
- * zapisuje przez ISTNIEJĄCE store'y: wydarzenie przez `useEvents().save`,
- * projekt przez `useProjectHub()` (nowy bez wyceny, uzupełnienie pól). Status
+ * zapisuje przez ISTNIEJĄCE store'y: wydarzenie (nowe i zmiana istniejącego)
+ * przez `useEvents().save`, projekt przez `useProjectHub()` (nowy bez wyceny,
+ * uzupełnienie pól). Status
  * projektu nigdy nie zmienia się tutaj — wynik akceptacji podaje tylko
  * podpowiedź, którą ekran pokazuje do potwierdzenia.
  *
@@ -19,6 +20,7 @@ import { useProjectHub } from './project-hub-context'
 import { listCampaigns } from './campaigns-store'
 import { listInboxDecisions, readInboxFiles, saveInboxDecisions } from './inbox-store'
 import {
+  applyEventUpdate,
   decisionRecord,
   eventFromProposal,
   groupProposals,
@@ -26,6 +28,7 @@ import {
   projectPatchFromFields,
   proposalProblems,
   statusAfter,
+  usesTarget,
   type InboxTarget,
   type PendingProposal,
   type ProposalGroup,
@@ -114,19 +117,23 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
 
   const accept = useCallback<InboxValue['accept']>(
     async (items, target) => {
+      const eventOf = (proposal: Proposal) =>
+        proposal.type === 'event_update' ? (allEvents.find((e) => e.id === proposal.eventId) ?? null) : undefined
       const failed = items
-        .map(({ item, proposal }) => ({ key: item.key, problems: proposalProblems(proposal, target) }))
+        .map(({ item, proposal }) => ({ key: item.key, problems: proposalProblems(proposal, target, eventOf(proposal)) }))
         .filter((f) => f.problems.length > 0)
       const valid = items.filter(({ item }) => !failed.some((f) => f.key === item.key))
       const result: AcceptResult = { accepted: 0, failed, project: null, createdProject: false, statusSuggestion: null }
       if (!valid.length) return result
+      // Sama godzina albo dane istniejącego wydarzenia nie potrzebują projektu.
+      const needsProject = valid.some(({ proposal }) => usesTarget(proposal))
 
       let project: Project | null =
         target.type === 'existing' ? (projects.find((p) => p.id === target.projectId) ?? null) : null
-      if (target.type === 'existing' && !project) {
+      if (needsProject && target.type === 'existing' && !project) {
         return { ...result, failed: items.map(({ item }) => ({ key: item.key, problems: ['project'] })) }
       }
-      if (target.type === 'new') {
+      if (needsProject && target.type === 'new') {
         const { name, client, date, leadSource, contact } = target.fields
         project = await createProjectWithoutQuote({ name, client, date, leadSource, contact })
         if (!project) return { ...result, failed: items.map(({ item }) => ({ key: item.key, problems: ['projectName'] })) }
@@ -149,6 +156,20 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
           await saveEvent(event)
           kinds.push(event.kind)
           await record([decisionRecord(item, 'accepted', { projectId: event.projectId ?? undefined, eventId: event.id })])
+        } else if (proposal.type === 'event_update') {
+          // Zmiana istniejącego wydarzenia: od oryginału z pliku (z nieznanymi
+          // polami i `source`), ślad w `updatedFrom`. Brak zmian = sama decyzja.
+          const original = eventOf(proposal)!
+          const projectId = proposal.set.linkProject ? (project?.id ?? null) : null
+          const next = applyEventUpdate(original, proposal, projectId, item.file)
+          if (next) await saveEvent(next)
+          await record([
+            decisionRecord(item, 'accepted', {
+              projectId: next?.projectId ?? undefined,
+              eventId: original.id,
+              eventTitle: original.title,
+            }),
+          ])
         } else if (project) {
           // Uzupełnienie projektu — także `project_new`, gdy wybrano istniejący projekt.
           const fields = proposal.type === 'project_update' ? proposal.set : proposal.project
@@ -169,14 +190,16 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
       }
       return result
     },
-    [projects, pending, createProjectWithoutQuote, updateProject, saveEvent, record]
+    [projects, pending, allEvents, createProjectWithoutQuote, updateProject, saveEvent, record]
   )
 
   const reject = useCallback(
     async (items: PendingProposal[]) => {
-      await record(items.map((item) => decisionRecord(item, 'rejected')))
+      const titleOf = (p: Proposal) =>
+        p.type === 'event_update' ? allEvents.find((e) => e.id === p.eventId)?.title : undefined
+      await record(items.map((item) => decisionRecord(item, 'rejected', { eventTitle: titleOf(item.proposal) })))
     },
-    [record]
+    [record, allEvents]
   )
 
   const reopen = useCallback(

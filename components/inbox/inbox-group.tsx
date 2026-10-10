@@ -8,12 +8,13 @@
  */
 
 import { useId, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Check, ChevronDown, FolderPlus, Loader2, Mail, Pencil, UserRound, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, FolderPlus, Loader2, Mail, Pencil, Repeat2, UserRound, X } from 'lucide-react'
 import { eventData, eventKind } from '@/lib/event-kinds'
 import {
   acceptedNewProjectId,
   defaultTarget,
   newProjectFieldsFor,
+  planEventUpdate,
   PROPOSAL_PROBLEM_TEXT,
   proposalDate,
   proposalProblems,
@@ -21,11 +22,14 @@ import {
   similarEvents,
   suggestProjects,
   SUGGESTION_LABELS,
+  usesTarget,
+  type EventFieldChange,
   type InboxTarget,
   type PendingProposal,
   type ProposalGroup,
 } from '@/lib/inbox'
 import type { Proposal } from '@/lib/inbox-types'
+import type { TimelineEvent } from '@/lib/event-types'
 import { useInbox, type AcceptResult } from '@/lib/inbox-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
@@ -35,7 +39,7 @@ import { plural } from '@/lib/pl-plural'
 import { KindChip, ProjectSwatch, formatDay, mono, pln, timeOf } from '@/components/calendar/calendar-bits'
 import { STATUS_DOT } from '@/components/projects/project-status-badge'
 import { FieldLabel, inputClass } from '@/components/marketing/marketing-bits'
-import { ContactFields, LeadSourceSelect, ProposalEditor } from './proposal-editor'
+import { ContactFields, LEAD_FIELD_LABELS, LeadSourceSelect, ProposalEditor } from './proposal-editor'
 
 const NEW = '__new__'
 const NONE = '__none__'
@@ -83,14 +87,90 @@ function projectDetails(proposal: Extract<Proposal, { type: 'project_update' | '
     .join(' · ')
 }
 
-function TypeChip({ proposal }: { proposal: Proposal }) {
+function TypeChip({ proposal, eventKindKey }: { proposal: Proposal; eventKindKey?: string }) {
   if (proposal.type === 'event') return <KindChip kind={proposal.event.kind} />
+  if (proposal.type === 'event_update') {
+    return (
+      <span className="flex shrink-0 items-center gap-1">
+        {eventKindKey && <KindChip kind={eventKindKey} />}
+        <span className="flex items-center gap-0.5 rounded-[3px] bg-zinc-700 px-1 py-[2px] text-[10px] font-semibold leading-none text-zinc-100">
+          <Repeat2 className="size-2.5" aria-hidden />
+          zmiana
+        </span>
+      </span>
+    )
+  }
   const Icon = proposal.type === 'project_new' ? FolderPlus : UserRound
   return (
     <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-zinc-700 px-1 py-[2px] text-[10px] font-semibold leading-none text-zinc-100">
       <Icon className="size-2.5" aria-hidden />
       {proposal.type === 'project_new' ? 'projekt' : 'dane'}
     </span>
+  )
+}
+
+/** „Przed → po" dla zmiany istniejącego wydarzenia. */
+function EventUpdateDiff({
+  event,
+  changes,
+  awaitingProject,
+  projectLabel,
+  campaignName,
+}: {
+  event: TimelineEvent
+  changes: EventFieldChange[]
+  /** Przypięcie czeka na wybór projektu dla wątku. */
+  awaitingProject: boolean
+  projectLabel: (id: string | null) => string
+  campaignName: (id: string) => string
+}) {
+  const kind = eventKind(event.kind)
+  const label = (field: string) => {
+    if (field === 'projectId') return 'Projekt'
+    if (field === 'start') return 'Kiedy'
+    const key = field.slice('data.'.length)
+    return kind.fields?.find((f) => f.key === key)?.label ?? LEAD_FIELD_LABELS[key] ?? key
+  }
+  const show = (field: string, value: unknown): string => {
+    if (value === undefined || value === null || value === '') return '—'
+    if (field === 'projectId') return projectLabel(value as string)
+    if (field === 'start') return when(String(value))
+    if (field === 'data.quality' && isLeadQuality(value)) return LEAD_QUALITY_LABELS[value]
+    if (field === 'data.campaignId') return campaignName(String(value))
+    if (field === 'data.origin') return leadSourceLabel(String(value))
+    return typeof value === 'object' ? JSON.stringify(value) : String(value)
+  }
+  if (!changes.length && !awaitingProject) {
+    return (
+      <p className="mt-1 text-[11px] text-zinc-500">
+        Bez zmian — wydarzenie ma już te dane (przy „tylko puste pola” nic nie nadpisujemy). Akceptacja tylko zamknie
+        propozycję.
+      </p>
+    )
+  }
+  return (
+    <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-md border border-white/5 bg-black/20 px-2.5 py-1.5 text-[11px]">
+      {awaitingProject && (
+        <div className="contents">
+          <dt className="text-zinc-600">Projekt</dt>
+          <dd className="min-w-0 break-words">
+            <span className="text-zinc-500">{show('projectId', event.projectId)}</span>
+            <span className="px-1.5 text-zinc-600" aria-label="zmienia się na">→</span>
+            <span className="text-amber-300/90">wybierz projekt powyżej</span>
+          </dd>
+        </div>
+      )}
+      {changes.map((c) => (
+        <div key={c.field} className="contents">
+          <dt className="text-zinc-600">{label(c.field)}</dt>
+          <dd className="min-w-0 break-words">
+            <span className="text-zinc-500 line-through decoration-zinc-700">{show(c.field, c.before)}</span>
+            <span className="px-1.5 text-zinc-600" aria-label="zmienia się na">→</span>
+            <span className="text-zinc-100">{show(c.field, c.after)}</span>
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -113,19 +193,41 @@ function ProposalRow({
   onAccept: () => void
   onReject: () => void
 }) {
-  const { events } = useEvents()
+  const { events, allEvents } = useEvents()
   const { projects } = useProjectHub()
   const { campaigns } = useInbox()
   const [preview, setPreview] = useState(false)
   const [editing, setEditing] = useState(false)
 
-  const problems = proposalProblems(proposal, target)
+  // Zmieniane wydarzenie (z usuniętymi — usunięte daje problem, nie znika z oczu).
+  const targetEvent =
+    proposal.type === 'event_update' ? (allEvents.find((e) => e.id === proposal.eventId) ?? null) : undefined
+  const problems = proposalProblems(proposal, target, targetEvent)
   const projectId = target.type === 'existing' ? target.projectId : null
   const similar = proposal.type === 'event' ? similarEvents(proposal.event, projectId, events) : []
   const projectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? 'bez projektu'
   const campaignName = (id: string) => campaigns.find((c) => c.id === id)?.name || 'kampania'
+  const previewProjectId = target.type === 'existing' ? target.projectId : target.type === 'new' ? NEW : null
+  const changes =
+    proposal.type === 'event_update' && targetEvent && !targetEvent.deletedAt
+      ? planEventUpdate(targetEvent, proposal, previewProjectId)
+      : []
+  const awaitingProject =
+    proposal.type === 'event_update' &&
+    !!proposal.set.linkProject &&
+    previewProjectId === null &&
+    !!targetEvent &&
+    (!targetEvent.projectId || !proposal.ifMissing)
+  const projectLabel = (id: string | null) =>
+    id === NEW && target.type === 'new' ? `nowy projekt „${target.fields.name}”` : projectName(id)
   const details =
-    proposal.type === 'event' ? eventDetails(proposal, campaignName) : projectDetails(proposal)
+    proposal.type === 'event'
+      ? eventDetails(proposal, campaignName)
+      : proposal.type === 'event_update'
+        ? targetEvent
+          ? `${eventKind(targetEvent.kind).label} z ${when(targetEvent.start)} · ${projectName(targetEvent.projectId)}`
+          : 'wydarzenie nie istnieje'
+        : projectDetails(proposal)
   const evidence = proposal.evidence
 
   return (
@@ -133,11 +235,11 @@ function ProposalRow({
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
         <div className="flex min-w-[14rem] flex-1 items-start gap-2">
           <span className="mt-0.5">
-            <TypeChip proposal={proposal} />
+            <TypeChip proposal={proposal} eventKindKey={targetEvent?.kind} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="truncate text-sm text-zinc-100">{proposalTitle(proposal)}</span>
+              <span className="truncate text-sm text-zinc-100">{proposalTitle(proposal, targetEvent?.title)}</span>
               {edited && <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/90">zmieniona</span>}
             </div>
             <div className="text-[11px] text-zinc-500">
@@ -145,6 +247,15 @@ function ProposalRow({
               {details && <span>{proposalDate(proposal) ? ' · ' : ''}{details}</span>}
             </div>
             {proposal.reason && <p className="mt-0.5 text-[11px] italic text-zinc-500">{proposal.reason}</p>}
+            {proposal.type === 'event_update' && targetEvent && !targetEvent.deletedAt && (
+              <EventUpdateDiff
+                event={targetEvent}
+                changes={changes}
+                awaitingProject={awaitingProject}
+                projectLabel={projectLabel}
+                campaignName={campaignName}
+              />
+            )}
           </div>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -312,7 +423,11 @@ export function InboxGroup({
   const project = target.type === 'existing' ? projects.find((p) => p.id === target.projectId) : undefined
 
   const current = (item: PendingProposal) => edits.get(item.key) ?? item.proposal
-  const acceptable = group.items.filter((item) => proposalProblems(current(item), target).length === 0)
+  const eventFor = (p: Proposal) =>
+    p.type === 'event_update' ? (allEvents.find((e) => e.id === p.eventId) ?? null) : undefined
+  const acceptable = group.items.filter(
+    (item) => proposalProblems(current(item), target, eventFor(current(item))).length === 0
+  )
 
   const run = async (items: PendingProposal[]) => {
     setBusy(true)
@@ -353,10 +468,19 @@ export function InboxGroup({
     if (target.type === 'new') setOverride({ ...target, fields: { ...target.fields, ...patch } })
   }
 
-  const meta = [group.client && group.client !== group.title ? group.client : '', group.emails.join(', ')]
+  // Grupa samych zmian bez tematu i klienta — tytuł z nazwy zmienianego wydarzenia.
+  const first = group.items[0]?.proposal
+  const firstEvent = first?.type === 'event_update' ? eventFor(first) : undefined
+  const title =
+    first?.type === 'event_update' && !first.evidence?.subject && !group.client && firstEvent?.title
+      ? firstEvent.title
+      : group.title
+  const meta = [group.client && group.client !== title ? group.client : '', group.emails.join(', ')]
     .filter(Boolean)
     .join(' · ')
   const suggestedIds = new Set(suggestions.map((s) => s.projectId))
+  // Grupa samych poprawek godziny / danych nie potrzebuje projektu — bez wyboru.
+  const showPicker = group.items.some((item) => usesTarget(current(item)))
   const selectValue =
     target.type === 'existing' ? target.projectId : target.type === 'new' ? NEW : target.type === 'none' ? NONE : ''
 
@@ -364,7 +488,7 @@ export function InboxGroup({
     <section className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
       <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-zinc-100">{group.title}</h2>
+          <h2 className="truncate text-sm font-semibold text-zinc-100">{title}</h2>
           {(meta || !group.client) && (
             <p className="truncate text-[11px] text-zinc-500">{meta || 'Bez danych klienta'}</p>
           )}
@@ -374,6 +498,7 @@ export function InboxGroup({
         </span>
       </header>
 
+      {showPicker && (
       <div className="mb-2 rounded-lg border border-white/5 bg-black/20 p-2.5">
         <FieldLabel htmlFor={`${id}-project`}>Projekt dla tego wątku</FieldLabel>
         <div className="flex flex-wrap items-center gap-2">
@@ -473,6 +598,7 @@ export function InboxGroup({
           </div>
         )}
       </div>
+      )}
 
       <ul className="divide-y divide-white/[0.04]">
         {group.items.map((item) => (

@@ -20,6 +20,18 @@ import { LEAD_SOURCES, LEAD_SOURCE_LABELS, type ProjectContact } from '@/lib/pro
 import { isLeadQuality } from '@/lib/marketing-types'
 import { FieldLabel, QualityPicker, inputClass } from '@/components/marketing/marketing-bits'
 
+/** Etykiety pól `data` leada (pola zakładki Marketing — formularz kalendarza ich nie zna). */
+export const LEAD_FIELD_LABELS: Record<string, string> = {
+  channel: 'Kanał',
+  summary: 'O co pyta',
+  quality: 'Jakość',
+  campaignId: 'Kampania',
+  origin: 'Pochodzenie',
+  contactName: 'Osoba kontaktowa',
+  email: 'E-mail',
+  phone: 'Telefon',
+}
+
 /** Typy do wyboru: bez spraw firmy (zakup sprzętu żyje w katalogu, marketing w kampaniach). */
 const PICKABLE_KINDS = EVENT_KINDS.filter((k) => k.scope !== 'business')
 
@@ -290,6 +302,81 @@ function ProjectFieldsEditor({
   )
 }
 
+/**
+ * Zmiana istniejącego wydarzenia: przypięcie do projektu wątku, godzina, pola
+ * `data`. Dzień, typ i status się tu nie pojawiają — tego `event_update` nie zmienia.
+ */
+function EventUpdateEditor({
+  proposal,
+  onApply,
+  onCancel,
+}: {
+  proposal: Extract<Proposal, { type: 'event_update' }>
+  onApply: (next: Proposal) => void
+  onCancel: () => void
+}) {
+  const id = useId()
+  const [link, setLink] = useState(!!proposal.set.linkProject)
+  const [time, setTime] = useState(proposal.set.time ?? '')
+  const [data, setData] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(proposal.set.data ?? {}).map(([k, v]) => [k, typeof v === 'string' ? v : String(v)]))
+  )
+  const [ifMissing, setIfMissing] = useState(proposal.ifMissing)
+
+  const apply = () => {
+    const original = proposal.set.data ?? {}
+    const nextData = Object.fromEntries(
+      Object.entries(data)
+        .filter(([, v]) => v.trim())
+        // Wartości nie-tekstowe (liczby) zostają takie, jakie były, jeśli ich nie ruszono.
+        .map(([k, v]) => [k, typeof original[k] !== 'string' && String(original[k]) === v ? original[k] : v.trim()])
+    )
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { linkProject, time: _time, data: _data, ...rest } = proposal.set
+    onApply({
+      ...proposal,
+      ifMissing,
+      set: {
+        ...rest,
+        ...(link ? { linkProject: true } : {}),
+        ...(/^\d{2}:\d{2}$/.test(time) ? { time } : {}),
+        ...(Object.keys(nextData).length ? { data: nextData } : {}),
+      },
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-xs text-zinc-300">
+        <input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />
+        Przypnij do projektu wybranego dla wątku
+      </label>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div>
+          <FieldLabel htmlFor={`${id}-time`}>Godzina</FieldLabel>
+          <input id={`${id}-time`} type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputClass} />
+        </div>
+        {Object.keys(data).map((key) => (
+          <div key={key}>
+            <FieldLabel htmlFor={`${id}-d-${key}`}>{LEAD_FIELD_LABELS[key] ?? key}</FieldLabel>
+            <input
+              id={`${id}-d-${key}`}
+              value={data[key]}
+              onChange={(e) => setData((d) => ({ ...d, [key]: e.target.value }))}
+              className={inputClass}
+            />
+          </div>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-xs text-zinc-400">
+        <input type="checkbox" checked={ifMissing} onChange={(e) => setIfMissing(e.target.checked)} />
+        Tylko puste pola (wydarzenie już przypięte zostaje przy swoim projekcie)
+      </label>
+      <EditorButtons onApply={apply} onCancel={onCancel} />
+    </div>
+  )
+}
+
 function EditorButtons({ onApply, onCancel }: { onApply: () => void; onCancel: () => void }) {
   return (
     <div className="flex items-center gap-2">
@@ -324,6 +411,8 @@ export function ProposalEditor({
     <div className="mt-2 rounded-lg border border-white/10 bg-black/30 p-3">
       {proposal.type === 'event' ? (
         <EventEditor proposal={proposal} onApply={onApply} onCancel={onCancel} />
+      ) : proposal.type === 'event_update' ? (
+        <EventUpdateEditor proposal={proposal} onApply={onApply} onCancel={onCancel} />
       ) : (
         <ProjectFieldsEditor proposal={proposal} onApply={onApply} onCancel={onCancel} />
       )}
