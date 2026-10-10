@@ -35,6 +35,8 @@ interface CrewContextValue {
   roles: CrewRole[]
   /** Role do wyboru (bez wycofanych). */
   activeRoles: CrewRole[]
+  /** Id ról zapisanych w pliku; wbudowana rola spoza tego zbioru idzie za cennikiem. */
+  storedRoleIds: Set<string>
   /** Ludzie bez usuniętych (wycofani zostają). */
   people: CrewMember[]
   /** Wszyscy, z usuniętymi — do cofania. */
@@ -81,6 +83,7 @@ export function CrewProvider({ children }: { children: React.ReactNode }) {
   const roles = useMemo(() => resolveCrewRoles(storedRoles, pricingConfig), [storedRoles, pricingConfig])
   const activeRoles = useMemo(() => activeCrewRoles(roles), [roles])
   const people = useMemo(() => liveCrewMembers(allPeople), [allPeople])
+  const storedRoleIds = useMemo(() => new Set(storedRoles.map((r) => r.id)), [storedRoles])
 
   const saveRole = useCallback(async (role: CrewRole) => {
     setStoredRoles(await upsertCrewRole({ ...role, updatedAt: new Date().toISOString() }))
@@ -118,6 +121,7 @@ export function CrewProvider({ children }: { children: React.ReactNode }) {
   const value: CrewContextValue = {
     roles,
     activeRoles,
+    storedRoleIds,
     people,
     allPeople,
     isLoading,

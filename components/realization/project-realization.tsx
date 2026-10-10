@@ -23,6 +23,9 @@ import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useQuote } from '@/lib/quote-context'
+import { useCrew } from '@/lib/crew-context'
+import { crewRoleByName } from '@/lib/crew-types'
+import { unknownCrewNames, type UnknownCrewName } from '@/lib/crew-stats'
 import { createEvent } from '@/lib/events-store'
 import { eventKind } from '@/lib/event-kinds'
 import type { TimelineEvent } from '@/lib/event-types'
@@ -34,6 +37,7 @@ import {
   costsOfDay,
   crewSuggestions,
   isCrew,
+  personKey,
   projectLevelCosts,
   restoreCosts,
   softDeleteCost,
@@ -71,7 +75,7 @@ import { EventForm } from '@/components/calendar/event-form'
 import { EventNotice, noticeAfterSave, type EventNoticeState } from '@/components/calendar/event-notice'
 import { GearGrid, type DayRemoval } from '@/components/equipment/project-equipment'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { CostRow, CrewDatalist } from './cost-rows'
+import { CostRow, CrewRoleDatalist } from './cost-rows'
 import { DayCalendar, formatDayLong, type DayCalendarActions } from './day-calendar'
 import { DayCards } from './day-cards'
 import { NewDayButton, type NewDay } from './new-day'
@@ -107,6 +111,7 @@ function eventRange(event: Pick<TimelineEvent, 'start' | 'end'>): string {
 
 function RealizationView({ project }: { project: Project }) {
   const crewListId = useId()
+  const { people: crewPeople, roles: crewRoles, activeRoles, addPerson } = useCrew()
   const { allEvents, save: saveEvent, remove: removeEvent, restore: restoreEvent } = useEvents()
   const { updateProject, projects } = useProjectHub()
   const { items } = useEquipment()
@@ -390,13 +395,40 @@ function RealizationView({ project }: { project: Project }) {
     [projects, project.id, project.date, costs]
   )
 
+  // Imiona z wierszy ekipy tego projektu, których nie ma w bazie Ekipa —
+  // rekordy powstają dopiero po kliknięciu „Dodaj do bazy".
+  const outsideNames = useMemo(
+    () => unknownCrewNames([{ date: project.date, costs, deletedAt: undefined }], crewPeople),
+    [project.date, costs, crewPeople]
+  )
+
+  const addToCrewBase = async (entry: UnknownCrewName) => {
+    const member = await addPerson({
+      name: entry.name,
+      roleIds: entry.roles.map((r) => crewRoleByName(crewRoles, r)?.id).filter((id): id is string => !!id),
+      rate: entry.lastRate > 0 ? entry.lastRate : undefined,
+    })
+    if (!member) return
+    // Wiersze tego projektu z tym imieniem dostają powiązanie z nową osobą.
+    const key = personKey(entry.name)
+    const liveIds = new Set(crewPeople.map((m) => m.id))
+    commitCosts(
+      costsRef.current.map((c) =>
+        isCrew(c) && !c.deletedAt && (!c.personId || !liveIds.has(c.personId)) && personKey(c.person) === key
+          ? { ...c, personId: member.id }
+          : c
+      )
+    )
+    setNotice({ message: `Dodano „${member.name}" do Ekipy — kontakt i stawkę uzupełnisz w sekcji Ekipa.` })
+  }
+
   const projectCosts = projectLevelCosts(costs, days.map((d) => d.id))
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
   const newDayButton = <NewDayButton onAdd={addDay} />
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-6">
-      <CrewDatalist id={crewListListId(crewListId)} suggestions={suggestions} />
+      <CrewRoleDatalist id={crewListListId(crewListId)} names={activeRoles.map((r) => r.name)} />
 
       <header className="space-y-1">
         <h2 className="text-lg font-bold tracking-tight text-white" style={archivo}>
@@ -471,13 +503,31 @@ function RealizationView({ project }: { project: Project }) {
             {newDayButton}
           </div>
         </div>
+        {outsideNames.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">
+            <span>Spoza bazy Ekipa:</span>
+            {outsideNames.map((entry) => (
+              <button
+                key={personKey(entry.name)}
+                type="button"
+                onClick={() => void addToCrewBase(entry)}
+                title={[entry.roles.join(', '), entry.lastRate ? `${entry.lastRate} zł` : ''].filter(Boolean).join(' · ') || undefined}
+                className="inline-flex items-center gap-1 rounded-md border border-white/10 px-1.5 py-0.5 font-semibold text-zinc-200 hover:bg-white/5"
+              >
+                <Plus className="size-3" />
+                {entry.name}
+              </button>
+            ))}
+            <span className="text-zinc-600">— kliknij, żeby dodać do bazy</span>
+          </div>
+        )}
         <DayCards
           days={days}
           info={info}
           costs={costs}
           rentByDay={rentByDay}
-          suggestions={suggestions}
-          crewListId={crewListListId(crewListId)}
+          outsiders={suggestions}
+          roleListId={crewListListId(crewListId)}
           dayLabel={labelOf}
           calendar={calendarActions}
           dayRemoval={dayRemoval}

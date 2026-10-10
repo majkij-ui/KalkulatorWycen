@@ -259,3 +259,31 @@ export function createCrewMember(
   if (params.notes?.trim()) member.notes = params.notes.trim()
   return member
 }
+
+// ── Wybór osoby i kontakt ────────────────────────────────────────────────────
+
+/**
+ * Ludzie do wyboru w wierszu ekipy: najpierw ci, którzy mają tę rolę, potem
+ * reszta (alfabetycznie). `query` zawęża po imieniu (bez wielkości liter i
+ * polskich znaków). Wycofani i usunięci nie są do wyboru.
+ */
+export function crewPickerOptions(
+  members: CrewMember[],
+  roleId: string | null,
+  query = ''
+): { withRole: CrewMember[]; others: CrewMember[] } {
+  const needle = personKey(query)
+  const list = pickableCrewMembers(members)
+    .filter((m) => !needle || personKey(m.name).includes(needle))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+  if (!roleId) return { withRole: [], others: list }
+  return {
+    withRole: list.filter((m) => m.roleIds.includes(roleId)),
+    others: list.filter((m) => !m.roleIds.includes(roleId)),
+  }
+}
+
+/** Kontakt do skopiowania: „Imię · telefon · e-mail" (puste pola pominięte). */
+export function crewContactText(member: Pick<CrewMember, 'name' | 'contact'>): string {
+  return [member.name.trim(), member.contact?.phone?.trim(), member.contact?.email?.trim()].filter(Boolean).join(' · ')
+}

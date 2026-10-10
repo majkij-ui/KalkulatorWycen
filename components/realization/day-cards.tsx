@@ -25,8 +25,10 @@ export interface DayCardsProps {
   costs: ProjectCost[]
   /** Odpracował sprzęt w dniu (z podsumowania siatki). */
   rentByDay: Map<string, number>
-  suggestions: CrewSuggestion[]
-  crewListId: string
+  /** Imiona z innych projektów spoza bazy Ekipa (lista wyboru osoby). */
+  outsiders: CrewSuggestion[]
+  /** `datalist` z nazwami ról. */
+  roleListId: string
   dayLabel: (day: GearDay, index: number) => string
   calendar: DayCalendarActions
   dayRemoval: (day: GearDay) => DayRemoval
@@ -62,8 +64,8 @@ function DayCard({
   info,
   costs,
   rentByDay,
-  suggestions,
-  crewListId,
+  outsiders,
+  roleListId,
   dayLabel,
   calendar,
   dayRemoval,
@@ -146,8 +148,8 @@ function DayCard({
             <CrewRow
               key={cost.id}
               cost={cost}
-              suggestions={suggestions}
-              listId={crewListId}
+              outsiders={outsiders}
+              roleListId={roleListId}
               onChange={(patch) => onChangeCost(cost.id, patch)}
               onRemove={() => onRemoveCost(cost)}
             />

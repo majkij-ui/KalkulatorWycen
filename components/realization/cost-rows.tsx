@@ -8,9 +8,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { parseAmount } from '@/lib/event-draft'
-import { costAmount, personKey, type CrewSuggestion } from '@/lib/project-costs'
+import { costAmount, type CrewSuggestion } from '@/lib/project-costs'
 import { COST_CATEGORIES, costCategoryLabel, type ProjectCost } from '@/lib/project-types'
 import { pln } from '@/components/calendar/calendar-bits'
+import { PersonPicker } from './person-picker'
 
 export const fieldClass =
   'h-8 min-w-0 rounded-md border border-white/10 bg-black/40 px-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/30'
@@ -72,42 +73,32 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
   )
 }
 
-/** Osoba z ekipy: imię (podpowiedzi z innych projektów), rola, stawka za dzień. */
+/**
+ * Osoba z ekipy: osoba z bazy Ekipa albo wpisana tekstem (`PersonPicker`),
+ * rola (podpowiedzi z listy ról), stawka za dzień.
+ */
 export function CrewRow({
   cost,
-  suggestions,
-  listId,
+  outsiders,
+  roleListId,
   onChange,
   onRemove,
 }: {
   cost: ProjectCost
-  suggestions: CrewSuggestion[]
-  listId: string
+  /** Imiona z innych projektów spoza bazy — trzecia sekcja listy wyboru. */
+  outsiders: CrewSuggestion[]
+  /** `datalist` z nazwami ról. */
+  roleListId: string
   onChange: (patch: Partial<ProjectCost>) => void
   onRemove: () => void
 }) {
   const quantity = cost.quantity ?? 1
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
-      <input
-        value={cost.person ?? ''}
-        list={listId}
-        placeholder="Osoba"
-        aria-label="Osoba"
-        onChange={(e) => {
-          const person = e.target.value
-          // Wybór znanej osoby uzupełnia rolę i stawkę — tylko puste pola.
-          const known = suggestions.find((s) => personKey(s.person) === personKey(person))
-          onChange({
-            person,
-            ...(known && !cost.role ? { role: known.role } : {}),
-            ...(known && !cost.unitCost ? { unitCost: known.unitCost } : {}),
-          })
-        }}
-        className={`${fieldClass} w-full sm:w-auto sm:flex-[3]`}
-      />
+      <PersonPicker cost={cost} outsiders={outsiders} onChange={onChange} className="w-full sm:w-auto sm:flex-[3]" />
       <input
         value={cost.role ?? ''}
+        list={roleListId}
         placeholder="Rola"
         aria-label="Rola"
         onChange={(e) => onChange({ role: e.target.value })}
@@ -190,14 +181,12 @@ export function CostRow({
   )
 }
 
-/** Podpowiedzi osób dla pól „Osoba" (jedna lista na zakładkę). */
-export function CrewDatalist({ id, suggestions }: { id: string; suggestions: CrewSuggestion[] }) {
+/** Podpowiedzi ról dla pól „Rola" (jedna lista na zakładkę): aktywne role z bazy Ekipa. */
+export function CrewRoleDatalist({ id, names }: { id: string; names: string[] }) {
   return (
     <datalist id={id}>
-      {suggestions.map((s) => (
-        <option key={personKey(s.person)} value={s.person}>
-          {[s.role, s.unitCost ? pln(s.unitCost) : ''].filter(Boolean).join(' · ')}
-        </option>
+      {names.map((name) => (
+        <option key={name} value={name} />
       ))}
     </datalist>
   )

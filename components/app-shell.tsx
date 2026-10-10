@@ -21,6 +21,7 @@ import {
   NotebookPen,
   Package,
   Settings2,
+  Users,
   Waypoints,
 } from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
@@ -40,9 +41,10 @@ import { FinanceSection } from '@/components/finance/finance-section'
 import { CalendarSection } from '@/components/calendar/calendar-section'
 import { MarketingSection } from '@/components/marketing/marketing-section'
 import { InboxSection } from '@/components/inbox/inbox-section'
+import { CrewSection } from '@/components/crew/crew-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
-type Section = 'kalendarz' | 'skrzynka' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ustawienia'
+type Section = 'kalendarz' | 'skrzynka' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ekipa' | 'ustawienia'
 
 const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'kalendarz', label: 'Kalendarz', icon: CalendarDays },
@@ -51,6 +53,7 @@ const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'finanse', label: 'Finanse', icon: BarChart3 },
   { value: 'marketing', label: 'Marketing', icon: Megaphone },
   { value: 'sprzet', label: 'Sprzęt', icon: Package },
+  { value: 'ekipa', label: 'Ekipa', icon: Users },
   { value: 'ustawienia', label: 'Ustawienia', icon: Settings2 },
 ]
 
@@ -230,6 +233,8 @@ function ShellContent() {
         {section === 'marketing' && <MarketingSection onOpenProject={goToProject} />}
 
         {section === 'sprzet' && <EquipmentSection onOpenProject={(id) => goToProject(id, 'sprzet')} />}
+
+        {section === 'ekipa' && <CrewSection onOpenProject={(id) => goToProject(id, 'sprzet')} />}
 
         {section === 'ustawienia' && (
           <ComingSoon
