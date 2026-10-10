@@ -104,8 +104,8 @@ usual problem with free text ("Tchibo" / "Tchibo Polska" / "tchibo" counting as 
 
 - The client input is a **picker over names already used**, with free typing for a new client.
 - Grouping uses a normalised key (trimmed, case- and diacritic-insensitive), so small spelling
-  differences still group together. A "merge names" action in Settings fixes real duplicates by
-  rewriting the field on the affected projects.
+  differences still group together. A "merge names" action (built in T10 on the client page, §6d)
+  fixes real duplicates by rewriting the field on the affected projects.
 - Picking an existing client **copies contact details** from that client's most recent project, so
   repeat clients still prefill the lead and the quote.
 - "How much did this client bring in" = filter the projects by client and sum their financials. That
@@ -458,7 +458,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T9a Ekipa: people + Realizacja** ✅ (2026-10-10, §6d) | `crew-roles.json` (built-in roles from the price list until edited), `crew.json` (people, contact, rate), screen „Ekipa" with derived stats (days together, projects, paid, average rate, history, ranking), person picker with „+ Nowa osoba" in Realizacja crew rows (`ProjectCost.personId`), "Dodaj do bazy" for names already used. Pure: `crew-types.ts`, `crew-stats.ts`; store `crew-store.ts`, context `crew-context.tsx`. 21 new tests; 20/20 mutations caught; flows verified in the browser preview. | T5a |
 | **T9b Ekipa in the quote** ✅ (2026-10-10, §6d "T9b as built") | Per-day crew lines (`ShootingDay.crew`): role placeholder or person from the T9a database, **+ Nowa rola**, names and rates frozen; client price from the role × header margin, person changes only my cost; old counters folded under „Stare pozycje ekipy" and priced exactly as before (golden tests on old-app quotes); one plan cost line per crew line; "Przepisz ekipę z planu" carries the person; crew in G6 kits (quote and Realizacja); PDF Ekipa/Obsada rows list roles, names only on request. Pure: `quote-crew.ts`. 15 new tests + 4 golden; 14/14 mutations caught; flows verified on the production build. | T9a, G5 |
 | **T9c Retire the old rows** (idea, §6d) | New quotes stop offering fixed crew counters and old gear fields; quick-mode packages become kits. Old quotes unchanged. | T9b, use in practice |
-| **T10 Klienci** (idea, §6d) | Sidebar list + page per client, all derived: revenue (total, per year, share), return rhythm, size trend, win rate, first lead source, merge spellings. Days to payment after T6, crew after T9. | T3 |
+| **T10 Klienci** ✅ (2026-10-10, §6d) | Sidebar „Klienci" after „Projekty": list (projects, jobs, revenue, last project, „wraca", „dawno bez zlecenia"; sort by revenue / recency / count; search ignores case and Polish letters) and a page per client, all derived: revenue (total, per year, share), profit and margin, return rhythm with a nudge, size trend, win rate, first lead source, days to payment from invoice events, project list, latest contact with copy. „Scal nazwy" rewrites `client` in one write, with undo. Pure: `client-stats.ts`, `client-merge.ts`, `patchProjects`. 24 new tests + 1 integration test; 39/39 mutations caught; verified in the browser. Crew per client after T9. | T3 |
 
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
@@ -599,7 +599,7 @@ costs stay in `financials.koszty`.
 - Crew suggestions come only from won/done projects (quote rates are hypotheses).
 - Day labels default to "Dzień N" over all days (prep included); an event title is used when set.
 
-## 6d. Crew database and client pages *(M.J. 2026-10-10; T9a built, T9b, T9c and T10 open)*
+## 6d. Crew database and client pages *(M.J. 2026-10-10; T9a, T9b and T10 built the same day, T9c open)*
 
 ### Ekipa — a database of people, picked like gear (T9)
 
@@ -664,6 +664,59 @@ projects grow or shrink, revenue brought in by that client.
 - **"Scal nazwy"** (merge spellings, planned for Settings in §3.2a) lives on this page instead.
 - **Only if needed later:** a small `clients.json` keyed by `clientKey` for facts that can't be
   derived (NIP and address for invoices, notes). That would revisit decision 3 in §7.
+
+**As built (2026-10-10):**
+- **Still no clients file.** Every number is derived per `clientKey` in `lib/client-stats.ts` (pure, on
+  top of `clients.ts`). The only write is „Scal nazwy", which rewrites `Project.client` through
+  `patchProjects` / `updateProjects`: one queued write on the freshly read file, so fields changed
+  elsewhere, unknown fields and soft-deleted projects survive.
+- **Definitions** (constants exported from `client-stats.ts`):
+  - *job* = won / done. Revenue = `financials.sumaNetto` of jobs, year by ledger date (Finance rule).
+    Share = client revenue ÷ revenue of all jobs, including projects without a client; the per-year
+    share uses that year's total.
+  - Profit = sum of `financials.zysk` of jobs (the plan; actuals come with T6), margin = profit ÷
+    revenue. Jobs without financials count as 0 and are flagged on the revenue tile.
+  - „wraca" = at least `REPEAT_MIN_JOBS` (2) jobs.
+  - Rhythm: distinct job dates (two jobs on the same day = one return), median gap in days, full
+    calendar months since the last job. **Nudge** when the days since the last job exceed
+    max(1.5 × median, median + 60) and no open quote is dated on or after the last job. Needs at
+    least two distinct job dates. The list's "last project" is the newest project of any status;
+    the rhythm uses jobs only.
+  - Size trend: jobs with an amount, in date order. From 3 of them, the mean of the second half is
+    compared with the first (the middle one is skipped when odd): ≥ 1.2× „rośnie", ≤ 1/1.2 „maleje",
+    otherwise „stabilnie"; the sentence under the bars says by how much.
+  - Win rate = won ÷ (won + lost); open quotes are shown separately.
+  - First lead source = `leadSource` of the **oldest** project (any status), „nieustalone" when empty.
+    No fallback to later projects: those usually say `powracajacy`.
+  - Days to payment: `thread-stats` invoice pairing per project; median and longest of the paid ones,
+    plus open invoices with the longest wait (planned ones don't count).
+- **Screen** (`components/clients/`, Sprzęt look, Archivo / JetBrains Mono from the calendar):
+  - List: tiles (clients, repeat clients and their share of revenue, revenue from clients plus
+    revenue in jobs without a client, clients past their usual gap), search, sort remembered in
+    `nonoise-clients-sort-v1`. „Klienci" in the sidebar always returns to the list, like „Projekty".
+  - Page: „wraca" mark, nudge banner, six tiles (revenue, profit, win rate, return rhythm, days to
+    payment, first contact), bars of job values (one brand colour, label on hover/focus, click opens
+    the project), revenue per year with share, project list showing each project's spelling (click →
+    `goToProject`), latest contact with copy per field and „kopiuj wszystko".
+- **„Scal nazwy"** (`lib/client-merge.ts`): pick one of the spellings or type a new name, add other
+  clients (similar names are suggested: a shared meaningful word, or one name without spaces and
+  punctuation starting the other; legal forms and „Polska" don't count), preview each project's old →
+  new value, confirm with the count. „Cofnij" restores each project's exact previous value, but only
+  where the field still holds the merged name (later edits and deleted projects are left alone). The
+  page follows the new key, and the Projekty list's remembered client filter follows too (restored on
+  undo). Quotes, including the client name printed on the PDF, are not touched.
+- **Tests:** `client-stats.test.ts` (17), `client-merge.test.ts` (7), one integration test for
+  `patchProjects` in `v3-integration.test.ts`; 39/39 deliberate mutations caught. Verified in the
+  browser preview on seeded localStorage (numbers checked by hand, merge and undo incl. a rename to a
+  new key, opening a project, search, sort, phone width); storage restored afterwards. The static
+  export builds.
+- **Known limits / next:**
+  - „Cofnij" lives until you leave the Klienci screen, like the other notices.
+  - Crew per client waits for T9. Retro projects without invoice events show „—" for payment.
+  - No link from the project header's client to the client page yet (a `goToClient(key)` in the
+    shell would do).
+  - The nudge looks at ledger dates only, so a long `won` job with an old ledger date can still
+    trigger it.
 
 ### Decided (M.J. 2026-10-10)
 1. **The client price comes from the role.** The person only changes my cost (plan line), never the
@@ -859,8 +912,7 @@ header asks for it, and months without a reading count as 0 zł (no estimate).
 
 ### Follow-ups noticed during T3
 
-- "Merge client names" in Settings (rewrite `client` on the affected projects) is still open; grouping
-  already treats spelling variants as one client.
+- ~~"Merge client names" in Settings~~ — done in T10 as „Scal nazwy" on the client page (§6d).
 - The financials backfill and the quote migration read and write the whole project file outside the
   write queue. Both are rare manual actions; move them onto `store.mutate` if that ever matters.
 - The event form opened from a project still offers business kinds (gear purchase, marketing) and

@@ -50,6 +50,7 @@ import {
   filterProjects,
   listAllProjects,
   listProjects,
+  patchProjects,
   restoreProject,
   setProjectStatus,
   upsertProject,
@@ -398,4 +399,44 @@ test('usunięta zmigrowana wycena nie wraca przy ponownej migracji', async () =>
   assert.equal(again.status, 'skipped-already-done')
   assert.equal((await listProjects()).length, 1)
   assert.equal((await listAllProjects()).length, 2)
+})
+
+test('patchProjects: wiele projektów jednym zapisem, na świeżym pliku, bez gubienia obcych pól i usuniętych', async () => {
+  const a = createProject({ name: 'A', client: 'tchibo ' })
+  const b = createProject({ name: 'B', client: 'Tchibo Polska' })
+  const c = createProject({ name: 'C', client: 'Kino Muza' })
+  const gone = createProject({ name: 'Usunięty', client: 'tchibo' })
+  for (const p of [a, b, c, gone]) await upsertProject(p)
+  await deleteProject(gone.id)
+  // Ktoś (import, druga instancja) zmienił plik po wczytaniu listy — łata nie może tego cofnąć.
+  const raw = JSON.parse(storage.getItem(WEB_PROJECTS_KEY) ?? '{}')
+  raw.items = raw.items.map((p: Record<string, unknown>) => (p.id === a.id ? { ...p, notes: 'z importu', gmailThreadId: 't-9' } : p))
+  storage.setItem(WEB_PROJECTS_KEY, JSON.stringify(raw))
+
+  let writes = 0
+  const setItem = storage.setItem.bind(storage)
+  storage.setItem = (key: string, value: string) => {
+    if (key === WEB_PROJECTS_KEY) writes += 1
+    setItem(key, value)
+  }
+  const visible = await patchProjects(
+    [
+      { id: a.id, patch: { client: 'Tchibo' } },
+      { id: b.id, patch: { client: 'Tchibo' } },
+    ],
+    '2026-10-10T12:00:00.000Z'
+  )
+  storage.setItem = setItem
+
+  assert.equal(writes, 1, 'jeden zapis dla całej łaty')
+  assert.deepEqual(visible.map((p) => p.name).sort(), ['A', 'B', 'C'])
+  const all = await listAllProjects()
+  const byId = new Map(all.map((p) => [p.id, p]))
+  assert.equal(byId.get(a.id)?.client, 'Tchibo')
+  assert.equal(byId.get(b.id)?.client, 'Tchibo')
+  assert.equal(byId.get(c.id)?.client, 'Kino Muza')
+  assert.equal(byId.get(a.id)?.updatedAt, '2026-10-10T12:00:00.000Z')
+  assert.equal(byId.get(a.id)?.notes, 'z importu')
+  assert.equal((byId.get(a.id) as Record<string, unknown>).gmailThreadId, 't-9')
+  assert.ok(byId.get(gone.id)?.deletedAt, 'usunięty zostaje w pliku')
 })

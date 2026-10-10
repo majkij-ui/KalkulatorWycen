@@ -72,6 +72,28 @@ export async function upsertProject(project: Project): Promise<Project[]> {
 }
 
 /**
+ * Zmiana pól wielu projektów jednym zapisem (np. „Scal nazwy" klienta). Łata
+ * trafia na świeżo odczytany plik, więc nie cofa cudzych zmian w innych polach.
+ * Zwraca widoczne projekty.
+ */
+export async function patchProjects(
+  patches: { id: string; patch: Partial<Project> }[],
+  updatedAt: string = new Date().toISOString()
+): Promise<Project[]> {
+  const byId = new Map(patches.map(({ id, patch }) => [id, patch]))
+  return visible(
+    await store.mutate((all) =>
+      all.map((p) => {
+        const patch = byId.get(p.id)
+        if (!patch) return p
+        const next: Project = { ...p, ...patch, id: p.id, updatedAt }
+        return next.colorKey ? next : { ...next, colorKey: projectColorFor(next) }
+      })
+    )
+  )
+}
+
+/**
  * Usunięcie jest MIĘKKIE: projekt dostaje `deletedAt` i znika z widoków, ale
  * zostaje w pliku (da się cofnąć). `deletedAt` jawnie — ten sam znacznik
  * dostaje wątek projektu.

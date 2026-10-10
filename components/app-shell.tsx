@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Clapperboard,
   FolderKanban,
+  Handshake,
   Inbox,
   Megaphone,
   NotebookPen,
@@ -41,15 +42,26 @@ import { FinanceSection } from '@/components/finance/finance-section'
 import { CalendarSection } from '@/components/calendar/calendar-section'
 import { MarketingSection } from '@/components/marketing/marketing-section'
 import { InboxSection } from '@/components/inbox/inbox-section'
+import { ClientsSection } from '@/components/clients/clients-section'
 import { CrewSection } from '@/components/crew/crew-section'
 import { AmbientGlow } from '@/components/ambient-glow'
 
-type Section = 'kalendarz' | 'skrzynka' | 'projekty' | 'finanse' | 'marketing' | 'sprzet' | 'ekipa' | 'ustawienia'
+type Section =
+  | 'kalendarz'
+  | 'skrzynka'
+  | 'projekty'
+  | 'klienci'
+  | 'finanse'
+  | 'marketing'
+  | 'sprzet'
+  | 'ekipa'
+  | 'ustawienia'
 
 const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'kalendarz', label: 'Kalendarz', icon: CalendarDays },
   { value: 'skrzynka', label: 'Skrzynka', icon: Inbox },
   { value: 'projekty', label: 'Projekty', icon: FolderKanban },
+  { value: 'klienci', label: 'Klienci', icon: Handshake },
   { value: 'finanse', label: 'Finanse', icon: BarChart3 },
   { value: 'marketing', label: 'Marketing', icon: Megaphone },
   { value: 'sprzet', label: 'Sprzęt', icon: Package },
@@ -227,6 +239,8 @@ function ShellContent() {
           ) : (
             <ProjectList />
           ))}
+
+        {section === 'klienci' && <ClientsSection onOpenProject={goToProject} />}
 
         {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
 
