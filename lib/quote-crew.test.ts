@@ -5,6 +5,7 @@ import {
   addKitCrewToQuote,
   createQuoteCrewLine,
   crewCostRate,
+  dayActorCount,
   dayCrewFigures,
   hasLegacyCrew,
   kitCrewDayCosts,
@@ -315,4 +316,14 @@ test('plan podniósł liczbę obsadzonej pozycji: osoba tylko w pierwszej kopii'
       ['Gafer', null],
     ]
   )
+})
+
+test('aktorzy dnia (prawa do wizerunku): stary licznik + pozycje z rolą Aktor, bez modeli i ekipy', () => {
+  assert.equal(dayActorCount(day({ aktor: 2 })), 2)
+  assert.equal(dayActorCount(day({ crew: [line(ACTOR, { qty: 3 }), line(OPERATOR, { qty: 2 })] })), 3)
+  assert.equal(dayActorCount(day({ aktor: 1, crew: [line(ACTOR, { qty: 2 })] })), 3)
+  assert.equal(dayActorCount(day({ model: 4 })), 0)
+  assert.equal(dayActorCount(day({ crew: [line(ACTOR), line(GAFFER, { qty: 2 }), line(EDITOR)] })), 1, 'gafer i montażysta to nie aktorzy')
+  const model = createQuoteCrewLine({ id: 'model', name: 'Model', group: 'obsada', clientRate: 1500 })
+  assert.equal(dayActorCount(day({ crew: [line(ACTOR), { ...model, qty: 2 }] })), 1, 'model z obsady to nie aktor')
 })

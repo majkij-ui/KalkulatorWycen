@@ -118,6 +118,18 @@ export function quoteCrewPersonDays(data: Pick<QuoteData, 'isDetailedProdukcja' 
   return safeArray<ShootingDay>(data.detailedShootingDays).reduce((sum, day) => sum + dayCrewFigures(day).personDays, 0)
 }
 
+/**
+ * Aktorzy dnia — do „skopiuj liczbę aktorów" w Dodatkowych (prawa do
+ * wizerunku): stary licznik `aktor` plus pozycje ekipy z wbudowaną rolą
+ * „Aktor". Model i statyści się nie liczą, jak dotąd.
+ */
+export function dayActorCount(day: Pick<ShootingDay, 'aktor' | 'crew'>): number {
+  const fromLines = safeArray<QuoteCrewLine>(day.crew)
+    .filter((line) => line.roleId === 'aktor')
+    .reduce((sum, line) => sum + lineQty(line), 0)
+  return Math.max(0, safeNum(day.aktor, 0)) + fromLines
+}
+
 /** Czy dzień używa starych liczników ekipy — wtedy pokazujemy je rozwinięte. */
 export function hasLegacyCrew(
   day: Pick<ShootingDay, 'rezOp' | 'asystent' | 'gafer' | 'dzwiekowiec' | 'mua' | 'aktor' | 'model' | 'statysta'>

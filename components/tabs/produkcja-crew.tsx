@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 
 const NEW_ROLE = '__new_role__'
+const NEW_PERSON = '__new_person__'
 
 function amountOf(text: string): number | undefined {
   if (!text.trim()) return undefined
@@ -198,13 +199,23 @@ function CrewLineRow({
   onChange: (next: QuoteCrewLine) => void
   onRemove: () => void
 }) {
+  const { addPerson } = useCrew()
+  const [newPerson, setNewPerson] = useState(false)
   const { withRole, others } = crewPickerOptions(people, line.roleId)
   const listed = new Set([...withRole, ...others].map((m) => m.id))
   const bucket = crewLineBucket(line)
 
   const pickPerson = (id: string) => {
+    if (id === NEW_PERSON) return setNewPerson(true)
     const person = id ? (people.find((m) => m.id === id) ?? null) : null
     onChange(withCrewPerson(line, person, role))
+  }
+
+  // Nowa osoba z rolą tej pozycji trafia do bazy Ekipa i od razu obsadza miejsce.
+  const createPerson = async (params: { name: string; rate?: number }) => {
+    const person = await addPerson({ name: params.name, rate: params.rate, roleIds: role ? [role.id] : [] })
+    if (person) onChange(withCrewPerson(line, person, role))
+    setNewPerson(false)
   }
 
   return (
@@ -248,6 +259,7 @@ function CrewLineRow({
             ))}
           </optgroup>
         )}
+        <option value={NEW_PERSON}>＋ Nowa osoba…</option>
       </select>
       {!line.personId && (
         <div className="flex items-center gap-1">
@@ -274,7 +286,68 @@ function CrewLineRow({
       <button type="button" onClick={onRemove} aria-label={`Usuń ${line.roleName}`} className="text-zinc-600 hover:text-red-400">
         <X className="size-4" />
       </button>
+      {newPerson && (
+        <NewPersonForm roleName={line.roleName} onSave={createPerson} onCancel={() => setNewPerson(false)} />
+      )}
     </li>
+  )
+}
+
+function NewPersonForm({
+  roleName,
+  onSave,
+  onCancel,
+}: {
+  roleName: string
+  onSave: (params: { name: string; rate?: number }) => void | Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  const [rate, setRate] = useState('')
+  const canSave = name.trim().length > 0 && (rate.trim() === '' || amountOf(rate) !== undefined)
+
+  const save = () => {
+    if (canSave) void onSave({ name: name.trim(), rate: amountOf(rate) })
+  }
+
+  return (
+    <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-white/10 bg-black/30 p-2">
+      <label className="text-[11px] text-zinc-500">
+        Imię i nazwisko
+        <Input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save()
+            if (e.key === 'Escape') onCancel()
+          }}
+          className="mt-1 h-8 w-48 text-sm"
+        />
+      </label>
+      <label className="text-[11px] text-zinc-500">
+        Mój koszt / dzień (opcjonalnie)
+        <Input
+          inputMode="decimal"
+          value={rate}
+          onChange={(e) => setRate(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save()
+            if (e.key === 'Escape') onCancel()
+          }}
+          className="mt-1 h-8 w-28 text-right text-sm tabular-nums"
+        />
+      </label>
+      <Button size="sm" className="h-8 text-xs" onClick={save} disabled={!canSave}>
+        Dodaj do Ekipy
+      </Button>
+      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={onCancel}>
+        Anuluj
+      </Button>
+      <p className="w-full text-[11px] text-zinc-500">
+        Trafi do bazy Ekipa z rolą „{roleName}". Telefon i e-mail dopiszesz na ekranie „Ekipa".
+      </p>
+    </div>
   )
 }
 
