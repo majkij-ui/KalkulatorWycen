@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { computeCrewStats, crewRanking, matchCrewMember, unknownCrewNames } from './crew-stats'
+import { computeCrewStats, crewOnProjects, crewRanking, matchCrewMember, unknownCrewNames } from './crew-stats'
 import { crewContactText, crewPickerOptions, type CrewMember } from './crew-types'
 import type { Project, ProjectCost } from './project-types'
 
@@ -137,4 +137,20 @@ test('wybór osoby: najpierw z tą rolą, potem reszta; bez wycofanych; filtr po
   assert.deepEqual(others.map((m) => m.name), ['Adam'])
   assert.deepEqual(crewPickerOptions(people, null, 'luk').others.map((m) => m.name), ['Łukasz'])
   assert.equal(crewContactText({ name: 'Ola ', contact: { phone: '600 100 200', email: '' } }), 'Ola · 600 100 200')
+})
+
+test('ekipa przy projektach klienta: tylko te projekty, tylko zlecenia; imiona spoza bazy osobno', () => {
+  const people = [member('a', 'Łukasz'), member('bb', 'Piotr')]
+  const mine = [
+    project('p1', 'done', '2026-03-10', [crew('c1', 'Łukasz', 800), crew('c2', 'Kasia', 600)]),
+    project('p2', 'won', '2026-05-02', [crew('c3', 'Łukasz', 900)]),
+    project('p3', 'quote', '2026-06-01', [crew('c4', 'Piotr', 1000), crew('c5', 'Ania', 500)]),
+  ]
+  const { ranking, outside } = crewOnProjects(people, mine, { now: NOW })
+  assert.deepEqual(
+    ranking.map((r) => [r.member.name, r.stats.days, r.stats.paidTotal]),
+    [['Łukasz', 2, 1700]],
+    'Piotr był tylko w wycenie — nie liczy się'
+  )
+  assert.deepEqual(outside, ['Kasia'], 'Ania tylko w wycenie')
 })

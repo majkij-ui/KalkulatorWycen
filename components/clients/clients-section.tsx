@@ -12,6 +12,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowUpRight, BellRing, Handshake, Loader2, Repeat, Search } from 'lucide-react'
 import { useEvents } from '@/lib/events-context'
+import { useCrew } from '@/lib/crew-context'
+import { crewOnProjects } from '@/lib/crew-stats'
 import { useProjectHub } from '@/lib/project-hub-context'
 import {
   CLIENT_SORTS,
@@ -98,12 +100,20 @@ interface MergeNotice {
   listClient: string
 }
 
-export function ClientsSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
+export function ClientsSection({
+  onOpenProject,
+  initialKey = null,
+}: {
+  onOpenProject?: (id: string) => void
+  /** Strona klienta do otwarcia od razu (np. z nagłówka projektu). */
+  initialKey?: string | null
+}) {
   const today = toDateKey(new Date())
   const { projects, isLoading, updateProjects, listClient, setListClient } = useProjectHub()
   const { events } = useEvents()
+  const { allPeople } = useCrew()
 
-  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [openKey, setOpenKey] = useState<string | null>(initialKey)
   const [query, setQuery] = useState('')
   const [sort, setSortState] = useState<ClientSort>(readSort)
   const [notice, setNotice] = useState<MergeNotice | null>(null)
@@ -122,6 +132,18 @@ export function ClientsSection({ onOpenProject }: { onOpenProject?: (id: string)
   const stats = useMemo(
     () => (openKey ? clientStats(projects, events, openKey, today) : null),
     [projects, events, openKey, today]
+  )
+  // Kto pracował przy zleceniach tego klienta (rzeczywiste koszty ekipy, T9a).
+  const crew = useMemo(
+    () =>
+      openKey
+        ? crewOnProjects(
+            allPeople,
+            projects.filter((p) => clientKey(p.client ?? '') === openKey),
+            { events }
+          )
+        : null,
+    [allPeople, projects, events, openKey]
   )
 
   // Klient zniknął (scalony gdzie indziej, projekty usunięte) → wracamy do listy.
@@ -201,6 +223,7 @@ export function ClientsSection({ onOpenProject }: { onOpenProject?: (id: string)
         <ClientPage
           stats={stats}
           projects={projects}
+          crew={crew}
           onBack={() => open(null)}
           onOpenProject={onOpenProject}
           onMerge={merge}

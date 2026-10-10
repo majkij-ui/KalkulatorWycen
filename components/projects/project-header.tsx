@@ -13,10 +13,10 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Loader2, Save, X } from 'lucide-react'
+import { ArrowLeft, Check, Handshake, Loader2, Save, X } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useEvents } from '@/lib/events-context'
-import { clientDirectory } from '@/lib/clients'
+import { clientDirectory, clientKey } from '@/lib/clients'
 import { leadsFromEvents } from '@/lib/marketing-leads'
 import { LEAD_QUALITY_LABELS } from '@/lib/marketing-types'
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, countsTowardRevenue, leadSourceLabel } from '@/lib/project-types'
@@ -48,7 +48,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
   )
 }
 
-export function ProjectHeader() {
+export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) => void } = {}) {
   const { activeProject, projects, closeProject, saveActiveProject, updateActiveProject, changeActiveClient, setStatus } =
     useProjectHub()
   const { events } = useEvents()
@@ -186,15 +186,28 @@ export function ProjectHeader() {
 
         <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
           <Field label="Klient">
-            <ClientCombobox
-              value={activeProject.client}
-              directory={directory}
-              onCommit={(name) => void commitClient(name)}
-              free
-              placeholder="Wpisz albo wybierz…"
-              ariaLabel="Klient"
-              className="w-60"
-            />
+            <div className="flex items-center gap-1">
+              <ClientCombobox
+                value={activeProject.client}
+                directory={directory}
+                onCommit={(name) => void commitClient(name)}
+                free
+                placeholder="Wpisz albo wybierz…"
+                ariaLabel="Klient"
+                className="w-60"
+              />
+              {onOpenClient && clientKey(activeProject.client) && (
+                <button
+                  type="button"
+                  onClick={() => onOpenClient(clientKey(activeProject.client))}
+                  title="Strona klienta: przychód, powroty, płatności"
+                  aria-label={`Strona klienta ${activeProject.client}`}
+                  className="flex size-8 items-center justify-center rounded-md border border-white/10 text-zinc-400 outline-none hover:bg-white/5 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-white/50"
+                >
+                  <Handshake className="size-4" aria-hidden />
+                </button>
+              )}
+            </div>
           </Field>
 
           <Field label="Data księgowa" htmlFor="project-date">
