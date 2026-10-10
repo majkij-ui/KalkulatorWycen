@@ -12,7 +12,7 @@
  * `nonoise-inbox-v1`: `{ files: [{ name, content }] }` — tylko do testów UI.
  */
 
-import { BaseDirectory, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { BaseDirectory, exists, readDir, readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauriRuntime } from './storage'
 import { createCollectionStore } from './v3-store'
 import {
@@ -35,10 +35,13 @@ function isInboxFileName(name: string): boolean {
 async function readTauriInbox(): Promise<ParsedInboxFile[]> {
   let names: string[]
   try {
+    if (!(await exists(INBOX_DIR, { baseDir: BaseDirectory.AppData }))) return [] // brak folderu = pusta skrzynka
     const entries = await readDir(INBOX_DIR, { baseDir: BaseDirectory.AppData })
     names = entries.filter((e) => e.isFile && isInboxFileName(e.name)).map((e) => e.name)
-  } catch {
-    return [] // brak folderu = pusta skrzynka
+  } catch (error) {
+    // Folder jest, a nie da się go odczytać (np. brak uprawnienia w capabilities).
+    // Pokazujemy to na ekranie — cicha pusta skrzynka ukrywała propozycje.
+    return [{ name: '', status: 'error', error: `nie da się odczytać folderu (${String(error)})` }]
   }
   return Promise.all(
     names.sort().map(async (name) => {
