@@ -17,6 +17,7 @@ import {
   createProject,
   deleteProject as deleteProjectRecord,
   listAllProjects,
+  patchProjects,
   replaceAllProjects,
   restoreProject as restoreProjectRecord,
   upsertProject,
@@ -77,6 +78,8 @@ interface ProjectHubValue {
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
   /** Zmiana pól dowolnego projektu (nie dotyka wyceny w kalkulatorze). */
   updateProject: (id: string, patch: Partial<Project>) => Promise<void>
+  /** Zmiana pól wielu projektów jednym zapisem (np. „Scal nazwy" klienta). */
+  updateProjects: (patches: { id: string; patch: Partial<Project> }[]) => Promise<void>
   /**
    * Klient otwartego projektu (nagłówek). Kopiuje kontakt z ostatniego projektu
    * tego klienta, gdy bieżący go nie ma (`clients.ts`), a pustą wycenę wgrywa
@@ -320,6 +323,21 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [patchProject]
   )
 
+  const updateProjects = useCallback(
+    async (patches: { id: string; patch: Partial<Project> }[]) => {
+      if (!patches.length) return
+      const updatedAt = new Date().toISOString()
+      const byId = new Map(patches.map(({ id, patch }) => [id, patch]))
+      const seq = ++writeSeqRef.current
+      setProjects(
+        projectsRef.current.map((p) => (byId.has(p.id) ? { ...p, ...byId.get(p.id), id: p.id, updatedAt } : p))
+      )
+      const saved = await patchProjects(patches, updatedAt)
+      if (seq === writeSeqRef.current) setProjects(saved)
+    },
+    [setProjects]
+  )
+
   const removeProject = useCallback(
     async (id: string, deletedAt: string = new Date().toISOString()) => {
       const project = projectsRef.current.find((p) => p.id === id)
@@ -387,6 +405,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     saveActiveProject,
     updateActiveProject,
     updateProject,
+    updateProjects,
     changeActiveClient,
     setStatus,
     removeProject,
