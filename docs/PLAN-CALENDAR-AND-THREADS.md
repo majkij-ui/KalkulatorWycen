@@ -417,14 +417,24 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T3 Project thread** ✅ (2026-10-09, §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing the crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes it together with its thread, with undo. Pure: `clients.ts`, `project-list.ts`, `project-deletion.ts`, header client rule in `project-save.ts`; collection writes are serialized. 27 new tests; 18/18 mutations caught; flows verified in the browser. | T1 |
 | **T4 Gmail import v0** ✅ (2026-10-09, §5d) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). ✅ Inbox format (`inbox-types.ts`), `npm run data -- inbox`, „Skrzynka" screen with sidebar counter, Gmail pilot 1.09–9.10. 22 tests (+1 extended payments test); 19/19 mutations caught. Next: a recurring "sync my mail" from chat. | T1, T3 |
 | **T5a Realizacja tab** ✅ (2026-10-09, §6c) | The project's Sprzęt tab became Realizacja: shoot/prep days whose date lives in the calendar (variant A), gear per day (G3 grid), crew and other actual costs (`Project.costs`), Profit moved out of the calculator as the plan, planned vs actual margin. Pure: `realization-days.ts`, `project-costs.ts`, `realization-plan.ts`. 37 new tests; 20/20 mutations caught; flows verified in the browser and on the production export. | T1 |
-| **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`. | T5a |
+| **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`, phone numbers from the crew database (T9a). | T5a, T9a |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance (actual costs: `totalActualCosts` / `actualCostsByCategory` on `Project.costs`, §6c), days-to-payment, overdue list. | T5a, phase 4 |
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
+| **T9a Ekipa: people + Realizacja** (idea, §6d) | `crew-roles.json` (seeded from the 8 roles), `crew.json` (people, contact, rate), screen „Ekipa" with derived stats (days together, paid, last time), person picker with **+** in Realizacja crew rows (`ProjectCost.personId`), "Dodaj do bazy" for names already used. | T5a |
+| **T9b Ekipa in the quote** (idea, §6d) | Per-day crew lines: role placeholder or person, **+** new role, rates frozen; old counters under "Stare pozycje ekipy"; plan cost from person or role; "Przepisz ekipę z planu" carries the person; crew kits. | T9a, G5 |
+| **T9c Retire the old rows** (idea, §6d) | New quotes stop offering fixed crew counters and old gear fields; quick-mode packages become kits. Old quotes unchanged. | T9b, use in practice |
+| **T10 Klienci** (idea, §6d) | Sidebar list + page per client, all derived: revenue (total, per year, share), return rhythm, size trend, win rate, first lead source, merge spellings. Days to payment after T6, crew after T9. | T3 |
 
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
+
+**Suggested order from 2026-10-10:** T10 Klienci can run any time in parallel: it adds a screen and
+only reads data, so it touches little besides the sidebar. T9a goes before T5b (the call sheet wants
+the phone numbers). T9b edits the calculator (`produkcja.tsx`, `profit-calc.ts`, `quote-calc.ts`), so
+no other calculator work should run in parallel with it. T6 lives in Finance and doesn't collide
+with T9 or T10.
 
 ## 6b. T3 spec *(agreed with M.J. 2026-10-09)*
 
@@ -555,6 +565,79 @@ costs stay in `financials.koszty`.
   kind leaves the day "outside its event" (nothing is lost).
 - Crew suggestions come only from won/done projects (quote rates are hypotheses).
 - Day labels default to "Dzień N" over all days (prep included); an event title is used when set.
+
+## 6d. Ideas: crew database and client pages *(M.J. 2026-10-10, not started)*
+
+### Ekipa — a database of people, picked like gear (T9)
+
+**Asked for:** a "Crew" panel with contacts for crew members and contractors; pick them from a
+dropdown when building a quote and when filling in Realizacja. In the quote a slot can be a
+**placeholder role** ("asystent", "operator", "gaffer") picked from a dropdown with **+** for a new
+role; a real person can be chosen later. Same mechanics as gear (G5). Later, retire the old way
+(fixed role rows per day with an arbitrary count, labels renamed and prices edited by hand, used as
+generic slots). Later stats: how often I worked with Łukasz or Piotrek.
+
+**What exists today:** the quote has fixed counters per day (`ShootingDay.rezOp … statysta`, labels
+overridable in `crewNames`, prices from the pricing config). Realizacja crew rows are
+`Project.costs` with free-text `person` / `role` and a rate; `crewSuggestions` already derives names
+and last rates from won/done projects; "Przepisz ekipę z planu" copies roles with an empty person.
+
+**Proposed shape (mirrors the G series, all additive):**
+- **Role list** (`crew-roles.json`): `{ id, name, clientRate, costRate?, group: ekipa | obsada | post,
+  order, retiredAt? }`. Seeded once from the 8 current roles and their pricing-config rates; **+** in
+  any picker adds a role. A role is what the client pays for.
+- **People** (`crew.json`): `{ id, name, roles: roleId[], rate? (what they charge me per day),
+  contact { phone, email }, city?, notes?, retiredAt?, deletedAt? }`. A person is what I pay.
+- **Quote** (`ShootingDay.crew?: QuoteCrewLine[]`): `{ id, roleId, roleName, personId?, personName?,
+  clientRate, costRate, qty }`, names and rates **frozen** when added (like `QuoteGearLine`). A line
+  without `personId` is a placeholder. Old counters stay readable under "Stare pozycje ekipy" and
+  price exactly as before. Header margin applies as it does to crew today. Crew kits ("Wywiad:
+  operator + dźwięk") reuse the G6 idea.
+- **Plan (former Profit):** one cost line per crew line, cost = the person's rate if assigned, else
+  the role's `costRate`, else the client rate (today's behaviour).
+- **Realizacja:** crew rows get the same picker (+ new person inline); `ProjectCost.personId?` next
+  to the frozen `person` name. "Przepisz ekipę z planu" carries the person when the quote had one;
+  placeholders stay to be filled in. Older free-text names: "Dodaj do bazy" offers the names
+  already used in `Project.costs` (reading never writes).
+- **Screen "Ekipa"** (sidebar, like Sprzęt): list with search and role filter, side panel to edit,
+  contact copy, retire / restore. Derived stats from **actual** crew costs of won/done projects
+  (quote placeholders don't count): days worked together, projects, last time, paid this year and
+  in total, average day rate, roles played, project history (click opens the project), ranking
+  "najczęściej pracuję z…".
+- **Retiring the old way (later, T9c):** new quotes stop offering the fixed counters and the gear
+  fields G5 folded away; quotes that use them still show and price them. Quick-mode crew size and
+  gear packages could become kits then (G6 decision 10). Nothing is deleted (§3.4).
+- **Link to T5b:** a call sheet needs phone numbers, so the people database should come first.
+
+### Klienci — a page per client (T10)
+
+**Asked for:** a section where a repeat client has its own page: how often they come back, whether
+projects grow or shrink, revenue brought in by that client.
+
+**Proposed:** keep §3.2a. Everything is **derived** from projects grouped by `clientKey`;
+`clientDirectory` and `clientRevenue` already exist. No clients file is needed for the stats.
+- **List "Klienci"** (sidebar): name, projects, revenue, last project, a "wraca" mark for repeat
+  clients (≥ 2 won/done projects); sort by revenue, recency, number of projects.
+- **Client page:**
+  - revenue total and per year, share of my revenue, profit and margin from `financials`;
+  - how often they come back: median gap between projects, "ostatni projekt N mies. temu", a nudge
+    when the gap is well past their usual;
+  - size trend: project values in date order as small bars, with "rośnie / maleje / stabilnie" once
+    there are 3+ projects;
+  - win rate: quotes vs won vs lost;
+  - days to payment (from invoice events, T6), how they first came (`leadSource` of the first
+    project), crew used on their jobs (after T9);
+  - project list (click opens the project) and latest contact.
+- **"Scal nazwy"** (merge spellings, planned for Settings in §3.2a) lives on this page instead.
+- **Only if needed later:** a small `clients.json` keyed by `clientKey` for facts that can't be
+  derived (NIP and address for invoices, notes). That would revisit decision 3 in §7.
+
+### Open questions for M.J.
+1. Client price in the quote comes from the **role** and the person only changes my cost
+   (recommended), or each person has their own client price?
+2. Contractors who aren't on set (editor, colourist, motion designer): same database with a `post`
+   role group (recommended), or a separate list?
+3. Klienci and Ekipa as two new sidebar sections (9 items), or Ekipa and Sprzęt grouped as "Zasoby"?
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
