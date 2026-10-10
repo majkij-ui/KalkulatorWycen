@@ -463,11 +463,34 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
 
-**Suggested order from 2026-10-10:** T10 Klienci can run any time in parallel: it adds a screen and
-only reads data, so it touches little besides the sidebar. T9a goes before T5b (the call sheet wants
-the phone numbers). T9b edits the calculator (`produkcja.tsx`, `profit-calc.ts`, `quote-calc.ts`), so
-no other calculator work should run in parallel with it. T6 lives in Finance and doesn't collide
-with T9 or T10.
+**Merged and installed 2026-10-10 (evening):** T4b, T9a, T9b, T10 on top of T5a and G5/G6. Checked on
+the real hub data, read-only: all 10 saved quotes compute identically before and after the merge and
+match their stored financials; client revenue sums to the jobs total; both inbox files parse (42
+pending, every `event_update` target exists).
+
+**Next:** T5b (call sheet, now that crew has phone numbers) and T6 (money loop) can run in parallel:
+T5b lives in Realizacja, T6 in Finance. T9c waits until the new crew and gear pickers have been used on
+real quotes. T7 after T6.
+
+**Glue left between tracks (no single session owned these):**
+- **Role rates on the Ekipa screen follow the last opened quote.** Opening a project loads that quote's
+  own price list (`loadQuoteSnapshot` → `setPricingConfigState`), and `CrewProvider` resolves the
+  built-in roles from it. Inside a quote that is right (the quote prices from its own list, like the
+  old counters); on the Ekipa screen „z cennika" rates change with whichever project was opened last.
+  Fix: resolve built-ins from the default price list (`quote-gen-user-default-pricing`, falling back to
+  the current one) everywhere except the calculator.
+- **Project header → client page** (`goToClient(key)` in the shell; T10 note).
+- **Crew per client** on the client page, now that T9 exists (`crew-stats` filtered by the client's
+  projects).
+- **„+ Nowa osoba" in the quote's person select** (generalise T9a's `PersonPicker`; T9b note).
+- Dodatkowe's actor-count button still reads the old `aktor` counter of day 1, not obsada lines (T9b).
+- PDF descriptions are built once, so later crew changes don't rewrite them (as before T9b).
+
+**Waiting for M.J.:**
+- **Skrzynka:** 42 proposals (35 from the pilot, 7 from T4b).
+- **Funnel:** 19 spring leads have no project. Several got a PDF quote by mail; create lost projects for
+  them so the funnel's „wycena" step counts them? (§5d, lead links)
+- **Gear:** purchase prices, dates and rental rates (catalogue gear prices at 0 zł until then).
 
 ## 6b. T3 spec *(agreed with M.J. 2026-10-09)*
 
