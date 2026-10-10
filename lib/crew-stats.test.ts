@@ -97,14 +97,15 @@ test('data dnia pracy pochodzi z kalendarza, gdy dzień jest powiązany z wydarz
 test('osoba bez pracy ma puste statystyki; ranking pomija ją i sortuje po dniach', () => {
   const people = [member('a', 'Ola'), member('bb', 'Piotr'), member('ccc', 'Kasia')]
   const projects = [
-    project('p1', 'done', '2026-03-10', [crew('c1', 'Ola', 800), crew('c2', 'Piotr', 800), crew('c3', 'Piotr', 800, { dayId: 'd2' })]),
+    // Piotr: tyle samo dni co Ola, wyższe wypłaty, ale tylko jeden projekt.
+    project('p1', 'done', '2026-03-10', [crew('c1', 'Ola', 800), crew('c2', 'Piotr', 900), crew('c3', 'Piotr', 900, { dayId: 'd2' })]),
     project('p2', 'done', '2026-04-10', [crew('c4', 'Ola', 800)]),
   ]
   const stats = computeCrewStats(people, projects, { now: NOW })
   assert.equal(stats.get('ccc')!.projects, 0)
   assert.equal(stats.get('ccc')!.avgDayRate, null)
   const ranking = crewRanking(people, stats)
-  assert.deepEqual(ranking.map((r) => r.member.id), ['a', 'bb'], 'remis dni (2): więcej projektów wygrywa')
+  assert.deepEqual(ranking.map((r) => r.member.id), ['a', 'bb'], 'remis dni (2): więcej projektów wygrywa z wyższymi wypłatami')
 })
 
 test('„Dodaj do bazy": imiona spoza bazy, najnowsza pisownia i stawka, bez powiązanych wierszy', () => {
