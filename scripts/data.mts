@@ -54,6 +54,7 @@ import {
 } from '../lib/inbox-types'
 import { describeProposal, validateInboxDraft } from '../lib/inbox-validate'
 import { campaignSchema } from '../lib/marketing-types'
+import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
 import {
   equipmentItemSchema,
   fixedCostSchema,
@@ -72,6 +73,8 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'campaigns.json': campaignSchema,
   'equipment.json': equipmentItemSchema,
   'gear-kits.json': gearKitSchema,
+  'crew-roles.json': crewRoleSchema,
+  'crew.json': crewMemberSchema,
 }
 
 type Item = Record<string, unknown> & { id: string }

@@ -27,6 +27,7 @@ import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
 import { EquipmentProvider } from '@/lib/equipment-context'
 import { EventsProvider } from '@/lib/events-context'
 import { InboxProvider, useInbox } from '@/lib/inbox-context'
+import { CrewProvider } from '@/lib/crew-context'
 import { QuoteCalculatorView } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectHeader } from '@/components/projects/project-header'
@@ -246,9 +247,11 @@ export function AppShell() {
     <ProjectHubProvider>
       <EquipmentProvider>
         <EventsProvider>
-          <InboxProvider>
-            <ShellContent />
-          </InboxProvider>
+          <CrewProvider>
+            <InboxProvider>
+              <ShellContent />
+            </InboxProvider>
+          </CrewProvider>
         </EventsProvider>
       </EquipmentProvider>
     </ProjectHubProvider>
