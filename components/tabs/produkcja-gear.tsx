@@ -13,6 +13,8 @@ import { useMemo, useState } from 'react'
 import { Check, Gift, Layers, Minus, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { useQuote } from '@/lib/quote-context'
 import { useEquipment } from '@/lib/equipment-context'
+import { useCrew } from '@/lib/crew-context'
+import { addKitCrewToQuote, kitCrewFromLines } from '@/lib/quote-crew'
 import {
   addKitToQuoteGear,
   dayGearFigures,
@@ -26,6 +28,7 @@ import {
   equipmentCategoryRank,
   unitsOwned,
   type EquipmentItem,
+  type GearKit,
 } from '@/lib/project-types'
 import {
   createExternalRentalId,
@@ -157,6 +160,9 @@ export function DayGearSection({
 }) {
   const { data, formatCurrency } = useQuote()
   const { items, kits, addKit } = useEquipment()
+  // Zestawy niosą też ekipę (T9b): dodanie zestawu dokłada role i ludzi do dnia.
+  const { roles, people } = useCrew()
+  const crewLines = day.crew ?? []
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const lines = day.gear ?? []
   const rentals = day.externalRentals ?? []
@@ -177,7 +183,7 @@ export function DayGearSection({
   const [kitName, setKitName] = useState<string | null>(null)
   const saveKit = async () => {
     if (!kitName?.trim()) return
-    await addKit(kitName, lines)
+    await addKit(kitName, lines, kitCrewFromLines(crewLines))
     setKitName(null)
   }
 
@@ -304,7 +310,10 @@ export function DayGearSection({
           onToggle={(item) =>
             setGear(setQuoteGearLine(lines, item, lines.some((l) => l.itemId === item.id) ? 0 : unitsOwned(item)))
           }
-          onKit={(kit) => setGear(addKitToQuoteGear(lines, kit, items))}
+          onKit={(kit) => {
+            if (kit.lines.length > 0) setGear(addKitToQuoteGear(lines, kit.lines, items))
+            if (kit.crew?.length) onUpdate('crew', addKitCrewToQuote(crewLines, kit.crew, roles, people))
+          }}
         />
         <Button
           type="button"
@@ -316,7 +325,7 @@ export function DayGearSection({
           <Plus className="size-3.5" />
           Z wypożyczalni
         </Button>
-        {lines.length > 0 &&
+        {(lines.length > 0 || crewLines.length > 0) &&
           (kitName === null ? (
             <Button
               type="button"
@@ -365,10 +374,10 @@ function GearPicker({
   onKit,
 }: {
   items: EquipmentItem[]
-  kits: { id: string; name: string; lines: { itemId: string; qty: number }[] }[]
+  kits: GearKit[]
   lines: QuoteGearLine[]
   onToggle: (item: EquipmentItem) => void
-  onKit: (kit: { itemId: string; qty: number }[]) => void
+  onKit: (kit: GearKit) => void
 }) {
   const [query, setQuery] = useState('')
   const inDay = new Set(lines.map((l) => l.itemId))
@@ -423,12 +432,14 @@ function GearPicker({
                 <button
                   key={kit.id}
                   type="button"
-                  onClick={() => onKit(kit.lines)}
+                  onClick={() => onKit(kit)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-zinc-200 hover:bg-white/5"
                 >
                   <Layers className="size-3.5 shrink-0 text-zinc-500" />
                   <span className="flex-1 truncate">{kit.name}</span>
-                  <span className="text-[11px] text-zinc-500">{kit.lines.length} poz.</span>
+                  <span className="text-[11px] text-zinc-500">
+                    {kit.lines.length} poz.{kit.crew?.length ? ` · ekipa ${kit.crew.length}` : ''}
+                  </span>
                 </button>
               ))}
             </div>

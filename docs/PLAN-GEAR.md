@@ -129,6 +129,9 @@ Finance. They only answer "did this purchase pay off".
   (`realization-days.ts`, plan §6c). Click behaviour is unchanged; a day's date is edited in the
   calendar, and day removal is soft with "Cofnij".
 
+Since T9b (2026-10-10) kits can also carry crew (`GearKit.crew`: role, optional person, count); see
+PLAN-CALENDAR-AND-THREADS.md §6d "T9b as built".
+
 Follow-ups from G5/G6:
 - ~~`scripts/data.mts` does not list `gear-kits.json` yet~~ — added after the T4 merge (2026-10-10).
 - Catalogue rental rates are still empty in the real data: until they are filled, catalogue gear

@@ -20,6 +20,7 @@ import type {
   ProfitLineOverride,
   ProfitCustomItem,
   QuoteExternalRental,
+  QuoteCrewLine,
 } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
@@ -87,6 +88,11 @@ function getFormatBasePrice(post: PricingConfigShape['postprodukcja'], formatKey
   const firstKey = Object.keys(post).find(k => k.startsWith('Format: '))
   const fallback = firstKey != null ? post[firstKey] : undefined
   return typeof fallback === 'number' ? fallback : 0
+}
+
+/** Klucz pozycji kosztowej ekipy z bazy w dniu wyceny (T9b). */
+export function crewLineKey(dayId: string, lineId: string): string {
+  return `pro:${dayId}:crew:${lineId}`
 }
 
 /** Klucz pozycji kosztowej sprzętu z wypożyczalni wpisanego w dniu wyceny (G5). */
@@ -209,6 +215,22 @@ export function buildDerivedCostLines(
       // Sprzęt (kamery, obiektywy, stabilizacja, podgląd, światło, dron) NIE jest
       // rozbijany na osobne koszty — zastępuje go jedna ręczna pozycja
       // "Rental sprzętu" (poniżej), żeby nie tworzyć ściany tekstu.
+      // Ekipa z bazy (T9b): jedna pozycja na pozycję wyceny, po MOIM koszcie
+      // (stawka osoby → koszt roli → stawka roli), zamrożonym w wycenie.
+      safeArray<QuoteCrewLine>(day.crew).forEach((line) => {
+        const qty = safeNum(line.qty, 0, 0)
+        if (qty <= 0) return
+        const person = line.personName?.trim()
+        push({
+          key: crewLineKey(day.id, line.id),
+          section: 'produkcja',
+          label: person ? `${line.roleName} · ${person}` : line.roleName,
+          detail,
+          unitLabel: 'os.',
+          defaultQuantity: qty,
+          defaultUnitCost: safeNum(line.costRate, 0, 0),
+        })
+      })
       // Mój sprzęt z katalogu (G5) też nie jest kosztem. Kosztem jest za to
       // sprzęt z wypożyczalni wpisany w dniu: ile klient płaci, tyle płacę ja.
       safeArray<QuoteExternalRental>(day.externalRentals).forEach((rental) => {

@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { Layers, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
+import { useCrew } from '@/lib/crew-context'
 import type { GearKit } from '@/lib/project-types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +39,7 @@ export function GearKitsPanel() {
 
 function KitRow({ kit }: { kit: GearKit }) {
   const { items, updateKit, removeKit } = useEquipment()
+  const { roles, people } = useCrew()
   const [name, setName] = useState(kit.name)
   const [confirm, setConfirm] = useState(false)
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -51,6 +53,16 @@ function KitRow({ kit }: { kit: GearKit }) {
     }
   })
   const value = parts.reduce((sum, part) => sum + part.value, 0)
+  // Ekipa zestawu (T9b): rola, osoba, liczba osób — stawki zawsze z bazy Ekipa.
+  const crewParts = (kit.crew ?? []).map((entry) => {
+    const role = roles.find((r) => r.id === entry.roleId)
+    const person = entry.personId ? people.find((p) => p.id === entry.personId) : undefined
+    return {
+      key: `${entry.roleId}|${entry.personId ?? ''}`,
+      label: `${entry.qty > 1 ? `${entry.qty}× ` : ''}${role?.name ?? 'rola spoza bazy'}${person ? ` · ${person.name}` : ''}`,
+      missing: !role || !!role.retiredAt,
+    }
+  })
 
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3">
@@ -75,11 +87,24 @@ function KitRow({ kit }: { kit: GearKit }) {
             </span>
           ))}
         </div>
+        {crewParts.length > 0 && (
+          <div className="mt-0.5 px-1 text-xs text-zinc-500">
+            <span className="text-zinc-600">Ekipa: </span>
+            {crewParts.map((part, i) => (
+              <span key={part.key} className={part.missing ? 'text-zinc-600 line-through' : undefined}>
+                {part.label}
+                {i < crewParts.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="text-right text-xs tabular-nums text-zinc-400">
-        <div className="text-sm font-semibold text-zinc-200">{pln(value)}</div>
-        <div>za dzień</div>
-      </div>
+      {parts.length > 0 && (
+        <div className="text-right text-xs tabular-nums text-zinc-400">
+          <div className="text-sm font-semibold text-zinc-200">{pln(value)}</div>
+          <div>sprzęt za dzień</div>
+        </div>
+      )}
       {confirm ? (
         <div className="flex gap-1">
           <Button variant="destructive" size="sm" onClick={() => void removeKit(kit.id)} className="h-8 text-xs">

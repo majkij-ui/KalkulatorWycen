@@ -17,6 +17,7 @@ import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeArray, safeNum } from '@/lib/safe-numbers'
 import { getProductionEkipaCastSprzetNetto, type LineItemRow } from '@/lib/quote-calc'
 import { pdfGearSentences } from '@/lib/quote-gear'
+import { pdfCrewSentences } from '@/lib/quote-crew'
 import type { LocalPdfState, PdfRowKey, PortfolioRow, QuoteData } from '@/lib/quote-types'
 import { isTauriRuntime } from '@/lib/storage'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
@@ -285,7 +286,11 @@ function getOpisInitial({
       return `${L.opisQuickQuoteMode}: ${safeNum(data.dniZdjeciowe, 0, 0)} ${L.opisDays} × ${safeNum(data.wielkoscEkipy, 1, 1)} ${L.opisCrewSize}\n${L.opisRezOpSurcharge}: ${yn(data.crudeRezOpSurcharge)}.`
     }
 
-    return `${L.opisDetailedCrew} ${safeArray(data.detailedShootingDays).length} ${L.opisShootingDays}.`
+    // Ekipa z bazy (T9b): role z osobodniami; imiona tylko na życzenie.
+    return [
+      `${L.opisDetailedCrew} ${safeArray(data.detailedShootingDays).length} ${L.opisShootingDays}.`,
+      ...pdfCrewSentences(data, 'ekipa', L, data.crewPeopleInPdf),
+    ].join('\n')
   }
 
   if (key === 'obsada') {
@@ -315,6 +320,7 @@ function getOpisInitial({
     if (aktorPD > 0) lines.push(`${L.opisActor}: ${aktorPD} ${L.opisPersonDays}.`)
     if (modelPD > 0) lines.push(`${L.opisModel}: ${modelPD} ${L.opisPersonDays}.`)
     if (statystaPD > 0) lines.push(`${L.opisExtra}: ${statystaPD} ${L.opisPersonDays}.`)
+    lines.push(...pdfCrewSentences(data, 'obsada', L, data.crewPeopleInPdf))
     if (actorRightsLine) lines.push(actorRightsLine)
     return lines.join('\n')
   }

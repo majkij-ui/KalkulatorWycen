@@ -249,11 +249,23 @@ export type GearDay = z.infer<typeof gearDaySchema>
  * dodawany jednym klikiem do dnia wyceny albo dnia Realizacji. Trzyma tylko
  * pozycje i sztuki — ceny zawsze z katalogu w chwili użycia.
  */
+/** Ekipa w zestawie (T9b): rola, opcjonalnie osoba, liczba osób. Stawki zawsze z bazy Ekipa. */
+export const kitCrewLineSchema = z
+  .object({
+    roleId: z.string().min(1),
+    personId: z.string().min(1).optional().catch(undefined),
+    qty: z.number().int().min(1).catch(1),
+  })
+  .passthrough()
+export type KitCrewLine = z.infer<typeof kitCrewLineSchema>
+
 export const gearKitSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().catch(''),
     lines: lenientArray(gearLineSchema),
+    /** Ekipa zestawu (T9b) — brak pola = zestaw tylko ze sprzętem. */
+    crew: lenientArray(kitCrewLineSchema).optional(),
     createdAt: z.string().catch(''),
   })
   .passthrough()

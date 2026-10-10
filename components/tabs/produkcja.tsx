@@ -18,6 +18,8 @@ import type { CrewRoleKey, PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } 
 import { computeShootingDayNet } from '@/lib/quote-calc'
 import { dayGearFigures, hasLegacyGear } from '@/lib/quote-gear'
 import { DayGearSection, GearQuotePanel } from './produkcja-gear'
+import { CrewQuoteNotice, DayCrewSection } from './produkcja-crew'
+import { dayCrewFigures, hasLegacyCrew } from '@/lib/quote-crew'
 
 const DP = DEFAULT_PRICING
 
@@ -210,6 +212,8 @@ function DayCard({
   const crewNames = day.crewNames ?? {}
   // Stare pola sprzętu (kamery, standard/rental…) tylko gdy dzień ich używa.
   const [showLegacy, setShowLegacy] = useState(() => hasLegacyGear(day))
+  // Stare liczniki ekipy (ReżOp … Statysta) tak samo — T9b.
+  const [showLegacyCrew, setShowLegacyCrew] = useState(() => hasLegacyCrew(day))
 
   function setCrewName(role: CrewRoleKey, name: string) {
     onUpdate('crewNames', { ...crewNames, [role]: name })
@@ -218,7 +222,13 @@ function DayCard({
   // Live day subtotal displayed at the bottom of the card. Sprzęt z katalogu i
   // wypożyczalnia bez marży (lib/quote-gear.ts), tak jak w sumie wyceny.
   const gear = dayGearFigures(day, data.gearDiscountPercent)
-  const dayBaseNetto = computeShootingDayNet(day, pc) * marginMultiplier + gear.charged + gear.external
+  // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki.
+  const crew = dayCrewFigures(day)
+  const dayBaseNetto =
+    computeShootingDayNet(day, pc) * marginMultiplier +
+    (crew.ekipa + crew.obsada) * marginMultiplier +
+    gear.charged +
+    gear.external
   const adj = day.dayAdjustment ?? 0
   const dayFinalNetto = dayBaseNetto + adj
 
@@ -241,7 +251,19 @@ function DayCard({
       </div>
 
       <div>
-        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6 first:mt-0">Ekipa</h4>
+        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6 first:mt-0">Ekipa i obsada</h4>
+        <DayCrewSection day={day} onUpdate={onUpdate} />
+        <button
+          type="button"
+          onClick={() => setShowLegacyCrew((v) => !v)}
+          aria-expanded={showLegacyCrew}
+          className="mt-3 text-[11px] text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+        >
+          {showLegacyCrew ? 'Ukryj stare pozycje ekipy' : 'Stare pozycje ekipy (ReżOp, operator, gafer… aktor, model, statysta)'}
+        </button>
+        {showLegacyCrew && (
+        <>
+        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-4">Ekipa (stare pozycje)</h4>
         <div className="space-y-0">
           <Row label={<EditableLabel value={crewNames.rezOp ?? ''} placeholder="ReżOp" onChange={(v) => setCrewName('rezOp', v)} />}>
             <InlinePrice value={pc.rezOp} onChange={(v) => updatePricingValue('produkcja', 'rezOp', v)} isModified={pc.rezOp !== DP.produkcja.rezOp} />
@@ -265,7 +287,7 @@ function DayCard({
           </Row>
         </div>
 
-        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Obsada</h4>
+        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Obsada (stare pozycje)</h4>
         <div className="space-y-0">
           <Row label={<EditableLabel value={crewNames.aktor ?? ''} placeholder="Aktor" onChange={(v) => setCrewName('aktor', v)} />}>
             <InlinePrice value={pc.aktor} onChange={(v) => updatePricingValue('produkcja', 'aktor', v)} isModified={pc.aktor !== DP.produkcja.aktor} />
@@ -280,6 +302,8 @@ function DayCard({
             <Counter compact label="" value={day.statysta} onChange={(v) => onUpdate('statysta', v)} min={0} />
           </Row>
         </div>
+        </>
+        )}
 
         <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-primary/80 mb-3 mt-6">Sprzęt</h4>
         <DayGearSection day={day} onUpdate={onUpdate} />
@@ -632,6 +656,9 @@ export function ProdukcjaTab() {
             >
               <motion.div variants={item}>
                 <GearQuotePanel />
+              </motion.div>
+              <motion.div variants={item}>
+                <CrewQuoteNotice />
               </motion.div>
               {days.map((day, index) => (
                 <motion.div key={day.id} variants={item}>

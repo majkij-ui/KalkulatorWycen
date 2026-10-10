@@ -31,6 +31,7 @@ import {
   updateGearDay,
 } from '@/lib/gear-usage'
 import type { DayInfo, DaySuggestion } from '@/lib/realization-days'
+import type { KitCrewEntry } from '@/lib/quote-crew'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
 import {
   countsTowardRevenue,
@@ -92,6 +93,10 @@ export interface GearGridProps {
   addDayButton: ReactNode
   /** Dodatkowe akcje paska siatki (np. „Sprzęt z wyceny"). */
   extraActions?: ReactNode
+  /** Ekipa dnia jako wpisy zestawu — „Zapisz ten dzień jako zestaw" (T9b). */
+  kitCrewOfDay?: (day: GearDay) => KitCrewEntry[]
+  /** Ekipa z zestawu → koszty dnia (T9b); koszty trzyma rodzic. */
+  onKitCrew?: (day: GearDay, crew: KitCrewEntry[]) => void
 }
 
 export function GearGrid({
@@ -107,6 +112,8 @@ export function GearGrid({
   onRemoveDay,
   addDayButton,
   extraActions,
+  kitCrewOfDay,
+  onKitCrew,
 }: GearGridProps) {
   const { items, isLoading, kits, addKit } = useEquipment()
 
@@ -309,8 +316,12 @@ export function GearGrid({
                     onDuplicate={() => commit(duplicateGearDay(days, day.id))}
                     onRemove={() => onRemoveDay(day)}
                     kits={kits}
-                    onApplyKit={(lines) => commit(applyKitToGearDay(days, day.id, lines, items))}
-                    onSaveKit={(name) => void addKit(name, day.lines)}
+                    hasCrew={(kitCrewOfDay?.(day) ?? []).length > 0}
+                    onApplyKit={(kit) => {
+                      if (kit.lines.length > 0) commit(applyKitToGearDay(days, day.id, kit.lines, items))
+                      if (kit.crew?.length) onKitCrew?.(day, kit.crew)
+                    }}
+                    onSaveKit={(name) => void addKit(name, day.lines, kitCrewOfDay?.(day) ?? [])}
                   />
                 ))}
                 <div className="text-right text-[11px] text-zinc-500">Odpracował</div>
@@ -574,6 +585,7 @@ function DayHeader({
   kits,
   onApplyKit,
   onSaveKit,
+  hasCrew,
 }: {
   day: GearDay
   info: DayInfo | undefined
@@ -586,8 +598,10 @@ function DayHeader({
   onRemove: () => void
   /** Zestawy sprzętu (G6): dodanie do dnia jednym klikiem, zapis dnia jako zestawu. */
   kits: GearKit[]
-  onApplyKit: (lines: GearKit['lines']) => void
+  onApplyKit: (kit: GearKit) => void
   onSaveKit: (name: string) => void
+  /** Dzień ma ekipę (T9b) — wtedy też da się go zapisać jako zestaw. */
+  hasCrew: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -679,7 +693,7 @@ function DayHeader({
           {confirm && removal.ok && removal.confirm && (
             <p className="text-[11px] text-zinc-500">{removal.confirm} Kliknij jeszcze raz, żeby usunąć.</p>
           )}
-          {(kits.length > 0 || day.lines.length > 0) && (
+          {(kits.length > 0 || day.lines.length > 0 || hasCrew) && (
             <div className="mt-1 border-t border-white/5 pt-2">
               <div className="mb-1 text-[11px] text-zinc-500">Zestawy</div>
               {kits.length > 0 && (
@@ -689,10 +703,10 @@ function DayHeader({
                       key={kit.id}
                       type="button"
                       onClick={() => {
-                        onApplyKit(kit.lines)
+                        onApplyKit(kit)
                         setOpen(false)
                       }}
-                      title={`Dodaj do dnia: ${kit.lines.length} poz.`}
+                      title={`Dodaj do dnia: ${kit.lines.length} poz. sprzętu${kit.crew?.length ? `, ekipa: ${kit.crew.length}` : ""}`}
                       className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/5"
                     >
                       <Layers className="size-3" />
@@ -701,7 +715,7 @@ function DayHeader({
                   ))}
                 </div>
               )}
-              {day.lines.length > 0 &&
+              {(day.lines.length > 0 || hasCrew) &&
                 (kitName === null ? (
                   <button
                     type="button"

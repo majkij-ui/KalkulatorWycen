@@ -31,6 +31,7 @@ import { eventKind } from '@/lib/event-kinds'
 import type { TimelineEvent } from '@/lib/event-types'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
 import { gearFromQuote } from '@/lib/gear-usage'
+import { kitCrewDayCosts, kitCrewFromDayCosts, type KitCrewEntry } from '@/lib/quote-crew'
 import {
   addCost,
   copyCrewToDays,
@@ -299,6 +300,25 @@ function RealizationView({ project }: { project: Project }) {
     commitCosts(costsRef.current.map((c) => (ids.has(c.id) && !c.deletedAt ? { ...c, deletedAt } : c)))
   }
 
+  // Zestawy z ekipą (T9b): ekipa zestawu → wiersze kosztów dnia; ekipa dnia → zestaw.
+  const kitCrewOfDay = (day: GearDay) => kitCrewFromDayCosts(costsOfDay(costsRef.current, day.id), crewRoles)
+
+  const applyKitCrew = (day: GearDay, crew: KitCrewEntry[]) => {
+    ensureDaysSaved()
+    const rows = kitCrewDayCosts(crew, day.id, costsOfDay(costsRef.current, day.id), crewRoles, crewPeople)
+    if (rows.length === 0) {
+      setNotice({ message: 'Ekipa z zestawu jest już w tym dniu.' })
+      return
+    }
+    const before = new Set(costsRef.current.map((c) => c.id))
+    const next = rows.reduce((list, row) => addCost(list, row), costsRef.current)
+    commitCosts(next)
+    setNotice({
+      message: `Dopisano z zestawu ${rows.length} ${plural(rows.length, 'osobę', 'osoby', 'osób')} do ekipy dnia.`,
+      undo: undoAdded(new Set(next.filter((c) => !before.has(c.id)).map((c) => c.id))),
+    })
+  }
+
   const copyCrew = (dayId: string) => {
     ensureDaysSaved()
     const before = new Set(costsRef.current.map((c) => c.id))
@@ -553,6 +573,8 @@ function RealizationView({ project }: { project: Project }) {
         dayRemoval={dayRemoval}
         onRemoveDay={(day) => void removeDay(day)}
         addDayButton={newDayButton}
+        kitCrewOfDay={kitCrewOfDay}
+        onKitCrew={applyKitCrew}
         extraActions={
           <button
             type="button"

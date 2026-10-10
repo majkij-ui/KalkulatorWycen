@@ -5,6 +5,7 @@ import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
 import { computeFuelRatePerKm } from './profit-calc'
 import { dayGearFigures } from './quote-gear'
+import { dayCrewFigures } from './quote-crew'
 
 const VAT_RATE = 0.23
 
@@ -166,12 +167,15 @@ export function getBreakdownWithPricing(
       const adjustment = safeNum(day.dayAdjustment, 0)
       // Sprzęt z katalogu i z wypożyczalni: bez marży (patrz quote-gear.ts).
       const gear = dayGearFigures(day, data.gearDiscountPercent)
-      const lineNetto = applyMargin(dayNet, marginMultiplier) + adjustment + gear.charged + gear.external
+      // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki.
+      const crew = dayCrewFigures(day)
+      const crewNetto = applyMargin(crew.ekipa, marginMultiplier) + applyMargin(crew.obsada, marginMultiplier)
+      const lineNetto = applyMargin(dayNet, marginMultiplier) + crewNetto + adjustment + gear.charged + gear.external
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
         value: 'Szczegółowa wycena',
         quantity: 1,
-        unitPriceNet: dayNet + gear.charged + gear.external,
+        unitPriceNet: dayNet + crew.ekipa + crew.obsada + gear.charged + gear.external,
         lineNetto,
       })
     })
@@ -375,6 +379,9 @@ export function getProductionEkipaCastSprzetNetto(
     sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
     const gear = dayGearFigures(day, data.gearDiscountPercent)
     sprzetNetto += gear.charged + gear.external
+    const crew = dayCrewFigures(day)
+    ekipaNetto += applyMargin(crew.ekipa, marginMultiplier)
+    castNetto += applyMargin(crew.obsada, marginMultiplier)
     ekipaNetto += safeNum(day.dayAdjustment, 0)
   })
 

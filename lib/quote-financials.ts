@@ -12,6 +12,7 @@
 import { defaultQuoteData, type QuoteData, type ShootingDay } from './quote-types'
 import { migratePricingConfig, DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
 import { getTotals } from './quote-calc'
+import { dayCrewFigures } from './quote-crew'
 import { computeProfitSummary, resolveProfitSections } from './profit-calc'
 import { safeArray, safeNum } from './safe-numbers'
 import type { ProjectFinancials } from './project-types'
@@ -39,6 +40,7 @@ export function mergeQuoteDataPartial(partial: Partial<QuoteData>): QuoteData {
     ? Math.min(100, Math.max(0, merged.gearDiscountPercent))
     : defaultQuoteData.gearDiscountPercent
   if (typeof merged.gearValueInPdf !== 'boolean') merged.gearValueInPdf = defaultQuoteData.gearValueInPdf
+  if (typeof merged.crewPeopleInPdf !== 'boolean') merged.crewPeopleInPdf = defaultQuoteData.crewPeopleInPdf
   // Legacy snapshots (pre-crudeEditCount) only carried dniMontazu; the check must
   // look at the raw partial — after the spread, crudeEditCount is never undefined.
   if (partial.crudeEditCount === undefined && typeof partial.dniMontazu === 'number' && partial.dniMontazu > 0) {
@@ -62,7 +64,9 @@ export function computeTotalCrewDays(data: QuoteData): number {
       day.mua +
       day.aktor +
       day.model +
-      day.statysta,
+      day.statysta +
+      // Ekipa z bazy (T9b): każda osoba-dzień je i śpi jak licznik.
+      dayCrewFigures(day).personDays,
     0
   )
 }
