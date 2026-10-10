@@ -150,20 +150,22 @@ export function ClientsSection({ onOpenProject }: { onOpenProject?: (id: string)
     window.scrollTo({ top: 0 })
   }
 
+  // Klucz strony zmieniamy w tym samym takcie co projekty (`updateProjects` zmienia
+  // je od razu, przed zapisem) — inaczej strona na chwilę „gubi" klienta i wraca do listy.
   const merge = async (plan: ClientMergePlan) => {
-    await updateProjects(mergePatches(plan).map(({ id, client }) => ({ id, patch: { client } })))
-    // Filtr listy projektów wskazywał scalonego klienta → niech wskazuje wynik scalenia.
-    if (listClient && plan.keys.includes(listClient)) setListClient(plan.targetKey)
     setNotice({ plan, fromKey: openKey ?? plan.targetKey, listClient })
     setOpenKey(plan.targetKey)
+    // Filtr listy projektów wskazywał scalonego klienta → niech wskazuje wynik scalenia.
+    if (listClient && plan.keys.includes(listClient)) setListClient(plan.targetKey)
+    await updateProjects(mergePatches(plan).map(({ id, client }) => ({ id, patch: { client } })))
   }
 
   const undo = async () => {
     if (!notice) return
-    await updateProjects(undoMergePatches(projects, notice.plan).map(({ id, client }) => ({ id, patch: { client } })))
-    setListClient(notice.listClient)
-    setOpenKey(notice.fromKey)
     setNotice(null)
+    setOpenKey(notice.fromKey)
+    setListClient(notice.listClient)
+    await updateProjects(undoMergePatches(projects, notice.plan).map(({ id, client }) => ({ id, patch: { client } })))
   }
 
   const noticeBar = notice && (
