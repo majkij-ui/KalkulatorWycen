@@ -48,7 +48,7 @@ const selectClass =
 
 export function CrewQuoteNotice() {
   const { data, updateField, updateShootingDay } = useQuote()
-  const { roles, people } = useCrew()
+  const { quoteRoles: roles, people } = useCrew()
   const days = data.detailedShootingDays ?? []
   const hasCrew = days.some((d) => (d.crew ?? []).length > 0)
   const stale = useMemo(() => staleCrewLines(days, roles, people), [days, roles, people])
@@ -94,7 +94,7 @@ export function DayCrewSection({
   onUpdate: <K extends keyof ShootingDay>(field: K, value: ShootingDay[K]) => void
 }) {
   const { marginMultiplier, formatCurrency } = useQuote()
-  const { roles, activeRoles, people, addRole } = useCrew()
+  const { quoteRoles: roles, quoteActiveRoles: activeRoles, people, addRole } = useCrew()
   const lines = day.crew ?? []
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles])
   const [newRole, setNewRole] = useState(false)

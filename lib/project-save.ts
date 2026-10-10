@@ -17,15 +17,24 @@
 import { computeSnapshotFinancials, mergeQuoteDataPartial } from './quote-financials'
 import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
+import type { PricingConfigShape } from './pricing-config'
 import type { QuoteData } from './quote-types'
 
 /**
  * Migawka, którą `openProject` wgrywa dla projektu bez wyceny: czysty
  * kalkulator z klientem z wątku. Jedna definicja dla otwarcia i dla
  * `isBlankQuoteData`, żeby „nietknięty" znaczyło dokładnie „taki jak po otwarciu".
+ *
+ * `pricing` = cennik domyślny użytkownika: nowa wycena startuje od niego, a nie
+ * od cennika projektu otwartego wcześniej (wczytanie wyceny podmienia cennik
+ * kalkulatora na jej własny). Bez zapisanego domyślnego — klucza nie ma i
+ * kalkulator zostaje przy bieżącym cenniku, jak dawniej.
  */
-export function blankQuoteSnapshot(client: string): { data: Partial<QuoteData>; marginMultiplier: number } {
-  return { data: { clientName: client }, marginMultiplier: 1 }
+export function blankQuoteSnapshot(
+  client: string,
+  pricing?: PricingConfigShape | null
+): { data: Partial<QuoteData>; marginMultiplier: number; pricingConfig?: PricingConfigShape } {
+  return { data: { clientName: client }, marginMultiplier: 1, ...(pricing ? { pricingConfig: pricing } : {}) }
 }
 
 /** Głębokie porównanie danych JSON; klucz z `undefined` traktujemy jak brak klucza. */

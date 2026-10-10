@@ -161,7 +161,7 @@ export function DayGearSection({
   const { data, formatCurrency } = useQuote()
   const { items, kits, addKit } = useEquipment()
   // Zestawy niosą też ekipę (T9b): dodanie zestawu dokłada role i ludzi do dnia.
-  const { roles, people } = useCrew()
+  const { quoteRoles: roles, people } = useCrew()
   const crewLines = day.crew ?? []
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const lines = day.gear ?? []

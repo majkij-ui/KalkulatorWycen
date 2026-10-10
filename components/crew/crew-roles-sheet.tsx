@@ -3,8 +3,10 @@
 /**
  * Role Ekipy: nazwa, stawka dla klienta, mój koszt, grupa; wycofanie i
  * przywrócenie. Wbudowane role, których nie edytowano, biorą nazwę i stawkę
- * z cennika kalkulatora („z cennika") — pierwsza zmiana zapisuje je do pliku i
- * od tej chwili mają własne stawki (decyzja 7: stawkę dla klienta daje rola).
+ * z cennika domyślnego („z cennika"; Ustawienia → „Zapisz stawki jako
+ * domyślne") — pierwsza zmiana zapisuje je do pliku i od tej chwili mają
+ * własne stawki (decyzja 7: stawkę dla klienta daje rola). W otwartej wycenie
+ * wbudowane role liczą się z jej własnego cennika (`quoteRoles`).
  */
 
 import { useState } from 'react'
@@ -89,7 +91,14 @@ function RoleRow({ role, fromPricing }: { role: CrewRole; fromPricing: boolean }
           />
           zł
         </label>
-        {fromPricing && <span className="rounded bg-zinc-800 px-1.5 py-px text-[10px] text-zinc-400">z cennika</span>}
+        {fromPricing && (
+          <span
+            className="rounded bg-zinc-800 px-1.5 py-px text-[10px] text-zinc-400"
+            title="Stawka z cennika domyślnego (Ustawienia → Zapisz stawki jako domyślne). W wycenie liczy się cennik tej wyceny."
+          >
+            z cennika
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-1">
           {dirty && (
             <Button size="sm" className="h-7 text-xs" onClick={save} disabled={!name.trim()}>

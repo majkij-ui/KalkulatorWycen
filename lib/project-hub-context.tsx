@@ -25,6 +25,7 @@ import {
 import { listImportableQuotes } from './legacy-app'
 import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
 import { backfillMissingFinancials } from './quote-financials'
+import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
 import { blankQuoteSnapshot, canReprefillBlankQuote, planProjectSave, type ProjectSavePlan } from './project-save'
 import { applyClientChoice, type ClientChoice } from './clients'
@@ -225,7 +226,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       if (!project) return
       // Projekt bez wyceny: czysty kalkulator z klientem z wątku, żeby
       // wycena „podjęła wątek" zamiast zostawić dane poprzedniego projektu.
-      loadQuoteSnapshot((project.quote ?? blankQuoteSnapshot(project.client)) as never)
+      loadQuoteSnapshot((project.quote ?? blankQuoteSnapshot(project.client, getSavedUserDefault())) as never)
       setActiveProjectId(id)
     },
     [projects, loadQuoteSnapshot]
@@ -244,7 +245,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       if (!trimmed) return null
       const project = createProject({ name: trimmed, existing: projectsRef.current })
       setProjects(await upsertProject(project))
-      loadQuoteSnapshot(blankQuoteSnapshot('') as never)
+      loadQuoteSnapshot(blankQuoteSnapshot('', getSavedUserDefault()) as never)
       setActiveProjectId(project.id)
       return project
     },
@@ -303,7 +304,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       // Przed zapisem: decyzja dotyczy kalkulatora z chwili zmiany.
       const reprefill = canReprefillBlankQuote(project, buildQuoteSnapshot())
       await patchProject(project.id, choice.patch)
-      if (reprefill) loadQuoteSnapshot(blankQuoteSnapshot(choice.patch.client) as never)
+      if (reprefill) loadQuoteSnapshot(blankQuoteSnapshot(choice.patch.client, getSavedUserDefault()) as never)
       return choice
     },
     [activeProjectId, buildQuoteSnapshot, loadQuoteSnapshot, patchProject]
