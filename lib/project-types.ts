@@ -328,8 +328,13 @@ export const projectCostSchema = z
     quantity: z.number().finite().nonnegative().optional().catch(undefined),
     /** Opis pozycji („Wynajem studia", „Paliwo Poznań"). */
     label: z.string().optional().catch(undefined),
-    /** Osoba (ekipa). */
+    /** Osoba (ekipa) — imię zamrożone w chwili wpisania, do wyświetlania. */
     person: z.string().optional().catch(undefined),
+    /**
+     * Osoba z bazy Ekipa (`crew.json`, T9a). Brak = wpisana tekstem; statystyki
+     * dopasowują wtedy osobę po imieniu (`personKey`).
+     */
+    personId: z.string().min(1).optional().catch(undefined),
     /** Rola na planie (ekipa): „Operator B", „Gafer". */
     role: z.string().optional().catch(undefined),
     /** Dzień realizacji (`gearDays[].id`); brak = koszt całego projektu. */

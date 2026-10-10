@@ -422,7 +422,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
-| **T9a Ekipa: people + Realizacja** (idea, §6d) | `crew-roles.json` (seeded from the 8 roles), `crew.json` (people, contact, rate), screen „Ekipa" with derived stats (days together, paid, last time), person picker with **+** in Realizacja crew rows (`ProjectCost.personId`), "Dodaj do bazy" for names already used. | T5a |
+| **T9a Ekipa: people + Realizacja** ✅ (2026-10-10, §6d) | `crew-roles.json` (built-in roles from the price list until edited), `crew.json` (people, contact, rate), screen „Ekipa" with derived stats (days together, projects, paid, average rate, history, ranking), person picker with „+ Nowa osoba" in Realizacja crew rows (`ProjectCost.personId`), "Dodaj do bazy" for names already used. Pure: `crew-types.ts`, `crew-stats.ts`; store `crew-store.ts`, context `crew-context.tsx`. 21 new tests; 20/20 mutations caught; flows verified in the browser preview. | T5a |
 | **T9b Ekipa in the quote** (idea, §6d) | Per-day crew lines: role placeholder or person, **+** new role, rates frozen; old counters under "Stare pozycje ekipy"; plan cost from person or role; "Przepisz ekipę z planu" carries the person; crew kits. | T9a, G5 |
 | **T9c Retire the old rows** (idea, §6d) | New quotes stop offering fixed crew counters and old gear fields; quick-mode packages become kits. Old quotes unchanged. | T9b, use in practice |
 | **T10 Klienci** (idea, §6d) | Sidebar list + page per client, all derived: revenue (total, per year, share), return rhythm, size trend, win rate, first lead source, merge spellings. Days to payment after T6, crew after T9. | T3 |
@@ -566,7 +566,7 @@ costs stay in `financials.koszty`.
 - Crew suggestions come only from won/done projects (quote rates are hypotheses).
 - Day labels default to "Dzień N" over all days (prep included); an event title is used when set.
 
-## 6d. Ideas: crew database and client pages *(M.J. 2026-10-10, not started)*
+## 6d. Crew database and client pages *(M.J. 2026-10-10; T9a built, T9b, T9c and T10 open)*
 
 ### Ekipa — a database of people, picked like gear (T9)
 
@@ -638,6 +638,56 @@ projects grow or shrink, revenue brought in by that client.
 2. **Contractors go in the same people list,** with roles in the `post` group (editor, colourist,
    motion designer).
 3. **Two new sidebar sections, „Klienci" and „Ekipa".** No „Zasoby" grouping.
+
+### T9a as built (2026-10-10)
+
+**Data** (commit `feat(lib): crew roles and people (T9a data)`; from here on additive only):
+- `CrewRole { id, name, clientRate, costRate?, group, order, retiredAt?, updatedAt? }` in
+  `crew-roles.json`. The 8 calculator roles keep their `CrewRoleKey` ids and exist **without a file**:
+  `resolveCrewRoles(stored, pricing)` adds every built-in that isn't stored, with the label used in the
+  plan (Profit) and `clientRate` from the current price list (`pricing.produkcja`). Only roles that were
+  edited or added are written, so an untouched built-in keeps following the price list; an edited one
+  has its own rates. Roles are retired, never deleted. `group` is a free string with known keys
+  `ekipa / obsada / post`.
+- `CrewMember { id, name, roleIds[], rate?, contact { phone?, email? }, city?, notes?, retiredAt?,
+  deletedAt?, createdAt, updatedAt }` in `crew.json`; soft delete with undo. Optional fields have no
+  defaults, so `npm run data` (both files are in `SCHEMAS`) accepts minimal records.
+- `ProjectCost.personId?` next to the frozen `person` name.
+- `CrewProvider` / `useCrew()` sits in `AppShell` under `QuoteProvider` (so the calculator can use it in
+  T9b) and reloads on window focus, like events.
+
+**Stats** (`crew-stats.ts`): actual crew rows (`category: 'ekipa'`, not soft-deleted) of won/done,
+non-deleted projects. A row belongs to a person by `personId`; rows without one match by
+`personKey(name)` (oldest live record with that key). A row tied to a realization day counts as
+`quantity` days (normally 1) and feeds the average day rate; a project-level crew cost (e.g. editing for
+the whole job) counts toward projects and pay but not days. Day dates come from the calendar
+(`gearDaysWithCalendarDates`). Per person: days, projects, last time, paid this year and in total,
+average day rate, roles played, project history; plus the ranking "najczęściej pracuję z…" (days, then
+projects, then pay). `unknownCrewNames` lists names used in crew rows (any status) that aren't in the
+database.
+
+**Screens:**
+- „Ekipa" in the sidebar after Sprzęt: tiles (people, paid this year, most frequent), ranking, a banner
+  with names not in the database ("Dodaj do bazy" / "Dodaj wszystkich" — the past work then counts by
+  name), search over name / role / city, role filter (incl. "Bez roli"), sort, retired toggle. The
+  person panel edits roles (with "Nowa rola" inline), my rate, phone, email, city, notes; copies the
+  contact; shows the stats and the project history (click opens the project on Realizacja); retire /
+  restore; soft delete with "Cofnij" on the list. The roles panel edits name, client rate, my cost and
+  group, marks untouched built-ins "z cennika", retires / restores, adds roles.
+- Realizacja crew rows: the person field is a picker — people with the row's role first, then the rest,
+  then names from other won/done projects that aren't in the database, and "+ Nowa osoba „…"" (creates
+  the person with the row's role and rate and links the row). Picking sets `personId`, the name, the
+  person's rate (when set) and an empty role; typing a different name unlinks. The role field suggests
+  the active role names. Above the day cards, names in this project that aren't in the database can be
+  added with one click; that also links this project's rows.
+
+**Not in T9a (left for T9b):** the calculator, `quote-calc`, `profit-calc` and
+`plannedCrew` / `crewCostsFromPlan` are untouched — the quote still prices crew from the price list and
+"Przepisz ekipę z planu" still copies roles with an empty person.
+
+**Known limits:** a person soft-deleted from Ekipa no longer gets stats, and rows linked to them keep
+the frozen name (they show up again under "spoza bazy"). Two people with the same name: name matching
+picks the oldest record; link rows explicitly to tell them apart.
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
