@@ -136,6 +136,9 @@ test('clientStats: klient bez zleceń — zero przychodu, brak marży; nieznany 
   assert.deepEqual(s.years, [])
   assert.equal(s.repeat, false)
   assert.equal(clientStats(projects, [], 'brak', TODAY), null)
+  // Jedno zlecenie i wycena to jeszcze nie powracający klient.
+  const once = [...projects, project({ client: 'Nowy', status: 'done', financials: fin(2_000) })]
+  assert.equal(clientStats(once, [], 'nowy', TODAY)!.repeat, false)
   assert.equal(clientStats(projects, [], '', TODAY), null)
 })
 
@@ -321,6 +324,7 @@ test('describeGap / describeSince: dni, tygodnie, miesiące, lata z odmianą', (
   assert.equal(describeGap(1), 'co 1 dzień')
   assert.equal(describeGap(10), 'co 10 dni')
   assert.equal(describeGap(21), 'co ~3 tyg.')
+  assert.equal(describeGap(40), 'co ~6 tyg.')
   assert.equal(describeGap(91), 'co ~3 mies.')
   assert.equal(describeGap(365), 'co ~12 mies.')
   assert.equal(describeGap(548), 'co ~1,5 roku')

@@ -41,6 +41,9 @@ export const TREND_RATIO = 1.2
 /** Trend pokazujemy dopiero od tylu zleceń z kwotą. */
 export const TREND_MIN_POINTS = 3
 
+/** Klient „wraca" od tylu zleceń. */
+export const REPEAT_MIN_JOBS = 2
+
 export function isJob(project: Pick<Project, 'status'>): boolean {
   return countsTowardRevenue(project.status)
 }
@@ -328,7 +331,7 @@ export function clientStats(
     profit,
     marginPct: revenue > 0 ? (profit / revenue) * 100 : null,
     missingFinancials: jobs.filter((p) => !p.financials).length,
-    repeat: jobs.length >= 2,
+    repeat: jobs.length >= REPEAT_MIN_JOBS,
     rhythm: clientRhythm(own, today),
     size: clientSize(own),
     outcomes: clientOutcomes(own),
@@ -381,7 +384,7 @@ export function clientSummaries(projects: ClientProject[], today: string): Clien
       jobCount,
       revenue: clientRevenue(own, info.key).revenue,
       lastDate: info.lastDate,
-      repeat: jobCount >= 2,
+      repeat: jobCount >= REPEAT_MIN_JOBS,
       nudge: clientRhythm(own, today).nudge,
     }
   })
