@@ -30,6 +30,8 @@ import {
   softDeleteCategory,
   softDeleteCrewEntry,
   softDeleteScheduleItem,
+  softDeleteScheduleItems,
+  addedScheduleIds,
   upsertScheduleItem,
   type CallSheetContext,
 } from './call-sheet'
@@ -245,6 +247,20 @@ test('harmonogram: przeciąganie, miękkie usuwanie z „Cofnij", początek nowe
     ['b', 'a']
   )
   assert.equal('deletedAt' in sheet.schedule[1], false)
+})
+
+test('cofnięcie szablonu: dopisane wpisy znikają miękko, wcześniejsze zostają', () => {
+  const before = upsertScheduleItem(blank(), plannerEvent('own', 400, 420))
+  const after = applyDayTemplate(before, 420)
+  const ids = addedScheduleIds(before, after)
+  assert.equal(ids.length, 6)
+  assert.ok(!ids.includes('own'))
+  const undone = softDeleteScheduleItems(after, ids, 'x')
+  assert.deepEqual(
+    liveSchedule(undone).map((e) => e.id),
+    ['own']
+  )
+  assert.equal(undone.schedule.length, 7, 'wpisy szablonu zostają w pliku')
 })
 
 test('punkty pod wpisem: dodawanie bez pustych, przesuwanie w granicach listy', () => {

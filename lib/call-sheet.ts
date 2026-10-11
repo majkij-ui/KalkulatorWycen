@@ -172,6 +172,23 @@ export function softDeleteScheduleItem(sheet: CallSheet, id: string, deletedAt: 
   return { ...sheet, schedule: markDeleted(sheet.schedule, id, deletedAt) }
 }
 
+/** Kilka wpisów naraz (cofnięcie szablonu, kopii albo importu). */
+export function softDeleteScheduleItems(sheet: CallSheet, ids: Iterable<string>, deletedAt: string): CallSheet {
+  const wanted = new Set(ids)
+  return {
+    ...sheet,
+    schedule: sheet.schedule.map((e) => (wanted.has(e.id) && !e.deletedAt ? { ...e, deletedAt } : e)),
+  }
+}
+
+/** Id żywych wpisów, których nie było w `before` (co dopisał szablon, kopia albo import). */
+export function addedScheduleIds(before: Pick<CallSheet, 'schedule'>, after: Pick<CallSheet, 'schedule'>): string[] {
+  const known = new Set(before.schedule.map((e) => e.id))
+  return live(after.schedule)
+    .filter((e) => !known.has(e.id))
+    .map((e) => e.id)
+}
+
 // ── Punkty pod wpisem (ujęcia) ───────────────────────────────────────────────
 
 export function addSubItem(event: PlannerEvent, text: string): PlannerEvent {
@@ -485,6 +502,8 @@ export interface ResolvedClient {
   value: Omit<CrewValues, 'role'>
   own: Record<'name' | 'phone' | 'email', boolean>
   hidden: boolean
+  /** Poprawki tak, jak je wpisano (pola edytora). */
+  raw: CallSheetClient | null
 }
 
 export function resolveClient(
@@ -505,6 +524,7 @@ export function resolveClient(
     value: { name: name.value, phone: phone.value, email: email.value },
     own: { name: name.own, phone: phone.own, email: email.own },
     hidden: !!sheet.client?.hidden,
+    raw: sheet.client ?? null,
   }
 }
 
