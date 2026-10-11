@@ -241,7 +241,14 @@ test('harmonogram: przeciąganie, miękkie usuwanie z „Cofnij", początek nowe
   )
   assert.equal(sheet.schedule.length, 2, 'wpis zostaje w pliku')
   assert.equal(nextStartMinutes(sheet), 730)
+  sheet = softDeleteScheduleItem(sheet, 'a', 'later')
   sheet = restoreSheetItems(sheet, at)
+  assert.deepEqual(
+    liveSchedule(sheet).map((e) => e.id),
+    ['b'],
+    '„Cofnij" przywraca tylko to, co usunięto z tym znacznikiem'
+  )
+  sheet = restoreSheetItems(sheet, 'later')
   assert.deepEqual(
     liveSchedule(sheet).map((e) => e.id),
     ['b', 'a']
@@ -382,12 +389,14 @@ const exportFile = JSON.stringify([
       },
       { id: '2', title: 'Drone', startMinutes: 400, endMinutes: 460, categoryId: 'uuid-drone' },
       { id: '3', title: 'Bez tagu', startMinutes: 460, endMinutes: 470, categoryId: 'missing' },
+      { id: '4', title: 'Przerwa', startMinutes: 470, endMinutes: 500, categoryId: 'uuid-breaks' },
       { id: 'broken', title: 'Bez czasu', categoryId: 'camera' },
     ],
     categories: [
       { id: 'camera', label: 'Camera', color: '#00f3ff' },
       { id: 'uuid-drone', label: 'Drone', color: '#ff6700' },
       { id: 'uuid-gray', label: 'Misc', color: '#94a3b8' },
+      { id: 'uuid-breaks', label: 'przerwy', color: '#39ff14' },
     ],
   },
   { id: 'not-a-day' },
@@ -398,7 +407,7 @@ test('plik CallSheetWiz: lista dni albo jeden dzień, uszkodzone wpisy znikają,
   assert.equal(days?.length, 1)
   assert.deepEqual(
     days![0].events.map((e) => e.id),
-    ['1', '2', '3']
+    ['1', '2', '3', '4']
   )
   assert.equal(parseSavedDaysFile(JSON.stringify(JSON.parse(exportFile)[0]))?.length, 1)
   assert.deepEqual(parseSavedDaysFile('[]'), [])
@@ -412,18 +421,20 @@ test('import dnia z CallSheetWiz: stary harmonogram miękko usunięty, tagi bez 
   const [day] = parseSavedDaysFile(exportFile)!
   const result = importSavedDay(target, day, NOW)
   const sheet = result.sheet
-  assert.deepEqual([result.added, result.replaced], [3, 1])
+  assert.deepEqual([result.added, result.replaced], [4, 1])
 
   const schedule = liveSchedule(sheet)
   assert.deepEqual(
     schedule.map((e) => e.title),
-    ['Crew Call & Safety Briefing', 'Drone', 'Bez tagu']
+    ['Crew Call & Safety Briefing', 'Drone', 'Bez tagu', 'Przerwa']
   )
   assert.notEqual(schedule[0].id, '1', 'kolizja id z wpisem w pliku → nowe id')
   assert.equal(schedule[1].id, '2')
   assert.equal(schedule[0].categoryId, 'camera', 'tag o tym samym id już był — „Kamera" zostaje')
   assert.equal(schedule[0].subItems![0].text, 'Walkie check')
   assert.equal(schedule[2].categoryId, '')
+  assert.equal(schedule[3].categoryId, 'meals', 'tag o tej samej nazwie (bez wielkości liter) zamiast nowego')
+  assert.equal(sheet.categories.some((c) => c.id === 'uuid-breaks'), false)
 
   const drone = sheet.categories.find((c) => c.id === 'uuid-drone')!
   assert.deepEqual([drone.label, drone.color, drone.importedColor], ['Drone', 'orange', '#ff6700'])
@@ -440,7 +451,7 @@ test('import dnia z CallSheetWiz: stary harmonogram miękko usunięty, tagi bez 
     date: '2026-07-19T10:00:00.000Z',
     at: NOW.toISOString(),
   })
-  assert.equal(liveSchedule(restoreSheetItems(sheet, result.deletedAt)).length, 4, '„Cofnij" przywraca stary wpis')
+  assert.equal(liveSchedule(restoreSheetItems(sheet, result.deletedAt)).length, 5, '„Cofnij" przywraca stary wpis')
   assert.deepEqual(callSheetSchema.parse(sheet), sheet)
 
   const titled = importSavedDay({ ...blank(), title: 'Mój tytuł' }, day, NOW).sheet
@@ -454,6 +465,7 @@ test('kolory z CallSheetWiz → najbliższy slot palety; szary i śmieci → neu
     ['#00f3ff', '#39ff14', '#ff00ff', '#ff6700', '#ff003c', '#9d00ff', '#f3ff00', '#0078ff'].map(paletteKeyForHex),
     ['cyan', 'lime', 'magenta', 'orange', 'coral', 'violet', 'lemon', 'blue']
   )
+  assert.equal(paletteKeyForHex('#ff0078'), 'rose', 'odcień 5° jest bliżej 355° (rose) niż 25° (coral) — koło barw się zamyka')
   assert.equal(paletteKeyForHex('#94a3b8'), null)
   assert.equal(paletteKeyForHex('nope'), null)
 })
