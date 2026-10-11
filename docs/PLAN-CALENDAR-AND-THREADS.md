@@ -943,7 +943,7 @@ invoice pairing now also returns each invoice's `amountNetto`, `dueDate`, the pa
   now says Finance uses entered costs (it said Finance ignores them).
 
 **Tests:** `money-loop.test.ts` (22), `money-loop-labels.test.ts` (6), +1 each in `thread-stats` and
-`event-types`, and the `realization-plan` actual-figures test extended (417 in total). One test proves the totals equal `finance-calc` when invoices match
+`event-types`, and the `realization-plan` actual-figures test extended (417 in total on the T6 branch, 422 after merging the 2026-10-10 glue batch). One test proves the totals equal `finance-calc` when invoices match
 the plan. 38 deliberate mutations across the four modules, 37 caught; the survivor (`if (money.plan &&
 anchored)`) is equivalent because that line already runs only for anchored projects.
 
