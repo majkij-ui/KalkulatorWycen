@@ -45,7 +45,7 @@ export interface ActualFigures {
   byCategory: Map<string, number>
 }
 
-const DEFAULT_TAX_RATE = 8.5
+export const DEFAULT_TAX_RATE = 8.5
 
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
