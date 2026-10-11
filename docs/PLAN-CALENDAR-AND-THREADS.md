@@ -467,6 +467,22 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
 
+**Merged and installed 2026-10-11:** T6 (money loop, §6e) and T5b (call sheet, §6f; its section was
+also numbered 6e on its branch and is renumbered). 453 tests. On the real data, read-only: all 10 saved
+quotes compute identically before and after; Finance 2026 = 159,613 zł revenue and 76,571 zł project
+profit as before (13 of 17 jobs from invoices, one invoice open: Interferie, due 16.10).
+
+**Next (2026-10-11), in order:**
+1. **Test-drive** by M.J. on real work; friction and bugs go into one fix batch.
+2. **Data completeness:** invoices for S-AI, JHJ, Morris & Lloyd, CIONET wywiady (79 % of 2026 revenue
+   is still „z planu"); gear purchase prices and rental rates; crew in Ekipa.
+3. **Glue after T6 (main session):** Klienci revenue and the Projekty client filter switch to the money
+   loop's best-known revenue; the mail runbook asks for invoice amounts, due dates and extra sales;
+   the G3 packing-list „Drukuj" moves to the call sheet's PDF path (`window.print()` is unreliable in
+   the desktop app).
+4. **T9c** (retire old quote rows, quick-mode packages → kits) once the new pickers have been used.
+5. **T7 Insights** (response time, conversion by source, effort vs quoted, gear spend, extras, crew).
+
 **Merged and installed 2026-10-10 (evening):** T4b, T9a, T9b, T10 on top of T5a and G5/G6. Checked on
 the real hub data, read-only: all 10 saved quotes compute identically before and after the merge and
 match their stored financials; client revenue sums to the jobs total; both inbox files parse (42
