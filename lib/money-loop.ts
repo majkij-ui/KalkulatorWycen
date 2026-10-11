@@ -5,9 +5,11 @@
  * wydarzenia w wątku projektu, koszty to `Project.costs`, plan to zamrożone
  * `financials`. Reguły (uzgodnione z M.J. 2026-10-11):
  *
- *  - PRZYCHÓD RZECZYWISTY = faktury (`invoice_sent.amountNetto`; faktura bez
- *    kwoty bierze kwotę sparowanej wpłaty) + wpłaty bez faktury, jeśli mają
- *    kwotę. Pary faktura → wpłata liczy `thread-stats`. Faktury są bez VAT.
+ *  - PRZYCHÓD RZECZYWISTY = wystawione faktury (`invoice_sent.amountNetto`;
+ *    faktura bez kwoty bierze kwotę sparowanej wpłaty) + wpłaty bez faktury,
+ *    jeśli mają kwotę. Pary faktura → wpłata liczy `thread-stats`. Faktury są
+ *    bez VAT. Faktura ZAPLANOWANA (data w przyszłości) to jeszcze plan: mówi,
+ *    kiedy przychód wpadnie, a projekt z nią nie jest zamknięty.
  *  - OCZEKIWANY = plan (`financials.sumaNetto`) + sprzedaż dodatkowa
  *    (`extra_sale`): surówka, dodatkowa postprodukcja, licencja…
  *  - NAJLEPSZA WIEDZA: faktury zastępują plan, gdy są pełne — są co najmniej
@@ -60,10 +62,12 @@ export interface ExtraSale {
 
 /**
  * Dlaczego przychód jest wg planu albo czego brakuje:
- * `no_invoices` — brak faktur, `partial` — faktury niższe niż oczekiwany w
- * realizacji, `missing_amount` — faktura bez kwoty.
+ * `no_invoices` — brak faktur, `planned` — są tylko faktury zaplanowane,
+ * `partial` — wystawione faktury niższe niż oczekiwany (zaliczka, w
+ * realizacji albo z zaplanowaną fakturą końcową), `missing_amount` — faktura
+ * bez kwoty.
  */
-export type RevenueNote = 'no_invoices' | 'partial' | 'missing_amount' | null
+export type RevenueNote = 'no_invoices' | 'planned' | 'partial' | 'missing_amount' | null
 /** `no_costs` — brak kosztów w Realizacji, `partial` — wpisano mniej niż plan (w realizacji). */
 export type CostsNote = 'no_costs' | 'partial' | null
 
@@ -87,14 +91,19 @@ export interface ProjectMoney {
   plan: PlanFigures | null
   extras: ExtraSale[]
   extrasTotal: number
-  /** Plan + dodatki; `null` = ani planu, ani dodatku z kwotą. */
+  /**
+   * Plan + dodatki; `null` = ani planu, ani dodatku z kwotą. Projekt bez planu
+   * z zaplanowaną fakturą bierze za plan jej kwotę.
+   */
   expected: number | null
   invoices: InvoiceStats[]
   unpairedPayments: UnpairedPayment[]
-  /** Faktury, których kwoty nie znamy (ani z faktury, ani z wpłaty). */
+  /** Wystawione faktury, których kwoty nie znamy (ani z faktury, ani z wpłaty). */
   invoicesWithoutAmount: number
-  /** Suma znanych faktur i wpłat bez faktury; `null` = brak faktur z kwotą. */
+  /** Suma wystawionych faktur i wpłat bez faktury; `null` = brak faktur z kwotą. */
   invoiced: number | null
+  /** Najbliższa zaplanowana faktura (data w przyszłości); `null` = brak. */
+  nextPlannedInvoice: string | null
   /** Najlepsza wiedza o przychodzie; `null` = nic nie wiadomo. */
   revenue: number | null
   revenueBasis: 'invoices' | 'plan' | 'none'
@@ -158,19 +167,25 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
   const done = project.status === 'done'
 
   // ── Przychód ───────────────────────────────────────────────────────────────
+  const issued = invoices.filter((i) => i.state !== 'planned')
+  const planned = invoices.filter((i) => i.state === 'planned' && invoiceAmount(i) !== null)
+  const plannedTotal = sum(planned.map((i) => invoiceAmount(i)!))
+
   const plan = project.financials ? planFromFinancials(project.financials) : null
   const extras = extrasOf(own)
   const pricedExtras = extras.flatMap((x) => (x.amount === null ? [] : [x.amount]))
   const extrasTotal = sum(pricedExtras)
-  const expected = plan === null && pricedExtras.length === 0 ? null : (plan?.revenue ?? 0) + extrasTotal
+  const basePlan = plan?.revenue ?? (planned.length > 0 ? plannedTotal : null)
+  const expected = basePlan === null && pricedExtras.length === 0 ? null : (basePlan ?? 0) + extrasTotal
 
-  const knownInvoices = invoices.filter((i) => invoiceAmount(i) !== null)
+  const knownInvoices = issued.filter((i) => invoiceAmount(i) !== null)
   const pricedPayments = unpairedPayments.filter((p) => p.amount !== null)
-  const invoicesWithoutAmount = invoices.length - knownInvoices.length
+  const invoicesWithoutAmount = issued.length - knownInvoices.length
   const hasActual = knownInvoices.length + pricedPayments.length > 0
   const invoiced = hasActual
     ? sum(knownInvoices.map((i) => invoiceAmount(i)!)) + sum(pricedPayments.map((p) => p.amount!))
     : null
+  const pendingInvoice = invoices.some((i) => i.state === 'planned')
 
   let revenue: number | null
   let revenueBasis: ProjectMoney['revenueBasis']
@@ -178,7 +193,7 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
   if (invoiced === null) {
     revenue = expected
     revenueBasis = expected === null ? 'none' : 'plan'
-    revenueNote = invoices.length > 0 ? 'missing_amount' : 'no_invoices'
+    revenueNote = invoicesWithoutAmount > 0 ? 'missing_amount' : pendingInvoice ? 'planned' : 'no_invoices'
   } else if (expected === null || invoiced >= expected - EPSILON) {
     revenue = invoiced
     revenueBasis = 'invoices'
@@ -187,7 +202,7 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
     revenue = expected
     revenueBasis = 'plan'
     revenueNote = 'missing_amount'
-  } else if (done) {
+  } else if (done && !pendingInvoice) {
     revenue = invoiced
     revenueBasis = 'invoices'
   } else {
@@ -232,9 +247,16 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
       pieces.push({ day: i.sent, amount: invoiceAmount(i)!, source: 'invoice', paid: i.state === 'paid' })
     )
     pricedPayments.forEach((p) => pieces.push({ day: p.day, amount: p.amount!, source: 'payment', paid: true }))
-    const rest = revenue - (invoiced ?? 0)
-    // Bez faktur cały oczekiwany przychód leży w dacie kotwicy; przy zaliczce
-    // tam leży reszta — niezafakturowana, więc i niezapłacona.
+    // Reszta (jeszcze niezafakturowana) najpierw w datach zaplanowanych
+    // faktur, potem w dacie kotwicy. Bez faktur to cały oczekiwany przychód;
+    // przy zaliczce — reszta, więc i niezapłacona.
+    let rest = revenue - (invoiced ?? 0)
+    planned.forEach((i) => {
+      const amount = Math.min(invoiceAmount(i)!, rest)
+      if (amount <= EPSILON) return
+      pieces.push({ day: i.sent, amount, source: 'plan', paid: false })
+      rest -= amount
+    })
     if (rest > EPSILON) pieces.push({ day: anchor, amount: rest, source: 'plan', paid: invoiced === null && paid })
     pieces.sort((a, b) => a.day.localeCompare(b.day))
   }
@@ -253,6 +275,7 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
     unpairedPayments,
     invoicesWithoutAmount,
     invoiced,
+    nextPlannedInvoice: invoices.find((i) => i.state === 'planned')?.sent ?? null,
     revenue,
     revenueBasis,
     revenueNote,

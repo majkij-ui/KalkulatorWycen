@@ -170,7 +170,7 @@ test('6. zaliczka w realizacji: plan do końca, potem faktury', () => {
     { revenue: 5_000, count: 0 },
     { revenue: 5_000, count: 1 },
   ], 'projekt z częścią niezapłaconą liczy się jako czekający')
-  const final = [...advance, ev('invoice_sent', '2026-11-20', { number: 'FV/2', amountNetto: 5_000 })]
+  const final = [...advance, ev('invoice_sent', '2026-10-08', { number: 'FV/2', amountNetto: 5_000 })]
   const done = projectMoney(project({ status: 'done', date: '2026-05-05' }), final, TODAY)
   assert.equal(done.revenue, 10_000)
   assert.equal(done.revenueBasis, 'invoices')
@@ -178,7 +178,7 @@ test('6. zaliczka w realizacji: plan do końca, potem faktury', () => {
     done.pieces.map((p) => [p.day, p.amount, p.source]),
     [
       ['2026-09-01', 5_000, 'invoice'],
-      ['2026-11-20', 5_000, 'invoice'],
+      ['2026-10-08', 5_000, 'invoice'],
     ]
   )
 })
@@ -261,6 +261,41 @@ test('wydarzenia innych projektów nie mieszają się', () => {
   assert.equal(m.revenueNote, 'no_invoices')
 })
 
+test('faktura zaplanowana (data w przyszłości) to jeszcze plan: wyznacza miesiąc, nie zamyka projektu', () => {
+  const gala = projectMoney(
+    project({ status: 'won', date: '2026-10-05', financials: financials(7_840, 1_500) }),
+    [ev('invoice_sent', '2026-11-20', { amountNetto: 8_000 })],
+    TODAY
+  )
+  assert.equal(gala.invoiced, null, 'nic jeszcze nie wystawiono')
+  assert.equal(gala.revenue, 7_840, 'kwota zaplanowanej faktury nie zastępuje planu')
+  assert.deepEqual([gala.revenueBasis, gala.revenueNote], ['plan', 'planned'])
+  assert.equal(gala.nextPlannedInvoice, '2026-11-20')
+  assert.deepEqual(gala.pieces, [{ day: '2026-11-20', amount: 7_840, source: 'plan', paid: false }])
+
+  // Zaliczka wystawiona, faktura końcowa zaplanowana: projekt zrealizowany nadal czeka.
+  const done = projectMoney(
+    project({ status: 'done' }),
+    [ev('invoice_sent', '2026-09-01', { amountNetto: 4_000 }), ev('invoice_sent', '2026-12-01', { amountNetto: 6_000 })],
+    TODAY
+  )
+  assert.deepEqual([done.revenue, done.revenueNote, done.invoiced], [10_000, 'partial', 4_000])
+  assert.deepEqual(
+    done.pieces.map((p) => [p.day, p.amount, p.source]),
+    [
+      ['2026-09-01', 4_000, 'invoice'],
+      ['2026-12-01', 6_000, 'plan'],
+    ],
+    'reszta ląduje w miesiącu zaplanowanej faktury'
+  )
+
+  // Bez planu: zaplanowana faktura jest planem.
+  const noPlan = projectMoney(project({ financials: null }), [ev('invoice_sent', '2026-12-01', { amountNetto: 3_000 })], TODAY)
+  assert.deepEqual([noPlan.revenue, noPlan.revenueBasis, noPlan.anchor], [3_000, 'plan', '2026-12-01'])
+  // Zaplanowana bez kwoty to nie „faktura bez kwoty".
+  assert.equal(projectMoney(project(), [ev('invoice_sent', '2026-12-01')], TODAY).revenueNote, 'planned')
+})
+
 // ── Koszty ───────────────────────────────────────────────────────────────────
 
 test('koszty: brak wpisów → plan i „brak kosztów"; w realizacji mniej niż plan → plan; po zrealizowaniu → rzeczywiste', () => {
@@ -316,7 +351,7 @@ test('kotwica przenosi projekt z miesiąca wyceny do miesiąca faktury (plan i k
   const ledger = moneyLedger(
     [project({ status: 'won', date: '2026-10-05', financials: financials(7_840, 1_500) })],
     [ev('invoice_sent', '2026-11-20', { amountNetto: 7_840 })],
-    TODAY
+    '2026-11-25'
   )
   assert.equal(ledger[0].revenueBasis, 'invoices', 'faktura równa planowi jest pełna także w realizacji')
   assert.equal(summarizeMoney(ledger, [], month(2026, 10)).projects.length, 0)
