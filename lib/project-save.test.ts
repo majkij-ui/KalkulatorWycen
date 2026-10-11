@@ -92,6 +92,25 @@ test('marża ani cennik bez pozycji wyceny nie nadpisują zaimportowanych finans
   assert.deepEqual(plan.project.financials, IMPORTED)
 })
 
+test('pusta wycena startuje od domyślnego cennika użytkownika, a bez niego nie rusza bieżącego', () => {
+  const custom = { ...DEFAULT_PRICING, produkcja: { ...DEFAULT_PRICING.produkcja, rezOp: 3100 } }
+  assert.equal(blankQuoteSnapshot('ACME', custom).pricingConfig, custom)
+  assert.equal('pricingConfig' in blankQuoteSnapshot('ACME', null), false)
+  assert.equal('pricingConfig' in blankQuoteSnapshot('ACME'), false)
+
+  // Projekt bez wyceny otwarty z cennikiem domyślnym i zapisany bez zmian: nadal bez wyceny.
+  const p = project()
+  const opened = blankQuoteSnapshot(p.client, custom)
+  const plan = planProjectSave({
+    project: p,
+    snapshot: snapshot(opened.data, { pricingConfig: opened.pricingConfig }),
+    now: NOW,
+  })
+  assert.ok(plan.status === 'ready')
+  assert.equal(plan.source, 'kept')
+  assert.equal(plan.project.quote, null)
+})
+
 test('wpisanie samego klienta aktualizuje klienta, nie zakłada wyceny', () => {
   const p = project({ client: '' })
   const plan = planProjectSave({ project: p, snapshot: snapshot({ clientName: 'Nowy Klient' }), now: NOW })

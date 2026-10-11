@@ -10,6 +10,7 @@
 import { ArrowLeft, ArrowUpRight, BellRing, Repeat } from 'lucide-react'
 import { describeGap, describeSince, SIZE_TREND_LABELS, type ClientStats } from '@/lib/client-stats'
 import type { ClientMergePlan } from '@/lib/client-merge'
+import type { crewOnProjects } from '@/lib/crew-stats'
 import { hasContact } from '@/lib/clients'
 import { countsTowardRevenue, leadSourceLabel, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
@@ -112,15 +113,52 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen?: () => void
   )
 }
 
+type ClientCrew = ReturnType<typeof crewOnProjects<Project>>
+
+/** Ekipa przy zleceniach klienta: kto, w jakiej roli, ile dni i za ile. */
+function CrewOnJobs({ crew }: { crew: ClientCrew }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {crew.ranking.map(({ member, stats }) => (
+        <div
+          key={member.id}
+          className="flex items-center gap-3 rounded-lg border border-white/5 bg-zinc-900/40 px-3 py-2"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-zinc-200">{member.name}</div>
+            <div className="truncate text-[11px] text-zinc-500">
+              {stats.roles.length ? stats.roles.slice(0, 3).map((r) => r.name).join(' · ') : 'bez roli'}
+              {' · '}
+              {stats.projects} {plural(stats.projects, 'zlecenie', 'zlecenia', 'zleceń')}
+            </div>
+          </div>
+          <div className="shrink-0 text-right text-[11px] text-zinc-500" style={mono}>
+            <div className="text-sm text-zinc-200">{pln(stats.paidTotal)}</div>
+            {stats.days > 0 && `${stats.days} ${plural(stats.days, 'dzień', 'dni', 'dni')}`}
+          </div>
+        </div>
+      ))}
+      {crew.outside.length > 0 && (
+        <p className="px-1 text-[11px] text-zinc-500">
+          Spoza bazy Ekipy: {crew.outside.join(', ')}. Dodasz ich na ekranie „Ekipa".
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function ClientPage({
   stats,
   projects,
+  crew,
   onBack,
   onOpenProject,
   onMerge,
 }: {
   stats: ClientStats
   projects: Project[]
+  /** Ekipa przy zleceniach klienta; `null` = nie liczono. */
+  crew?: ClientCrew | null
   onBack: () => void
   onOpenProject?: (id: string) => void
   onMerge: (plan: ClientMergePlan) => Promise<void>
@@ -300,6 +338,12 @@ export function ClientPage({
           })}
         </ul>
       </Section>
+
+      {crew && (crew.ranking.length > 0 || crew.outside.length > 0) && (
+        <Section title="Ekipa przy zleceniach">
+          <CrewOnJobs crew={crew} />
+        </Section>
+      )}
 
       <Section title="Ostatni kontakt">
         <ContactCard stats={stats} />

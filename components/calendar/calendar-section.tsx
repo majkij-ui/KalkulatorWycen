@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { EVENT_GROUPS, EVENT_GROUP_LABELS, groupChip, type EventGroup } from '@/lib/calendar-palette'
 import { buildCalendarEntries, monthSummary, type CalendarEntry } from '@/lib/calendar-entries'
+import { CALENDAR_LAYERS_KEY, CALENDAR_VIEW_KEY, parseCalendarView, parseHiddenGroups } from '@/lib/calendar-prefs'
 import { dayKey, monthGrid } from '@/lib/calendar-layout'
 import { eventKind } from '@/lib/event-kinds'
 import { useEvents } from '@/lib/events-context'
@@ -36,17 +37,40 @@ function coversDay(entry: CalendarEntry, day: string): boolean {
   return start <= day && (end >= start ? end : start) >= day
 }
 
+/** Wygoda, nie dane: brak dostępu do magazynu przeglądarki = wartości domyślne. */
+function readStorage(kind: 'session' | 'local', key: string): string | null {
+  try {
+    return (kind === 'session' ? sessionStorage : localStorage).getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStorage(kind: 'session' | 'local', key: string, value: string): void {
+  try {
+    ;(kind === 'session' ? sessionStorage : localStorage).setItem(key, value)
+  } catch {
+    // bez zapisu kalendarz wróci do bieżącego miesiąca i wszystkich warstw
+  }
+}
+
 export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const today = toDateKey(new Date())
   const { events } = useEvents()
   const { items } = useEquipment()
   const { projects } = useProjectHub()
 
-  const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }))
-  const [selectedDay, setSelectedDay] = useState(today)
+  // Widok wraca po przejściu do innego ekranu (do zamknięcia aplikacji), warstwy na stałe.
+  const [savedView] = useState(() => parseCalendarView(readStorage('session', CALENDAR_VIEW_KEY)))
+  const [cursor, setCursor] = useState(
+    () => savedView ?? { year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }
+  )
+  const [selectedDay, setSelectedDay] = useState(savedView?.day ?? today)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [form, setForm] = useState<{ target: FormTarget; key: number } | null>(null)
-  const [hiddenGroups, setHiddenGroups] = useState<Set<EventGroup>>(new Set())
+  const [hiddenGroups, setHiddenGroups] = useState<Set<EventGroup>>(() =>
+    parseHiddenGroups(readStorage('local', CALENDAR_LAYERS_KEY))
+  )
   const [notice, setNotice] = useState<EventNoticeState | null>(null)
   const panelRef = useRef<HTMLElement>(null)
 
@@ -105,6 +129,14 @@ export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string)
     setNotice(noticeAfterSave(info))
     setFocusId(info.project?.id ?? null)
   }
+
+  useEffect(() => {
+    writeStorage('session', CALENDAR_VIEW_KEY, JSON.stringify({ ...cursor, day: selectedDay }))
+  }, [cursor, selectedDay])
+
+  useEffect(() => {
+    writeStorage('local', CALENDAR_LAYERS_KEY, JSON.stringify([...hiddenGroups]))
+  }, [hiddenGroups])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

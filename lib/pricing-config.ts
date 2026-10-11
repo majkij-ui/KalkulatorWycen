@@ -221,13 +221,34 @@ export function savePricingConfig(config: PricingConfigShape): void {
   }
 }
 
+/** Zdarzenie okna po zapisaniu domyślnego cennika — Ekipa przelicza role z cennika. */
+export const USER_DEFAULT_PRICING_EVENT = 'nonoise-user-default-pricing'
+
 /** Save the current config as the user's personal default (used by hard-reset). */
 export function saveAsUserDefault(config: PricingConfigShape): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(USER_DEFAULT_KEY, JSON.stringify(config))
+    window.dispatchEvent(new Event(USER_DEFAULT_PRICING_EVENT))
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Cennik zapisany przez użytkownika jako domyślny („Zapisz stawki jako
+ * domyślne"), albo `null`, gdy żadnego nie zapisał. W przeciwieństwie do
+ * `getUserDefault` NIE podstawia cennika fabrycznego — wywołujący sam decyduje,
+ * co wtedy (zwykle: zostaje bieżący cennik kalkulatora).
+ */
+export function getSavedUserDefault(): PricingConfigShape | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(USER_DEFAULT_KEY)
+    if (!raw) return null
+    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
+  } catch {
+    return null
   }
 }
 

@@ -251,6 +251,24 @@ export function unknownCrewNames(
     .sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name, 'pl'))
 }
 
+/**
+ * Ekipa przy wybranych projektach (np. zleceniach jednego klienta): ranking
+ * jak „najczęściej pracuję z…", liczony tylko z tych projektów, plus imiona z
+ * ich kosztów ekipy, których nie ma w bazie. Te same reguły co na ekranie
+ * Ekipy — liczą się tylko projekty w realizacji i zrealizowane.
+ */
+export function crewOnProjects<P extends StatsProject>(
+  members: CrewMember[],
+  projects: P[],
+  options: { events?: DayEvent[]; now?: Date } = {}
+): { ranking: { member: CrewMember; stats: CrewMemberStats<P> }[]; outside: string[] } {
+  const jobs = projects.filter((p) => !p.deletedAt && countsTowardRevenue(p.status))
+  return {
+    ranking: crewRanking(members, computeCrewStats(members, jobs, options)),
+    outside: unknownCrewNames(jobs, members).map((u) => u.name),
+  }
+}
+
 /** Dzisiejsza data jako klucz — wygodne w ekranie przy wycofywaniu. */
 export function todayDateKey(now: Date = new Date()): string {
   return toDateKey(now)

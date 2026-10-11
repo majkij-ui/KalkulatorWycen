@@ -15,6 +15,7 @@ import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import { computeFuelRatePerKm } from '@/lib/profit-calc'
+import { dayActorCount } from '@/lib/quote-crew'
 import type { QuoteData } from '@/lib/quote-types'
 
 const DP = DEFAULT_PRICING
@@ -504,7 +505,8 @@ export function DodatkoweTab() {
                           variant="outline"
                           className="size-8 rounded-lg border-white/10 bg-white/5 hover:bg-white/10"
                           onClick={() => {
-                            const aktor = Number(data.detailedShootingDays?.[0]?.aktor) || 0
+                            const first = data.detailedShootingDays?.[0]
+                            const aktor = first ? dayActorCount(first) : 0
                             updateField('liczbaAktorow', Math.max(0, Math.min(99, aktor)))
                           }}
                           aria-label="Skopiuj liczbę aktorów z 1. dnia zdjęciowego"

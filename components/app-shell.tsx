@@ -148,12 +148,20 @@ const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calcul
  * Montowany z `key` = id projektu, więc każdy projekt startuje od swojej
  * domyślnej zakładki (`defaultProjectTab`) i czystego stanu nagłówka.
  */
-function ProjectView({ project, initialTab }: { project: Project; initialTab?: ProjectTab }) {
+function ProjectView({
+  project,
+  initialTab,
+  onOpenClient,
+}: {
+  project: Project
+  initialTab?: ProjectTab
+  onOpenClient: (key: string) => void
+}) {
   const [tab, setTab] = useState<ProjectTab>(() => initialTab ?? defaultProjectTab(project.status))
 
   return (
     <>
-      <ProjectHeader />
+      <ProjectHeader onOpenClient={onOpenClient} />
       <div className="border-b border-white/5 bg-black/20">
         <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist" aria-label="Zakładki projektu">
           {PROJECT_TAB_ITEMS.map(({ value, label, icon: Icon }) => {
@@ -200,6 +208,8 @@ function ShellContent() {
   // listy sprzętu prosto na „Realizację"). Trzymana razem z id, żeby nie przeszła
   // na inny projekt otwarty potem z listy.
   const [openTarget, setOpenTarget] = useState<{ id: string; tab: ProjectTab } | null>(null)
+  // Klient, którego stronę otworzyć w „Klientach" (z nagłówka projektu); pasek boczny czyści.
+  const [clientTarget, setClientTarget] = useState<string | null>(null)
 
   // Klik w „Projekty" w pasku bocznym zawsze wraca do LISTY — także z otwartego
   // projektu (pasek boczny jest zawsze widoczny, przycisk „Projekty" w pasku
@@ -208,6 +218,7 @@ function ShellContent() {
   const changeSection = (next: Section) => {
     if (next === 'projekty') closeProject()
     setOpenTarget(null)
+    setClientTarget(null)
     setSection(next)
     window.scrollTo({ top: 0 })
   }
@@ -216,6 +227,12 @@ function ShellContent() {
     setOpenTarget(tab ? { id, tab } : null)
     void openProject(id)
     setSection('projekty')
+    window.scrollTo({ top: 0 })
+  }
+
+  const goToClient = (key: string) => {
+    setClientTarget(key)
+    setSection('klienci')
     window.scrollTo({ top: 0 })
   }
 
@@ -235,12 +252,15 @@ function ShellContent() {
               key={activeProject.id}
               project={activeProject}
               initialTab={openTarget?.id === activeProject.id ? openTarget.tab : undefined}
+              onOpenClient={goToClient}
             />
           ) : (
             <ProjectList />
           ))}
 
-        {section === 'klienci' && <ClientsSection onOpenProject={goToProject} />}
+        {section === 'klienci' && (
+          <ClientsSection key={clientTarget ?? 'lista'} initialKey={clientTarget} onOpenProject={goToProject} />
+        )}
 
         {section === 'finanse' && <FinanceSection onOpenProject={goToProject} />}
 
