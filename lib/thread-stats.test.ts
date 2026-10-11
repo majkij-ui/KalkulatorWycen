@@ -142,3 +142,29 @@ test('pusty wątek nie rzuca', () => {
   assert.equal(s.firstDate, null)
   assert.deepEqual(describeThreadStats(s), [])
 })
+
+test('faktura niesie kwotę, termin i kwotę sparowanej wpłaty; wpłaty bez pary osobno', () => {
+  const s = threadStats(
+    [
+      ev('invoice_sent', '2026-09-16', { data: { number: '3/09', amountNetto: 2000, dueDate: '2026-10-16' } }),
+      ev('invoice_paid', '2026-10-02', { data: { number: '3/09', amount: 2000 } }),
+      ev('invoice_sent', '2026-09-20', { data: { number: '4/09', amountNetto: -1, dueDate: 'wkrótce' } }),
+      ev('invoice_paid', '2026-07-01', { data: { amount: 500 } }),
+      ev('invoice_paid', '2026-07-02', { data: { number: 'obca' } }),
+    ],
+    TODAY
+  )
+  assert.deepEqual(
+    s.invoices.map((i) => [i.number, i.amountNetto, i.dueDate, i.paidAmount]),
+    [
+      ['3/09', 2000, '2026-10-16', 2000],
+      ['4/09', null, null, null],
+    ],
+    'zła kwota i zły termin czytają się jako brak'
+  )
+  assert.deepEqual(s.unpairedPayments, [
+    { day: '2026-07-01', amount: 500 },
+    { day: '2026-07-02', amount: null, number: 'obca' },
+  ])
+  assert.deepEqual(threadStats([], TODAY).unpairedPayments, [])
+})

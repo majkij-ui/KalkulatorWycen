@@ -227,6 +227,28 @@ export const EVENT_KINDS: EventKind[] = [
     suggestsStatus: 'done',
   },
   {
+    // Sprzedaż ponad wycenę: surówka, dodatkowa postprodukcja, licencja (T6).
+    // Bywa na tej samej fakturze co zlecenie albo na osobnej, później. Finanse
+    // dodają ją do planu, dopóki nie ma faktur; potem liczą się faktury.
+    key: 'extra_sale',
+    label: 'Sprzedaż dodatkowa',
+    short: 'dodatek',
+    group: 'pieniadze',
+    range: false,
+    scope: 'project',
+    data: z.object({ what: text, amountNetto: amount, number: text }).passthrough(),
+    fields: [
+      {
+        key: 'what',
+        label: 'Co sprzedane',
+        type: 'text',
+        suggestions: ['surówka (materiał źródłowy)', 'dodatkowa postprodukcja', 'dodatkowa wersja / format', 'licencja / pola eksploatacji'],
+      },
+      { key: 'amountNetto', label: 'Kwota netto (zł)', type: 'number' },
+      { key: 'number', label: 'Na fakturze nr', type: 'text', placeholder: 'puste = jeszcze bez faktury' },
+    ],
+  },
+  {
     key: 'gear_purchase',
     label: 'Zakup sprzętu',
     short: 'sprzęt',
