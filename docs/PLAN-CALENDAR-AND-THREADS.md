@@ -453,7 +453,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T3 Project thread** ✅ (2026-10-09, §6b) | Project header + tabs (Oś czasu · Wycena · Sprzęt · Notatki) replacing the crowded project bar; client picker with contact copy; client and year filters on the list; deleting a project soft-deletes it together with its thread, with undo. Pure: `clients.ts`, `project-list.ts`, `project-deletion.ts`, header client rule in `project-save.ts`; collection writes are serialized. 27 new tests; 18/18 mutations caught; flows verified in the browser. | T1 |
 | **T4 Gmail import v0** ✅ (2026-10-09/10, §5d) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). ✅ Inbox format (`inbox-types.ts`), `npm run data -- inbox`, „Skrzynka" screen with sidebar counter, Gmail pilot 1.09–9.10 (35 proposals). 22 tests (+1 extended payments test); 19/19 mutations caught. ✅ **T4b**: `event_update` (link a lead, add a time, fill data; trace in `updatedFrom`), `newProjectRef`, `sync` window + `inbox-status`, runbook skill `przejrzyj-poczte`, lead links + sync 9–10.10 (7 proposals). 7 more tests; 19/19 mutations caught. | T1, T3 |
 | **T5a Realizacja tab** ✅ (2026-10-09, §6c) | The project's Sprzęt tab became Realizacja: shoot/prep days whose date lives in the calendar (variant A), gear per day (G3 grid), crew and other actual costs (`Project.costs`), Profit moved out of the calculator as the plan, planned vs actual margin. Pure: `realization-days.ts`, `project-costs.ts`, `realization-plan.ts`. 37 new tests; 20/20 mutations caught; flows verified in the browser and on the production export. | T1 |
-| **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`, phone numbers from the crew database (T9a). | T5a, T9a |
+| **T5b Call sheet planner** ✅ (2026-10-11, §6e) | „Call sheet" on every Realizacja day (a multi-day event has one per day): CallSheetWiz's timeline planner (drag/resize on a 5-min grid, checklist with sub-items, tags, day template, copy from another day) and a printable A4 call sheet. New `call-sheets.json` keyed to the day record (`CallSheet.dayId` → `gearDays[].id`, **proposed instead of** `shoot_day.data.callSheetId`, M.J. to confirm). Prefilled live, never overwritten: date and place from the calendar, the day's crew from `Project.costs` with phone/e-mail from Ekipa, gear from the G3 grid as a packing list, client contact from the project; typed values win. PDF through the quote's desktop path (html2canvas-pro → jsPDF → save dialog + `writeFile`, no new permission), page cuts between rows, clickable phone/e-mail. CallSheetWiz `SavedDay` import (file or paste). Pure: `time.ts`, `editing-engine.ts`, `schedule-types.ts`, `call-sheet-types.ts`, `call-sheet.ts`, `planner-timeline.ts`, `pdf-pages.ts`. 31 new tests; 37/37 mutations caught; verified in the browser preview. | T5a, T9a |
 | **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance (actual costs: `totalActualCosts` / `actualCostsByCategory` on `Project.costs`, §6c), days-to-payment, overdue list. | T5a, phase 4 |
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
@@ -471,7 +471,7 @@ the real hub data, read-only: all 10 saved quotes compute identically before and
 match their stored financials; client revenue sums to the jobs total; both inbox files parse (42
 pending, every `event_update` target exists).
 
-**Next:** T5b (call sheet, now that crew has phone numbers) and T6 (money loop) can run in parallel:
+**Next (as of 2026-10-10):** T5b (call sheet, now that crew has phone numbers) and T6 (money loop) can run in parallel:
 T5b lives in Realizacja, T6 in Finance. T9c waits until the new crew and gear pickers have been used on
 real quotes. T7 after T6.
 
@@ -856,6 +856,129 @@ placeholders). Sprzęt › Zestawy lists a kit's crew.
 - Dodatkowe's actor-count button still copies the old `aktor` counter of day 1, not obsada lines.
 - PDF descriptions are generated when the PDF state is first built (as before); changing crew or the
   names switch afterwards does not rewrite an existing description.
+
+## 6e. Call sheet *(T5b, built 2026-10-11)*
+
+### T5b as built
+
+**Link — proposal for M.J.** The plan said `shoot_day.data.callSheetId`. Built instead: a call sheet points at the
+**day record**, `CallSheet.dayId → Project.gearDays[].id` (plus `projectId`), the same anchor as `ProjectCost.dayId`:
+
+```
+CallSheet.dayId → Project.gearDays[].id → (eventId, eventDay) → events.json shoot_day / prep_day
+```
+
+Why: one field on the event cannot hold a sheet per day of a multi-day event; days without a date have no event; the
+link would write `events.json` (T4 inbox and data script territory); and a day already keeps its gear, crew and costs
+when its event moves, so the call sheet moves with it for free. The link is one-way (nothing is written into the
+project or the event). `shoot_day.data.callSheetId` stays in the kind schema, unused. One live call sheet per day: if
+two exist (two windows at once) the older wins and the other stays in the file untouched. Prep days get call sheets
+too.
+
+**Data** (`lib/call-sheet-types.ts`, `call-sheets.json` via `createCollectionStore`, web key `nonoise-call-sheets-v1`,
+in `SCHEMAS` of `npm run data`; passthrough everywhere, optional fields without defaults, soft delete):
+`{ id, projectId, dayId, title?, location?, locationNotes?, callTime? (minutes), notes?, schedule[], categories[],
+crew[], contacts[], client?, gearExtra[], importedFrom?, createdAt, updatedAt, deletedAt? }`.
+- `schedule[]` = CallSheetWiz's `PlannerEvent` (`startMinutes`/`endMinutes` from midnight, `categoryId`, `notes`,
+  `subItems[]`), named `schedule` so it is never confused with calendar events. An entry without numeric times is
+  dropped on read, like CallSheetWiz did.
+- `categories[]` = tags; `color` is a **palette slot** of the calendar (`'cyan'`), not a hex (§3.4 rule 7). Defaults:
+  Kamera, Obsada, Scenografia, Logistyka (CallSheetWiz's four, same ids) and Przerwy.
+- `crew[]` = per-row corrections `{ costId, name?, role?, phone?, email?, callTime?, note?, hidden? }` for crew rows of
+  the day in Realizacja, plus people only on the call sheet (no `costId`). `contacts[]` = extra contacts of the day
+  (location, catering). `client?` = corrections of the project contact. `gearExtra[]` = things outside the catalogue.
+- Schedule entries, tags, extra people, contacts and gear extras are soft-deleted with `deletedAt`; „Cofnij" removes
+  exactly that marker. A deleted tag leaves its entries pointing at it (shown as „bez tagu" until undone). Sub-items
+  are lines of text inside an entry and are removed from it, as in CallSheetWiz.
+
+**Prefill, never overwrite** (`resolveCallSheet` in `lib/call-sheet.ts`, pure). The hub's values are read live and
+shown as grey hints; whatever is typed on the call sheet wins and the hub never overwrites it; clearing a field falls
+back to the hub. The call sheet never writes anything into the hub.
+- Date: the day's date from the calendar (`realization-days.ts`), never stored on the sheet. Undated days say so.
+- Place: `sheet.location`, else `data.location` of the day's event.
+- Crew: live crew rows of the day (`Project.costs`, `category: 'ekipa'`, `dayId` = the day). Phone and e-mail from the
+  person in Ekipa (`personId`; rows without it match by name like `crew-stats`); a row linked to a person deleted from
+  Ekipa keeps its frozen name and gets no contact. A correction whose crew row disappeared stays in the file but is not
+  shown. „Ukryj" hides a row from the print (e.g. the editor who is pinned to the day but not on set).
+- Call time: `sheet.callTime`, else the start of the first schedule entry; a person can have their own. Wrap = end of
+  the last entry.
+- Client: `Project.contact` with corrections. Production line on the print: company, producer and e-mail from the PDF
+  texts (`pdfTexts`).
+- Gear: the day's G3 lines through `buildPackingList` (catalogue order, quantities), plus `gearExtra`.
+
+**Changed vs CallSheetWiz** (CallSheetWiz itself untouched — read only, code copied):
+- `time.ts` and `editing-engine.ts` ported with the same behaviour; added: Polish long date, drag bounds as a parameter
+  (default 06:00–22:00), `formatDuration` („1 h 30 min"). `editing-engine` functions are generic, so unknown fields
+  survive edits.
+- Timeline without `@dnd-kit` (the hub doesn't have it): pointer events with capture, math in `planner-timeline.ts`.
+  The axis widens to whole hours when the day starts before 06:00 or ends after 22:00; resizing also snaps to 5 min (the
+  old rules said so, the old code didn't); keyboard: Enter edits, ←/→ moves 5 min (Shift 15), Alt+←/→ resizes; the
+  „now" marker only on the shoot date. Zoom 1–4× fitted to the container instead of a fixed 2000 px.
+- Sub-item order with ↑/↓ buttons instead of drag (no dnd-kit; works from the keyboard). The per-entry „done" tick on
+  the checklist stays session-only, as in CallSheetWiz; sub-item ticks are saved.
+- „Zaraz po poprzednim" in the entry form (`followPreviousEvent` existed but had no button).
+- „Manage Days" is replaced by the hub's days; „Szablon dnia" (call, setup, shoot, lunch, shoot, wrap from the call
+  time) and „Skopiuj harmonogram z…" (another day's sheet: new ids, ticks cleared, tags matched by id or name, call
+  time and directions only if empty).
+
+**Printing / PDF.** `window.print()` is unreliable in the macOS WKWebView and `<a download>` is blocked there, so the
+call sheet uses the quote PDF's desktop path (`PDF_EXPORT.md`): a hidden white A4 sheet (`printable-call-sheet.tsx`,
+brand header, Archivo/JetBrains Mono, Ember accents) → `html2canvas-pro` → `jsPDF`, pages cut at the last row boundary
+that fits (`data-pdf-break="after"`, `planPdfPages` in `lib/pdf-pages.ts`, same rule as `handleTauriExport`), phone
+numbers and e-mails become `tel:`/`mailto:` link annotations (`data-pdf-href`, `placeLinks`). In Tauri: native „Zapisz
+jako…" (`dialog:allow-save`) + `writeFile` (`fs:allow-write-file` on `$HOME/**`) — **no new permission**. In the
+browser: a normal download. File name „Call sheet — <title> — <date>.pdf". „Podgląd wydruku" shows the same sheet
+inline.
+
+**Import from CallSheetWiz** („…" menu → „Importuj dzień z CallSheetWiz…"): the „Export all" file (or one day), picked
+with a file input or pasted as text. Port of `parseSavedDaysFile` (`null` = not a CallSheetWiz file, unknown fields
+kept). One chosen day goes into this call sheet: the current schedule is soft-deleted (undo), entries keep their ids
+unless they collide, tags with the same id or name are reused, other tags come in with the nearest palette slot
+(`paletteKeyForHex`, OKLCH hue on the colour wheel; greys → neutral) and the hex kept in `importedColor`; the day title
+fills the sheet title only if it is empty; `importedFrom` records the source day and its old date (the call sheet's
+date still comes from the calendar).
+
+**UI.** Realizacja: every day card has „Call sheet" (with the number of schedule entries once it exists). It opens
+the planner in place of the tab: day and place (the T5a calendar controls, „Edytuj w kalendarzu" works from here),
+title, place, directions, call time, notes; schedule (timeline + checklist, „+ Wpis", tags, template); crew and
+contacts; packing list; „Podgląd wydruku", „Zapisz PDF", „…" (import, copy from another day, delete). Saving like
+Realizacja: local copy, write ~0.4 s after the last change, flushed on leaving. **Opening writes nothing**; the first
+change also saves the day record when the day so far only came from the calendar (T5a's „saved with the first change").
+Deleting a call sheet is soft, with „Cofnij" on the Realizacja notice.
+
+**Tests:** `call-sheet.test.ts` (17), `planner-time.test.ts` (7), `pdf-pages.test.ts` (4), `call-sheets-store.test.ts`
+(3, web path integration); 418 in total. 37/37 deliberate mutations caught (3 survivors on the first pass got
+sharper tests: hue wrap-around near red, undo restores only its own marker, import reuses a tag by name). `npm run
+data -- apply` accepts a minimal call sheet and rejects one a `.catch` would rewrite. Typecheck clean apart from the
+known legacy `quote-pdf-document.tsx`; the static export builds.
+
+**Verified in the browser preview** (seeded localStorage, restored afterwards): crew rows with phones from Ekipa
+(including a name-matched row and a „do obsadzenia" slot), place from the calendar and its live update after
+„Edytuj w kalendarzu", template, drag move, drag resize, keyboard move/resize, entry form with „Zaraz po poprzednim",
+sub-items (add, reorder, tick), soft delete + „Cofnij", corrections, per-person call time, hide, extra person, extra
+contact, gear extras, print preview, PDF bytes (1 page, then 2 pages with a 34-entry day cut between rows; 7 link
+annotations; Polish letters and fonts in the rendered page), import (paste, two days, replace + „Cofnij"), copy from
+another day, delete + „Cofnij", „opening writes nothing", phone width (no horizontal scroll; titles on their own line).
+
+**Check in the desktop build (cannot be proven in the preview):**
+1. „Zapisz PDF": the native save dialog opens, the file is written (e.g. to Desktop/Downloads), opens in Preview,
+   links are clickable, Polish letters render (html2canvas on WKWebView), page cuts fall between rows.
+2. `call-sheets.json` is created in the hub folder on the first change and survives a restart; a day that only came
+   from the calendar is saved into `projects.json` at the same moment.
+3. Import: „Wybierz plik .json" opens the macOS file picker (WKWebView `<input type=file>`); if it doesn't, pasting the
+   file's text works.
+4. Timeline drag/resize with the trackpad (pointer capture in WKWebView).
+5. Window focus reload while a call sheet is open does not undo typing.
+
+**Known limits / follow-ups:**
+- The per-entry „done" ticks on the checklist are not saved (as in CallSheetWiz).
+- „Cofnij" lives in a single notice, so the next notice (e.g. after „Zapisz PDF") replaces it.
+- The printed table header is not repeated on page 2.
+- Production phone isn't printed (the PDF texts have no phone field).
+- The Realizacja packing-list print („Drukuj" in the G3 grid) still uses `react-to-print` (`window.print()`), which is
+  likely as unreliable in the desktop app as the old call sheet print; the call sheet PDF now carries the day's packing
+  list, and the grid's print could move to the same PDF path.
+- `podglad-pdf.tsx` could reuse `planPdfPages` (left untouched here to avoid touching the quote export).
 
 ## 6a. Marketing tab *(built 2026-10-08)*
 
