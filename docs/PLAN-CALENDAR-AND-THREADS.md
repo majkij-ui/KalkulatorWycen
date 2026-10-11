@@ -130,6 +130,7 @@ usual problem with free text ("Tchibo" / "Tchibo Polska" / "tchibo" counting as 
 | `deadline` | postprodukcja | no | what is due | |
 | `invoice_sent` | pieniądze | no | number, amount netto, due date | |
 | `invoice_paid` | pieniądze | no | amount received | suggests status `done` |
+| `extra_sale` | pieniądze | no | what, amount netto, invoice number (T6, §6e) | |
 | `gear_purchase` | firma | no | (projected from catalogue `purchaseDate`) | |
 | `marketing` | firma | yes | campaign, spend | |
 | `note` | inne | yes | — | |
@@ -454,7 +455,7 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 | **T4 Gmail import v0** ✅ (2026-10-09/10, §5d) | ✅ data script (`npm run data`), ✅ refresh-on-focus, ✅ 2026 retrofill (from the spreadsheet, not Gmail: 13 projects, 24 invoice events, 42 fixed costs, spring Google Ads). ✅ Inbox format (`inbox-types.ts`), `npm run data -- inbox`, „Skrzynka" screen with sidebar counter, Gmail pilot 1.09–9.10 (35 proposals). 22 tests (+1 extended payments test); 19/19 mutations caught. ✅ **T4b**: `event_update` (link a lead, add a time, fill data; trace in `updatedFrom`), `newProjectRef`, `sync` window + `inbox-status`, runbook skill `przejrzyj-poczte`, lead links + sync 9–10.10 (7 proposals). 7 more tests; 19/19 mutations caught. | T1, T3 |
 | **T5a Realizacja tab** ✅ (2026-10-09, §6c) | The project's Sprzęt tab became Realizacja: shoot/prep days whose date lives in the calendar (variant A), gear per day (G3 grid), crew and other actual costs (`Project.costs`), Profit moved out of the calculator as the plan, planned vs actual margin. Pure: `realization-days.ts`, `project-costs.ts`, `realization-plan.ts`. 37 new tests; 20/20 mutations caught; flows verified in the browser and on the production export. | T1 |
 | **T5b Call sheet planner** | CallSheetWiz attached to a shoot day (`shoot_day.data.callSheetId`), crew from the day's `Project.costs`, phone numbers from the crew database (T9a). | T5a, T9a |
-| **T6 Money loop** | Invoice events → actual revenue, planned vs actual in Finance (actual costs: `totalActualCosts` / `actualCostsByCategory` on `Project.costs`, §6c), days-to-payment, overdue list. | T5a, phase 4 |
+| **T6 Money loop** ✅ (2026-10-11, §6e) | Finance shows the best known number per project: invoices replace the plan when complete, Realizacja costs replace planned costs (plan until done while lower); each invoice counts in its own month, the rest at the project's anchor (first invoice, else ledger date). New kind `extra_sale` („Sprzedaż dodatkowa"). Tiles say how much is from invoices vs the plan; „Płatności" lists overdue and waiting invoices (30-day term assumed when missing) with days to payment; „Plan a rzeczywistość" per project with „brak faktur / brak kosztów" in words. Realizacja's actual column takes invoice revenue. Pure: `money-loop.ts`, `money-loop-labels.ts`; `thread-stats` pairing carries amounts and due dates. 30 new tests; 37/38 mutations caught (the survivor is equivalent). On the real data the 2026 totals and every month equal the old Finance. | T5a, phase 4 |
 | **T7a Marketing tab** ✅ (installed 2026-10-09) | See §6a. Campaigns, lead quality, cost per lead/won job, ROAS, client origin on every project. First half of T7. `npm run data` (the T4 data script) exists now. | T1 |
 | **T7 Insights** | Response time, conversion by source, effort (post days) vs quoted, gear spend/month, cost per lead. | T4, T6 |
 | **T8 In-app Gmail + AI** | OAuth + Claude API producing the T4 format. Optional. | T4 |
@@ -473,7 +474,9 @@ pending, every `event_update` target exists).
 
 **Next:** T5b (call sheet, now that crew has phone numbers) and T6 (money loop) can run in parallel:
 T5b lives in Realizacja, T6 in Finance. T9c waits until the new crew and gear pickers have been used on
-real quotes. T7 after T6.
+real quotes. T7 after T6. *(2026-10-11: T6 built on `claude/money-loop-finance-1d02a0`, not merged yet;
+it touches `realization-summary.tsx` / `project-realization.tsx` lightly — one prop and a footnote —
+so merge it before or after T5b with a glance at those two files.)*
 
 **Glue left between tracks (no single session owned these):**
 - **Role rates on the Ekipa screen follow the last opened quote.** Opening a project loads that quote's
@@ -488,8 +491,19 @@ real quotes. T7 after T6.
 - **„+ Nowa osoba" in the quote's person select** (generalise T9a's `PersonPicker`; T9b note).
 - Dodatkowe's actor-count button still reads the old `aktor` counter of day 1, not obsada lines (T9b).
 - PDF descriptions are built once, so later crew changes don't rewrite them (as before T9b).
+- **Client revenue and the Projekty client filter still use the plan and the ledger date** (§6d, T3).
+  Finance now uses the best known number by invoice date (§6e). Identical on today's data; they drift
+  apart once an invoice differs from its quote or lands in another month. Fix: `client-stats` and
+  `project-list` read `projectMoney(...).revenue` (and `pieces` for a year filter).
+- **Mail sync should fill the money fields:** `przejrzyj-poczte` / the inbox format can already carry
+  `invoice_sent.data.amountNetto` and `dueDate`, and `extra_sale`; the runbook should ask for them, so
+  overdue days and actual revenue need no hand entry.
 
 **Waiting for M.J.:**
+- **Invoices for 4 jobs (T6):** S-AI 80,440 zł, JHJ 25,780 zł, Morris & Lloyd 16,200 zł and CIONET
+  wywiady 3,260 zł (125,680 zł, 79 % of 2026) have no invoice in the hub, so Finance shows them from
+  the plan with „brak faktur"; S-AI and CIONET wywiady are ticked „Zapłacone" without one. An
+  `invoice_sent` each (number, amount, due date) makes them „z faktur" with days to payment.
 - **Skrzynka:** 42 proposals (35 from the pilot, 7 from T4b).
 - ~~**Funnel:** spring leads without a project~~ — done 2026-10-10: 7 lost projects (`p-ads2026-*`) for the
   leads that got a PDF quote by mail (Slow Face, METAL-FACH, SME Banking, FSWO, CKS Ossa, PBO Śląsk / Stare
@@ -857,6 +871,95 @@ placeholders). Sprzęt › Zestawy lists a kit's crew.
 - PDF descriptions are generated when the PDF state is first built (as before); changing crew or the
   names switch afterwards does not rewrite an existing description.
 
+## 6e. T6 Money loop *(agreed with M.J. 2026-10-11, built the same day)*
+
+**Asked for:** Finance shows what really happened next to what was planned: actual revenue from
+invoices, actual costs from Realizacja, plan vs actual per project and in total, days to payment and an
+overdue list. Never show 0 as a real number where nothing was entered.
+
+**Shown to M.J. first (real data, read-only):** 17 jobs in 2026, plan 159,613 zł; 13 have an invoice
+(33,933 zł, all equal to the plan, no VAT); S-AI, JHJ, Morris & Lloyd and CIONET wywiady (125,680 zł)
+have none; no project has Realizacja costs; median 23 days to payment, worst 171 („Wywiady – dzień
+kobiet"); nothing overdue. Ledger and invoice dates are the same day for every retro project, so the
+choice of date moves nothing today; payment date would (March 11,098 → 1,300 zł, YoPro to April).
+
+**Decided (M.J. 2026-10-11):**
+1. **The invoice date puts revenue into a month.** Each invoice counts in the month it was issued, also
+   an extra invoiced months later (October doesn't change in January). What isn't invoiced yet sits at
+   the project's **anchor**: its first invoice, else its ledger date. Costs sit at the anchor too.
+2. **Totals are the best known number.** Per project the actual replaces the plan as soon as it exists:
+   invoices for revenue, Realizacja lines for costs.
+3. **While „W realizacji", lower actuals count as partial.** An advance invoice or a half-filled
+   Realizacja keeps the plan („zafakturowano X z Y", „wpisano X z Y") until the project is
+   Zrealizowany; higher actuals count right away.
+4. **Extra sales are their own event kind** `extra_sale` („Sprzedaż dodatkowa", chip „dodatek"):
+   raw footage, extra post-production, a licence; data `what`, `amountNetto`, `number` (the invoice it
+   is on, optional). Shows in the calendar and the thread.
+
+**Real-life cases, as built** (each has a test in `money-loop.test.ts`):
+
+| Case | Revenue Finance uses |
+|---|---|
+| One invoice equal to the quote | the invoice, „zgodnie z planem" |
+| One invoice that differs (scope change, discount) | the invoice, Δ shown (lower only once done) |
+| Extra on the same invoice | `extra_sale` with that invoice's number; the invoice covers plan + extra |
+| Extra on a later invoice | both invoices, each in its own month; the later month shows „dodatkowa faktura: X w tym okresie" |
+| Extra agreed, not invoiced | plan + extra; once done, the invoices are final and the gap shows as Δ |
+| Advance + final invoice | plan (+ extras) until done or until invoices reach it, „zafakturowano X z Y" |
+| Paid without an invoice in the hub (ticked) | the plan, „brak faktur", counted as „wpłynęło" |
+| Invoice without an amount | the paired payment's amount; without one the plan, „faktura bez kwoty" |
+| Payment with an amount and no invoice | counts as revenue on the payment day |
+| Invoice dated in the future (planned) | still the plan; it only sets the month (and the rest goes there); „faktura zaplanowana na 20.11" |
+| No plan and no invoices | „brak planu", no profit — never 0 zł |
+| Costs: none / partial in production / done | plan („brak kosztów", plan 0 zł reads „w planie 0 zł") / plan („wpisano X z Y") / actual |
+
+Tax = the project's ryczałt rate (rebuilt from `financials`, default 8.5 %) on whichever revenue is
+used, in the same month. Profit = revenue − tax − costs; result = profit − fixed costs.
+
+**Data (additive, no version bump):** new kind `extra_sale`; nothing else is stored. `thread-stats`
+invoice pairing now also returns each invoice's `amountNetto`, `dueDate`, the paired payment's
+`paidAmount`, and the payments that match no invoice (`unpairedPayments`); existing callers unchanged.
+`DEFAULT_TAX_RATE` is exported from `realization-plan.ts`.
+
+**Code:**
+- `lib/money-loop.ts` (pure): `projectMoney` (plan, extras, expected, invoiced, best-known revenue and
+  costs with basis and note, tax, profit, dated revenue `pieces`, anchor, paid flag = `paymentState`,
+  median days to payment), `moneyLedger`, `summarizeMoney` (period: best known, plan of anchored
+  projects, invoiced part, coverage, wpłynęło / czeka per piece, fixed costs, result), `moneyTrend`,
+  `moneyYears`, `openInvoices` (days overdue; 30-day term assumed when none, `DEFAULT_PAYMENT_TERM_DAYS`),
+  `paymentDays` (median / longest / late for invoices issued in the period).
+- `lib/money-loop-labels.ts` (pure): the words in each cell — source tag (z faktur / plan / z
+  Realizacji), Δ to plan, the missing-data states, payment state, due text.
+- `components/finance/`: tiles read the money summary („z faktur X · z planu Y", „plan … · Δ",
+  wpłynęło / czeka, koszty z Realizacji N z M); **Płatności** (overdue in red, then in term; a status
+  badge when the project is a quote or lost; click → `goToProject`; independent of the period);
+  the trend chart; **Plan a rzeczywistość** (per project revenue / costs / profit / payment, five
+  columns from `xl`, stacked below). Quotes stay listed under „Wyceny (niewliczone)" by ledger date.
+- Realizacja (T5a): `actualFigures(plan, costs, revenue?)`; the actual column uses the same
+  best-known revenue (invoices when complete, else the calculator's plan + extras), and the footnote
+  now says Finance uses entered costs (it said Finance ignores them).
+
+**Tests:** `money-loop.test.ts` (22), `money-loop-labels.test.ts` (6), +1 each in `thread-stats` and
+`event-types`, and the `realization-plan` actual-figures test extended (417 in total). One test proves the totals equal `finance-calc` when invoices match
+the plan. 38 deliberate mutations across the four modules, 37 caught; the survivor (`if (money.plan &&
+anchored)`) is equivalent because that line already runs only for anchored projects.
+
+**Verified:** in the browser preview on seeded localStorage (13 projects covering every case above, ZUS
+and marketing costs): all tile numbers checked by hand, year and Q4 views (the later extra invoice in
+its own quarter), overdue rows open the project, a „Sprzedaż dodatkowa" added through the event form
+lands in Finance and Realizacja, phone width without horizontal scroll, no console errors; storage
+restored byte for byte afterwards. On the real hub data (read-only script): the year and every month
+equal the old Finance (159,613 zł revenue, 76,571 zł project profit, 32,754 zł result), 13 of 17 jobs
+from invoices, one invoice waiting (Z natury, due 16.10), median 23 days, 3 paid late.
+
+**Known limits / next:**
+- Finance only; client revenue and the Projekty client filter still use plan + ledger date (glue, §6).
+- Costs never move to the month of a later invoice; an extra job's own costs land at the anchor.
+- A project with several invoices of which one has no amount stays on the plan until the known
+  amounts reach it.
+- The 30-day default term is a constant, not a setting.
+- Finance does not list the extras themselves (the thread does); T7 can add „ile przyniosły dodatki".
+
 ## 6a. Marketing tab *(built 2026-10-08)*
 
 **Asked for:** campaign start and daily budget from Google Ads; leads rated fake / good / very good;
@@ -970,6 +1073,13 @@ Confirmed 2026-10-10 (T9 / T10, §6d):
 8. **One people list** for crew on set and contractors off set (role groups ekipa / obsada / post).
 9. **Sidebar** gets „Klienci" and „Ekipa" as their own sections. Klienci stays derived (decision 3
    holds).
+
+Confirmed 2026-10-11 (T6, §6e):
+10. **Invoice date decides the month**, per invoice; what isn't invoiced yet and the costs sit at the
+    project's anchor (first invoice, else ledger date).
+11. **Finance totals are the best known number**; in production, actuals below the plan count as
+    partial until the project is Zrealizowany.
+12. **Extra sales** are `extra_sale` events, on the same invoice or a later one.
 
 ## 8. Coordination with the phase-4 agent
 
