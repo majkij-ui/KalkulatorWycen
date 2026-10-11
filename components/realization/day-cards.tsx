@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { Plus, Trash2, Users } from 'lucide-react'
+import { ClipboardList, Plus, Trash2, Users } from 'lucide-react'
 import { costAmount, costsOfDay, isCrew, type CrewSuggestion, type NewCost } from '@/lib/project-costs'
 import type { DayInfo } from '@/lib/realization-days'
 import type { GearDay, ProjectCost } from '@/lib/project-types'
@@ -37,6 +37,11 @@ export interface DayCardsProps {
   onChangeCost: (id: string, patch: Partial<ProjectCost>) => void
   onRemoveCost: (cost: ProjectCost) => void
   onCopyCrew: (dayId: string) => void
+  /** Call sheet dnia (T5b): liczba wpisów harmonogramu, `null` = jeszcze go nie ma. */
+  callSheetOf: (day: GearDay) => { entries: number } | null
+  /** `false`, dopóki call sheety się wczytują (bez tego powstałby drugi call sheet dnia). */
+  callSheetsReady: boolean
+  onOpenCallSheet: (day: GearDay) => void
 }
 
 export function DayCards(props: DayCardsProps) {
@@ -74,6 +79,9 @@ function DayCard({
   onChangeCost,
   onRemoveCost,
   onCopyCrew,
+  callSheetOf,
+  callSheetsReady,
+  onOpenCallSheet,
 }: DayCardsProps & { day: GearDay; index: number }) {
   const [confirm, setConfirm] = useState(false)
   const dayInfo = info.get(day.id)
@@ -84,6 +92,7 @@ function DayCard({
   const rent = rentByDay.get(day.id) ?? 0
   const removal: DayRemoval = days.length > 1 ? dayRemoval(day) : { ok: false, reason: '' }
   const inCalendar = dayInfo?.link === 'calendar'
+  const callSheet = callSheetOf(day)
 
   return (
     <article
@@ -99,6 +108,26 @@ function DayCard({
           <DayCalendar day={day} info={dayInfo} actions={calendar} />
         </div>
         <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={() => onOpenCallSheet(day)}
+            disabled={!callSheetsReady}
+            aria-label={`Call sheet: ${dayLabel(day, index)}`}
+            title={
+              callSheet
+                ? 'Harmonogram dnia, ekipa z telefonami, lista pakowania i PDF'
+                : 'Zaplanuj dzień: harmonogram, ekipa z telefonami, lista pakowania i PDF'
+            }
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-40 ${
+              callSheet ? 'border-primary/40 bg-primary/10 text-orange-100 hover:bg-primary/15' : 'border-white/10 text-zinc-300 hover:bg-white/5'
+            }`}
+          >
+            <ClipboardList className="size-3.5" />
+            Call sheet
+            {callSheet && callSheet.entries > 0 && (
+              <span className="rounded bg-black/30 px-1 text-[10px] tabular-nums text-orange-200/90">{callSheet.entries}</span>
+            )}
+          </button>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wide text-zinc-500">Koszty dnia</div>
             <div className="text-sm font-semibold tabular-nums text-amber-300/90" style={mono}>

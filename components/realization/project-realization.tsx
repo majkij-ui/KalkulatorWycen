@@ -28,6 +28,9 @@ import { useCrew } from '@/lib/crew-context'
 import { crewRoleByName } from '@/lib/crew-types'
 import { unknownCrewNames, type UnknownCrewName } from '@/lib/crew-stats'
 import { createEvent } from '@/lib/events-store'
+import { callSheetForDay, liveScheduleCount } from '@/lib/call-sheet'
+import type { CallSheet } from '@/lib/call-sheet-types'
+import { useCallSheets } from '@/lib/use-call-sheets'
 import { eventKind } from '@/lib/event-kinds'
 import type { TimelineEvent } from '@/lib/event-types'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
@@ -78,6 +81,7 @@ import { EventForm } from '@/components/calendar/event-form'
 import { EventNotice, noticeAfterSave, type EventNoticeState } from '@/components/calendar/event-notice'
 import { GearGrid, type DayRemoval } from '@/components/equipment/project-equipment'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { CallSheetPlanner } from '@/components/planner/call-sheet-planner'
 import { CostRow, CrewRoleDatalist } from './cost-rows'
 import { DayCalendar, formatDayLong, type DayCalendarActions } from './day-calendar'
 import { DayCards } from './day-cards'
@@ -202,6 +206,36 @@ function RealizationView({ project }: { project: Project }) {
   // ── Dni ────────────────────────────────────────────────────────────────────
 
   const labelOf = (day: GearDay, index: number) => realizationDayLabel(day, info.get(day.id), index)
+
+  // ── Call sheet (T5b) ───────────────────────────────────────────────────────
+
+  const callSheets = useCallSheets(project.id)
+  const [plannerDayId, setPlannerDayId] = useState<string | null>(null)
+  const plannerIndex = plannerDayId ? days.findIndex((d) => d.id === plannerDayId) : -1
+  const plannerDay = plannerIndex >= 0 ? days[plannerIndex] : null
+
+  const callSheetOf = (day: GearDay) => {
+    const sheet = callSheetForDay(callSheets.sheets, project.id, day.id)
+    return sheet ? { entries: liveScheduleCount(sheet) } : null
+  }
+
+  const openCallSheet = (day: GearDay) => {
+    setPlannerDayId(day.id)
+    window.scrollTo({ top: 0 })
+  }
+
+  const closeCallSheet = () => {
+    setPlannerDayId(null)
+    window.scrollTo({ top: 0 })
+  }
+
+  const deleteCallSheet = async (sheet: CallSheet) => {
+    const index = days.findIndex((d) => d.id === sheet.dayId)
+    const label = index >= 0 ? labelOf(days[index], index) : 'dnia'
+    await callSheets.remove(sheet.id, new Date().toISOString())
+    closeCallSheet()
+    setNotice({ message: `Usunięto call sheet „${label}".`, undo: () => callSheets.restore(sheet.id) })
+  }
 
   const addDay = async ({ kind, date, location }: NewDay) => {
     if (date) {
@@ -456,6 +490,64 @@ function RealizationView({ project }: { project: Project }) {
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
   const newDayButton = <NewDayButton onAdd={addDay} />
 
+  const eventSheet = (
+    <Sheet open={!!editingEvent} onOpenChange={(open) => !open && setEditingEvent(null)}>
+      <SheetContent
+        side="right"
+        aria-describedby={undefined}
+        className="overflow-y-auto border-l border-white/10 bg-zinc-950/95 p-5 text-white backdrop-blur-2xl sm:max-w-md"
+      >
+        <SheetTitle className="sr-only">{editingEvent ? eventKind(editingEvent.kind).label : 'Wydarzenie'}</SheetTitle>
+        {editingEvent && (
+          <EventForm
+            key={editingEvent.id}
+            target={{ mode: 'edit', entry: { ...editingEvent, origin: 'event' } }}
+            onClose={() => setEditingEvent(null)}
+            onSaved={(saved) => {
+              setEditingEvent(null)
+              setEventNotice(noticeAfterSave(saved))
+            }}
+            onDeleted={(event) => {
+              setEditingEvent(null)
+              setEventNotice({ type: 'deleted', event })
+            }}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  )
+
+  if (plannerDay) {
+    return (
+      <>
+        <CallSheetPlanner
+          key={plannerDay.id}
+          project={project}
+          day={plannerDay}
+          info={info.get(plannerDay.id)}
+          dayLabel={labelOf(plannerDay, plannerIndex)}
+          stored={callSheetForDay(callSheets.sheets, project.id, plannerDay.id)}
+          others={days.flatMap((d, i) => {
+            if (d.id === plannerDay.id) return []
+            const sheet = callSheetForDay(callSheets.sheets, project.id, d.id)
+            return sheet ? [{ sheet, label: labelOf(d, i) }] : []
+          })}
+          calendar={calendarActions}
+          onFirstChange={ensureDaysSaved}
+          onSave={callSheets.save}
+          onDelete={(sheet) => void deleteCallSheet(sheet)}
+          onBack={closeCallSheet}
+        />
+        {eventNotice && (
+          <div className="mx-auto max-w-6xl px-4 pb-6">
+            <EventNotice notice={eventNotice} onDone={() => setEventNotice(null)} />
+          </div>
+        )}
+        {eventSheet}
+      </>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-6">
       <CrewRoleDatalist id={crewListListId(crewListId)} names={activeRoles.map((r) => r.name)} />
@@ -566,6 +658,9 @@ function RealizationView({ project }: { project: Project }) {
           onChangeCost={changeCost}
           onRemoveCost={removeCost}
           onCopyCrew={copyCrew}
+          callSheetOf={callSheetOf}
+          callSheetsReady={!callSheets.isLoading}
+          onOpenCallSheet={openCallSheet}
         />
       </section>
 
@@ -637,32 +732,7 @@ function RealizationView({ project }: { project: Project }) {
 
       <PlanSection plan={plan} unsaved={unsavedPlan} defaultOpen={!countsTowardRevenue(project.status)} />
 
-      <Sheet open={!!editingEvent} onOpenChange={(open) => !open && setEditingEvent(null)}>
-        <SheetContent
-          side="right"
-          aria-describedby={undefined}
-          className="overflow-y-auto border-l border-white/10 bg-zinc-950/95 p-5 text-white backdrop-blur-2xl sm:max-w-md"
-        >
-          <SheetTitle className="sr-only">
-            {editingEvent ? eventKind(editingEvent.kind).label : 'Wydarzenie'}
-          </SheetTitle>
-          {editingEvent && (
-            <EventForm
-              key={editingEvent.id}
-              target={{ mode: 'edit', entry: { ...editingEvent, origin: 'event' } }}
-              onClose={() => setEditingEvent(null)}
-              onSaved={(saved) => {
-                setEditingEvent(null)
-                setEventNotice(noticeAfterSave(saved))
-              }}
-              onDeleted={(event) => {
-                setEditingEvent(null)
-                setEventNotice({ type: 'deleted', event })
-              }}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      {eventSheet}
     </div>
   )
 }

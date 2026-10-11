@@ -113,6 +113,16 @@ Reference: `HANDOFF.md` + `handleTauriExport` (`contentHeight` logic).
 
 ---
 
+## Call sheet PDF (T5b)
+
+The call sheet (`components/planner/printable-call-sheet.tsx`) uses **path B in both runtimes**:
+`lib/print-call-sheet.ts` renders the hidden A4 sheet with `html2canvas-pro`, cuts pages with the same "last
+`data-pdf-break` that fits" rule (pure, tested: `planPdfPages` in `lib/pdf-pages.ts`), adds `tel:` / `mailto:` link
+annotations for elements marked `data-pdf-href`, then saves through the native dialog + `writeFile` in Tauri or a plain
+download in the browser. No `window.print()` anywhere, no new Tauri permission.
+
+---
+
 ## “Road we took” (what’s legacy)
 
 ### Legacy: react-pdf renderer (not used for current export)

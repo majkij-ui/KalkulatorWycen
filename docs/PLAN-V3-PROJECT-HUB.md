@@ -203,7 +203,12 @@ warstwy i zmuszało go do wiedzy o projektach.
   uzupełnia TYLKO `financials === null`, z cennika zapisanego w migawce; zamrożone migawki
   nietknięte. Uruchamiany ręcznie, jak migracja.
 
-### Faza 5 — wciągnięcie planera **[H, F]** (3–4 dni)
+### Faza 5 — wciągnięcie planera **[H, F]** ✅ ZROBIONE jako T5b (2026-10-11)
+
+> Built as T5b: see [PLAN-CALENDAR-AND-THREADS.md](PLAN-CALENDAR-AND-THREADS.md) §6f. The call sheet hangs on a
+> realization day (not the project), prints to PDF through the quote's desktop path instead of A4 print CSS, and the
+> packing list comes from the day's G3 gear.
+
 - Kopiujemy z CallSheetWiz: `lib/time.ts`, `lib/editing-engine.ts`, `lib/schedule-types.ts`
   (bez zmian) + komponenty do `components/planner/`.
 - Restyle na design system Nonoise (glass-card, ambient-glow, kolory) — UI ma być jednolite.
@@ -240,3 +245,7 @@ warstwy i zmuszało go do wiedzy o projektach.
 Zostaje jako osobne repo-archiwum. Po Fazie 5 nowe funkcje planera rozwijamy wyłącznie
 w QuoteGen. Świeże poprawki (print CSS, naprawa shoot date, zabezpieczenie ResizeObserver)
 przenosimy razem z kodem.
+
+> T5b (2026-10-11): code copied into `lib/` and `components/planner/`, the CallSheetWiz repo untouched. Kept: the
+> ResizeObserver guard (zero width / sub-pixel jitter) and the mount-gated "now" marker. The A4 print CSS was replaced
+> by the PDF path that already works in the desktop app (see `PDF_EXPORT.md`); shoot dates now come from the calendar.
