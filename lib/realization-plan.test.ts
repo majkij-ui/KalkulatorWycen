@@ -121,6 +121,14 @@ test('rzeczywistość: ten sam przychód i ryczałt, własne koszty', () => {
   assert.equal(actualFigures(plan, undefined).costCount, 0)
   assert.equal(actualFigures({ ...plan, revenue: 0, tax: 0 }, costs).marginPct, 0, 'bez przychodu nie dzielimy przez 0')
 
+  // T6: przychód z faktur, ryczałt wg stawki planu.
+  const invoiced = actualFigures(plan, costs, 2500)
+  const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`)
+  assert.equal(invoiced.revenue, 2500)
+  near(invoiced.tax, 212.5)
+  near(invoiced.profit, 2500 - 212.5 - 600)
+  near(invoiced.marginPct, ((2500 - 212.5 - 600) / 2500) * 100)
+
   assert.deepEqual(compareByCategory(plan, actual), [
     { category: 'ekipa', plan: null, actual: 500 },
     { category: 'dojazd', plan: null, actual: 100 },

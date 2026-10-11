@@ -2,8 +2,8 @@
 
 /**
  * Plan vs rzeczywistość projektu: koszty, zysk i marża. Rzeczywistość liczy
- * się z kosztów wpisanych w Realizacji przy tym samym przychodzie i ryczałcie
- * co plan (przychód z faktur to T6). Liczby nie trafiają do Finansów.
+ * się z kosztów wpisanych w Realizacji przy przychodzie z faktur (T6), a bez
+ * nich — przy przychodzie z planu. Finanse liczą te same koszty (`money-loop`).
  */
 
 import { useState } from 'react'
@@ -66,7 +66,16 @@ function toneOf(diff: number, upIsGood: boolean, epsilon = 0.5): Tone {
   return diff > 0 === upIsGood ? 'good' : 'bad'
 }
 
-export function RealizationSummary({ plan, actual }: { plan: PlanFigures; actual: ActualFigures }) {
+export function RealizationSummary({
+  plan,
+  actual,
+  fromInvoices = false,
+}: {
+  plan: PlanFigures
+  actual: ActualFigures
+  /** Przychód rzeczywisty pochodzi z faktur (T6), a nie z planu. */
+  fromInvoices?: boolean
+}) {
   const [showCategories, setShowCategories] = useState(false)
   const known = actual.costCount > 0
   const hasPlan = plan.source !== 'none'
@@ -77,6 +86,7 @@ export function RealizationSummary({ plan, actual }: { plan: PlanFigures; actual
   const profitDiff = actual.profit - plan.profit
   const marginDiff = actual.marginPct - plan.marginPct
   const vsPlan = (text: string) => (hasPlan && known ? `${text} vs plan` : null)
+  const withExtras = !fromInvoices && Math.abs(actual.revenue - plan.revenue) >= 0.5
 
   return (
     <section aria-label="Plan i rzeczywistość" className="space-y-2">
@@ -105,13 +115,18 @@ export function RealizationSummary({ plan, actual }: { plan: PlanFigures; actual
       </div>
 
       <p className="text-[11px] text-zinc-500">
-        {plan.source === 'quote' &&
+        {fromInvoices &&
+          `Przychód rzeczywisty z faktur (${pln(actual.revenue)}), w planie ${pln(plan.revenue)}; ryczałt ${pct(plan.taxRatePercent)}.`}
+        {!fromInvoices &&
+          plan.source === 'quote' &&
           `Przychód w obu kolumnach: kwota przelewu z wyceny (${pln(plan.revenue)}), ryczałt ${pct(plan.taxRatePercent)}.`}
-        {plan.source === 'import' &&
+        {!fromInvoices &&
+          plan.source === 'import' &&
           `Projekt bez wyceny: plan to wynik z importu (przychód ${pln(plan.revenue)}, koszty ${pln(plan.costs)}).`}
-        {plan.source === 'none' && 'Projekt nie ma wyceny ani przychodu — rzeczywistość pokazuje same koszty.'}
+        {!fromInvoices && plan.source === 'none' && 'Projekt nie ma wyceny ani przychodu — rzeczywistość pokazuje same koszty.'}
+        {withExtras && ` Ze sprzedażą dodatkową przychód rzeczywisty to ${pln(actual.revenue)}.`}
         {!known && ' Wpisz ekipę i koszty poniżej, żeby zobaczyć rzeczywisty wynik.'}
-        {' '}Te liczby nie zmieniają Finansów.
+        {' '}W Finansach wpisane koszty zastępują plan, gdy go przekroczą albo gdy projekt jest Zrealizowany.
       </p>
 
       {rows.length > 0 && (
