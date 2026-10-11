@@ -102,6 +102,10 @@ test('zysk: cały z planu ma znacznik planu; z faktur i kosztów — różnica d
   const real = profitText(money({ costs: [cost(2_500)] }, [ev('invoice_sent', '2026-09-16', { amountNetto: 10_000 })]))
   assert.equal(real.basis, null)
   assert.equal(plain(real.note), 'marża 67% · plan 7 150 zł · −500 zł')
+  // Przychód z planu, ale koszty już z Realizacji: zysk nie jest „planem".
+  const mixed = profitText(money({ costs: [cost(2_500)] }))
+  assert.equal(mixed.basis, null)
+  assert.equal(plain(mixed.note), 'marża 67% · plan 7 150 zł · −500 zł')
 })
 
 test('zapłata: po terminie, czeka, zapłacone bez faktury, zaplanowana, brak faktur', () => {
