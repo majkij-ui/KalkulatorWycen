@@ -79,6 +79,18 @@ test('eventData czyta pola typu, naprawia złe i zachowuje nieznane', () => {
   assert.deepEqual(eventData({ kind: 'nieznany', data: { x: 1 } }), { x: 1 })
 })
 
+test('sprzedaż dodatkowa (T6): co, kwota netto, numer faktury; nie podpowiada statusu', () => {
+  const kind = eventKind('extra_sale')
+  assert.equal(kind.group, 'pieniadze')
+  assert.equal(kind.scope, 'project')
+  assert.equal(kind.suggestsStatus, undefined)
+  assert.deepEqual(
+    eventData({ kind: 'extra_sale', data: { what: ' surówka ', amountNetto: 1500, number: '3/09', note: 'x' } }),
+    { what: 'surówka', amountNetto: 1500, number: '3/09', note: 'x' }
+  )
+  assert.equal(eventData({ kind: 'extra_sale', data: { amountNetto: 'dużo' } }).amountNetto, undefined)
+})
+
 test('podpowiedzi statusu idą tylko naprzód', () => {
   assert.equal(statusSuggestion('quote', 'won'), 'won')
   assert.equal(statusSuggestion('won', 'invoice_paid'), 'done')

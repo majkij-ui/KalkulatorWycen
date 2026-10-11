@@ -21,6 +21,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ClipboardCopy, PackagePlus, Plus } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
+import { projectMoney } from '@/lib/money-loop'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useQuote } from '@/lib/quote-context'
 import { useCrew } from '@/lib/crew-context'
@@ -66,6 +67,7 @@ import {
   costCategoryLabel,
   countsTowardRevenue,
   createGearDayId,
+  toDateKey,
   type GearDay,
   type Project,
   type ProjectCost,
@@ -399,7 +401,15 @@ function RealizationView({ project }: { project: Project }) {
   // ── Liczby ─────────────────────────────────────────────────────────────────
 
   const plan = useMemo(() => projectPlan(project, live), [project, live])
-  const actual = useMemo(() => actualFigures(plan, costs), [plan, costs])
+  // Przychód rzeczywisty tą samą regułą co Finanse (T6): faktury, gdy są pełne,
+  // inaczej plan z kalkulatora plus sprzedaż dodatkowa.
+  const money = useMemo(
+    () => projectMoney({ ...project, costs }, allEvents, toDateKey(new Date())),
+    [project, costs, allEvents]
+  )
+  const fromInvoices = money.revenueBasis === 'invoices' && money.revenue !== null
+  const actualRevenue = fromInvoices ? money.revenue! : plan.revenue + money.extrasTotal
+  const actual = useMemo(() => actualFigures(plan, costs, actualRevenue), [plan, costs, actualRevenue])
   const unsavedPlan = useMemo(() => isPlanUnsaved(project, live), [project, live])
 
   const gear = useMemo(() => summarizeProjectGear({ ...project, gearDays: days }, items), [project, days, items])
@@ -495,7 +505,7 @@ function RealizationView({ project }: { project: Project }) {
         </div>
       )}
 
-      <RealizationSummary plan={plan} actual={actual} />
+      <RealizationSummary plan={plan} actual={actual} fromInvoices={fromInvoices} />
 
       <section aria-label="Dni realizacji" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

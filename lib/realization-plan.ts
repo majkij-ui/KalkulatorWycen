@@ -6,8 +6,9 @@
  * — w migawce wyceny (decyzja 5 planu, bez migracji); Realizacja tylko je
  * pokazuje. Projekt bez wyceny (retro-import) ma za plan zaimportowany wynik.
  *
- * RZECZYWISTOŚĆ to koszty wpisane w Realizacji (`project-costs.ts`) przy TYM
- * SAMYM przychodzie i ryczałcie co plan. Przychód z faktur policzy T6.
+ * RZECZYWISTOŚĆ to koszty wpisane w Realizacji (`project-costs.ts`) przy
+ * przychodzie z faktur, gdy je znamy (T6, `money-loop.ts`), a inaczej tym samym
+ * co w planie; ryczałt ten sam co w planie.
  */
 
 import { crewLineKey, isRentalCostKey, resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
@@ -45,7 +46,7 @@ export interface ActualFigures {
   byCategory: Map<string, number>
 }
 
-const DEFAULT_TAX_RATE = 8.5
+export const DEFAULT_TAX_RATE = 8.5
 
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
@@ -164,16 +165,24 @@ export function isPlanUnsaved(
 
 // ── Rzeczywistość ────────────────────────────────────────────────────────────
 
-/** Wynik przy kosztach rzeczywistych: ten sam przychód i ryczałt co w planie. */
-export function actualFigures(plan: PlanFigures, costs: ProjectCost[] | null | undefined): ActualFigures {
+/**
+ * Wynik przy kosztach rzeczywistych. `revenue` — przychód rzeczywisty (z
+ * faktur, T6); domyślnie ten sam co w planie. Ryczałt zawsze wg stawki planu.
+ */
+export function actualFigures(
+  plan: PlanFigures,
+  costs: ProjectCost[] | null | undefined,
+  revenue: number = plan.revenue
+): ActualFigures {
   const total = totalActualCosts(costs)
-  const profit = plan.revenue - plan.tax - total
+  const tax = revenue === plan.revenue ? plan.tax : revenue * (plan.taxRatePercent / 100)
+  const profit = revenue - tax - total
   return {
-    revenue: plan.revenue,
-    tax: plan.tax,
+    revenue,
+    tax,
     costs: total,
     profit,
-    marginPct: plan.revenue > 0 ? (profit / plan.revenue) * 100 : 0,
+    marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
     costCount: (costs ?? []).filter((c) => !c.deletedAt).length,
     byCategory: actualCostsByCategory(costs),
   }

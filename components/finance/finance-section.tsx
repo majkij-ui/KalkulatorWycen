@@ -5,13 +5,16 @@
  *
  *   wynik firmy = zysk projektów (won/done) − koszty stałe okresu
  *
- * Cała matematyka siedzi w `finance-calc.ts` (czyste funkcje z testami); ten
- * plik tylko wybiera okres i rysuje. Liczby projektów to ZAMROŻONE migawki z
- * chwili zapisu — dashboard nigdy nie przelicza ich z bieżącego cennika.
+ * Od T6 liczby projektów to NAJLEPSZA WIEDZA: faktury zamiast planu, gdy są,
+ * koszty z Realizacji zamiast planowanych, gdy je wpisano; faktura liczy się
+ * w miesiącu wystawienia (`money-loop.ts`). Plan to nadal ZAMROŻONA migawka z
+ * chwili zapisu — dashboard nigdy nie przelicza jej z bieżącego cennika. Cała
+ * matematyka siedzi w `finance-calc.ts` i `money-loop.ts` (czyste funkcje z
+ * testami); ten plik tylko wybiera okres i rysuje.
  */
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import {
   Bar,
   CartesianGrid,
@@ -27,20 +30,29 @@ import {
 import { useProjectHub } from '@/lib/project-hub-context'
 import {
   isInPeriod,
-  monthlyTrend,
   periodContaining,
+  periodLabel,
   summarizePeriod,
   type Period,
   type PeriodKind,
-  type PeriodSummary,
 } from '@/lib/finance-calc'
-import { countsTowardRevenue, toDateKey, toYear, type Project } from '@/lib/project-types'
+import {
+  moneyLedger,
+  moneyTrend,
+  moneyYears,
+  openInvoices,
+  paymentDays,
+  summarizeMoney,
+  type MoneySummary,
+  type OpenInvoice,
+} from '@/lib/money-loop'
+import { pln, signedPln } from '@/lib/money-loop-labels'
+import { toDateKey, toYear } from '@/lib/project-types'
 import { useEvents } from '@/lib/events-context'
-import { paymentSplit, paymentState, type PaymentEvent, type PaymentSplit } from '@/lib/payments'
 import { plural } from '@/lib/pl-plural'
-import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
+import { PaymentsPanel, PlanVsActual } from './money-loop-panels'
 import { useFixedCosts } from './use-fixed-costs'
 
 /** Pierwszy rok kokpitu — wcześniejsze lata pokazujemy tylko, gdy są w nich dane. */
@@ -59,19 +71,10 @@ const KIND_LABELS: Record<Exclude<PeriodKind, 'month'>, string> = {
   quarter: 'Kwartał',
 }
 
-function pln(amount: number): string {
-  return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
-}
-
 function compactPln(amount: number): string {
   const abs = Math.abs(amount)
   if (abs >= 1000) return `${(amount / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}k`
   return String(Math.round(amount))
-}
-
-function formatDate(dateKey: string): string {
-  const [y, m, d] = dateKey.split('-')
-  return y && m && d ? `${d}.${m}.${y}` : dateKey
 }
 
 // ── Wybór okresu ─────────────────────────────────────────────────────────────
@@ -217,55 +220,85 @@ function BackfillBanner() {
 
 // ── Kafle KPI ────────────────────────────────────────────────────────────────
 
-function KpiTiles({ summary, split }: { summary: PeriodSummary; split: PaymentSplit }) {
-  const negative = summary.netResult < 0
+/** „plan 159 613 zł · +1 500 zł" — albo „zgodnie z planem", gdy różnicy nie ma. */
+function vsPlan(actual: number, plan: number): string {
+  const delta = signedPln(actual - plan)
+  return delta ? `plan ${pln(plan)} · ${delta}` : 'zgodnie z planem'
+}
+
+function KpiTiles({ money, pipeline }: { money: MoneySummary; pipeline: { count: number; value: number } }) {
+  const negative = money.netResult < 0
   const tone =
-    summary.netResult === 0
+    money.netResult === 0
       ? { box: 'border-white/5 bg-zinc-900/40', text: 'text-zinc-100' }
       : negative
         ? { box: 'border-red-500/30 bg-red-500/5', text: 'text-red-300' }
         : { box: 'border-emerald-500/30 bg-emerald-500/5', text: 'text-emerald-300' }
+  const { coverage } = money
+  const projectCount = money.projects.length
+  const fromPlan = money.revenue - money.invoicedRevenue
   return (
     <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Przychód netto</div>
-        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(summary.revenue)}</div>
+        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(money.revenue)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          {summary.projectCount} {plural(summary.projectCount, 'projekt', 'projekty', 'projektów')}
+          {projectCount} {plural(projectCount, 'projekt', 'projekty', 'projektów')}
+          {coverage.partial > 0 && ` · ${coverage.partial} w toku`}
         </div>
-        {/* Odhaczenie „Zapłacone" na liście projektów — ta sama reguła. */}
-        {summary.projectCount > 0 && (
+        {money.revenue > 0 && (
+          <div className="mt-0.5 text-xs text-zinc-500">
+            {money.invoicedRevenue === 0
+              ? 'brak faktur — wszystko z planu'
+              : fromPlan < 0.5
+                ? `wszystko z faktur`
+                : `z faktur ${pln(money.invoicedRevenue)} · z planu ${pln(fromPlan)}`}
+          </div>
+        )}
+        {coverage.projects > 0 && (
+          <div className="mt-0.5 text-xs text-zinc-500">{vsPlan(money.revenue, money.plan.revenue)}</div>
+        )}
+        {/* Ta sama reguła co odhaczenie „Zapłacone" na liście projektów, per faktura. */}
+        {money.revenue > 0 && (
           <div className="mt-0.5 text-xs tabular-nums">
-            <span className="text-emerald-400/80">wpłynęło {pln(split.paid.revenue)}</span>
-            {split.awaiting.count > 0 && (
-              <span className="text-amber-300/80"> · czeka {pln(split.awaiting.revenue)}</span>
+            <span className="text-emerald-400/80">wpłynęło {pln(money.paid.revenue)}</span>
+            {money.awaiting.revenue > 0.5 && (
+              <span className="text-amber-300/80"> · czeka {pln(money.awaiting.revenue)}</span>
             )}
           </div>
         )}
       </div>
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Zysk z projektów</div>
-        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(summary.projectProfit)}</div>
+        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(money.profit)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          po kosztach {pln(summary.productionCosts)} i podatku {pln(summary.tax)}
+          po kosztach {pln(money.costs)} i podatku {pln(money.tax)}
         </div>
+        {coverage.projects > 0 && (
+          <div className="mt-0.5 text-xs text-zinc-500">
+            {vsPlan(money.profit, money.plan.profit)} ·{' '}
+            {coverage.withCosts === 0
+              ? 'brak kosztów z Realizacji'
+              : `koszty z Realizacji ${coverage.withCosts} z ${coverage.projects}`}
+          </div>
+        )}
       </div>
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Koszty stałe</div>
-        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(summary.fixedCosts.total)}</div>
+        <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(money.fixedCosts.total)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          ZUS {pln(summary.fixedCosts.zus)} · mark. {pln(summary.fixedCosts.marketing)} · inne{' '}
-          {pln(summary.fixedCosts.other)}
+          ZUS {pln(money.fixedCosts.zus)} · mark. {pln(money.fixedCosts.marketing)} · inne{' '}
+          {pln(money.fixedCosts.other)}
         </div>
       </div>
       <div className={`rounded-xl border p-4 ${tone.box}`}>
         <div className="text-[11px] uppercase tracking-wide text-zinc-400">Wynik firmy</div>
         <div className={`mt-1 tabular-nums text-xl font-bold ${tone.text}`}>
-          {pln(summary.netResult)}
+          {pln(money.netResult)}
         </div>
         <div className="mt-1 text-xs text-zinc-400">
-          {summary.revenue > 0 ? `marża ${Math.round(summary.marginPct)}%` : 'brak przychodu'}
-          {summary.quoteCount > 0 && ` · w wycenach ${pln(summary.pipelineValue)}`}
+          {money.netMarginPct !== null ? `marża ${Math.round(money.netMarginPct)}%` : 'brak przychodu'}
+          {pipeline.count > 0 && ` · w wycenach ${pln(pipeline.value)}`}
         </div>
       </div>
     </div>
@@ -305,15 +338,15 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
   )
 }
 
-function TrendChart({ trend, period }: { trend: PeriodSummary[]; period: Period }) {
+function TrendChart({ trend, period }: { trend: MoneySummary[]; period: Period }) {
   const rows: TrendRow[] = trend.map((s, i) => ({
     month: MONTH_SHORT[i],
     inPeriod: isInPeriod(`${period.year}-${String(i + 1).padStart(2, '0')}`, period),
-    projectProfit: s.projectProfit,
+    projectProfit: s.profit,
     fixedCosts: s.fixedCosts.total,
     netResult: s.netResult,
   }))
-  const empty = rows.every((r) => r.projectProfit === 0 && r.fixedCosts === 0)
+  const empty = trend.every((s) => s.revenue === 0 && s.costs === 0 && s.fixedCosts.total === 0)
 
   return (
     <section className="mb-6 rounded-xl border border-white/5 bg-zinc-900/40 p-4">
@@ -387,107 +420,20 @@ function TrendChart({ trend, period }: { trend: PeriodSummary[]; period: Period 
   )
 }
 
-// ── Projekty okresu ──────────────────────────────────────────────────────────
-
-function ProjectRow({
-  project,
-  onOpen,
-  paid,
-}: {
-  project: Project
-  onOpen: (id: string) => void
-  /** Tylko dla projektów, które się liczą; `undefined` = nie dotyczy (wycena). */
-  paid?: boolean
-}) {
-  // Jak na liście projektów: pełny kolor i pogrubienie tylko dla kwot, które
-  // się liczą do wyniku. Otwarta wycena jest szara.
-  const counts = countsTowardRevenue(project.status)
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(project.id)}
-      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/5"
-    >
-      <span className="w-20 shrink-0 tabular-nums text-xs text-zinc-500">{formatDate(project.date)}</span>
-      <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{project.name || 'Bez nazwy'}</span>
-      <ProjectStatusBadge status={project.status} />
-      <span className="w-20 shrink-0 text-right text-[11px]">
-        {paid === true && <span className="text-emerald-400/80">zapłacone</span>}
-        {paid === false && <span className="text-amber-300/80">czeka</span>}
-      </span>
-      {project.financials ? (
-        <span className="w-44 shrink-0 text-right tabular-nums text-xs">
-          <span className={counts ? 'text-zinc-300' : 'text-zinc-500'}>{pln(project.financials.sumaNetto)}</span>
-          <span className="text-zinc-600"> · zysk </span>
-          <span
-            className={
-              !counts ? 'text-zinc-500' : project.financials.zysk < 0 ? 'font-semibold text-red-300' : 'font-semibold text-zinc-100'
-            }
-          >
-            {pln(project.financials.zysk)}
-          </span>
-        </span>
-      ) : (
-        <span className="w-44 shrink-0 text-right text-xs text-amber-400/80">nie policzono</span>
-      )}
-      <ArrowRight className="size-3.5 shrink-0 text-zinc-700 transition-colors group-hover:text-zinc-300" />
-    </button>
-  )
-}
-
-function PeriodProjects({
-  projects,
-  events,
-  onOpenProject,
-}: {
-  projects: Project[]
-  events: PaymentEvent[]
-  onOpenProject: (id: string) => void
-}) {
-  const today = toDateKey(new Date())
-  const realized = projects.filter((p) => countsTowardRevenue(p.status))
-  const pipeline = projects.filter((p) => p.status === 'quote')
-
-  return (
-    <section className="mb-6 rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-      <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">Projekty w okresie</h2>
-      {realized.length === 0 ? (
-        <p className="px-3 py-2 text-sm text-zinc-600">
-          Żaden projekt nie jest „W realizacji" ani „Zrealizowany" w tym okresie.
-        </p>
-      ) : (
-        <div className="flex flex-col">
-          {realized.map((p) => (
-            <ProjectRow key={p.id} project={p} onOpen={onOpenProject} paid={paymentState(events, p.id, today).paid} />
-          ))}
-        </div>
-      )}
-
-      {pipeline.length > 0 && (
-        <>
-          <h3 className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-            Wyceny (niewliczone)
-          </h3>
-          <div className="flex flex-col">
-            {pipeline.map((p) => (
-              <ProjectRow key={p.id} project={p} onOpen={onOpenProject} />
-            ))}
-          </div>
-        </>
-      )}
-    </section>
-  )
-}
-
 // ── Sekcja ───────────────────────────────────────────────────────────────────
 
 export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const { projects, isLoading } = useProjectHub()
   const fixed = useFixedCosts()
+  const { events } = useEvents()
   const [period, setPeriod] = useState<Period>(() => periodContaining(new Date(), 'year'))
+  const today = toDateKey(new Date())
+
+  // Pieniądze projektów liczone raz; okresy i wykres tylko je dzielą.
+  const ledger = useMemo(() => moneyLedger(projects, events, today), [projects, events, today])
 
   const years = useMemo(() => {
-    const set = new Set<number>([FIRST_YEAR, new Date().getFullYear(), period.year])
+    const set = new Set<number>([FIRST_YEAR, new Date().getFullYear(), period.year, ...moneyYears(ledger)])
     projects.forEach((p) => {
       const y = toYear(p.date)
       if (y !== null) set.add(y)
@@ -499,25 +445,24 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     const min = Math.min(...set)
     const max = Math.max(...set)
     return Array.from({ length: max - min + 1 }, (_, i) => max - i)
-  }, [projects, fixed.costs, period.year])
+  }, [projects, fixed.costs, period.year, ledger])
 
-  const summary = useMemo(
-    () => summarizePeriod(projects, fixed.costs, period),
-    [projects, fixed.costs, period]
-  )
-  const trend = useMemo(
-    () => monthlyTrend(projects, fixed.costs, period.year),
-    [projects, fixed.costs, period.year]
-  )
-  const { events } = useEvents()
-  const split = useMemo(
-    () => paymentSplit(projects.filter((p) => isInPeriod(p.date, period)), events, toDateKey(new Date())),
-    [projects, events, period]
-  )
-  const periodProjects = useMemo(
-    () => projects.filter((p) => isInPeriod(p.date, period)),
+  const money = useMemo(() => summarizeMoney(ledger, fixed.costs, period), [ledger, fixed.costs, period])
+  const trend = useMemo(() => moneyTrend(ledger, fixed.costs, period.year), [ledger, fixed.costs, period.year])
+  // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
+  const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period), [projects, period])
+  const pipeline = useMemo(
+    () => projects.filter((p) => p.status === 'quote' && isInPeriod(p.date, period)),
     [projects, period]
   )
+  const open = useMemo(() => openInvoices(ledger, today), [ledger, today])
+  const openByProject = useMemo(() => {
+    const map = new Map<string, OpenInvoice[]>()
+    open.forEach((invoice) => map.set(invoice.projectId, [...(map.get(invoice.projectId) ?? []), invoice]))
+    return map
+  }, [open])
+  const days = useMemo(() => paymentDays(ledger, period), [ledger, period])
+  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -525,8 +470,9 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Finanse</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Zysk projektów „W realizacji" i „Zrealizowanych" minus koszty stałe. Wyceny nie
-            wchodzą do wyniku.
+            Zysk projektów „W realizacji" i „Zrealizowanych" minus koszty stałe. Przychód z faktur
+            (w miesiącu wystawienia), a gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich
+            brak — z planu. Wyceny nie wchodzą do wyniku.
           </p>
         </div>
         <PeriodPicker period={period} years={years} onChange={setPeriod} />
@@ -540,9 +486,25 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
         </div>
       ) : (
         <>
-          <KpiTiles summary={summary} split={split} />
+          <KpiTiles
+            money={money}
+            pipeline={{ count: pipelineSummary.quoteCount, value: pipelineSummary.pipelineValue }}
+          />
+          <PaymentsPanel
+            open={open}
+            stats={days}
+            periodLabel={periodLabel(period)}
+            projectsById={projectsById}
+            onOpenProject={onOpenProject}
+          />
           <TrendChart trend={trend} period={period} />
-          <PeriodProjects projects={periodProjects} events={events} onOpenProject={onOpenProject} />
+          <PlanVsActual
+            summary={money}
+            projectsById={projectsById}
+            openByProject={openByProject}
+            pipeline={pipeline}
+            onOpenProject={onOpenProject}
+          />
           <FixedCostsPanel period={period} {...fixed} />
         </>
       )}

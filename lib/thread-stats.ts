@@ -33,6 +33,20 @@ export interface InvoiceStats {
   daysToPaid: number | null
   /** Ile dni faktura czeka na wpłatę (stan na `today`); `null` = opłacona albo zaplanowana. */
   daysOpen: number | null
+  /** Kwota netto z faktury (`amountNetto`); `null` = nie wpisano. */
+  amountNetto: number | null
+  /** Termin płatności `YYYY-MM-DD`; `null` = nie wpisano. */
+  dueDate: string | null
+  /** Kwota ze sparowanej wpłaty (`amount`); `null` = brak wpłaty albo kwoty. */
+  paidAmount: number | null
+}
+
+/** Wpłata, która nie pasuje do żadnej faktury w wątku (np. odhaczenie bez faktury). */
+export interface UnpairedPayment {
+  day: string
+  /** `null` = wpłata bez kwoty. */
+  amount: number | null
+  number?: string
 }
 
 export interface ThreadStats {
@@ -50,6 +64,8 @@ export interface ThreadStats {
   shootDays: number
   postDays: number
   invoices: InvoiceStats[]
+  /** Wpłaty bez pary — kolejność chronologiczna. */
+  unpairedPayments: UnpairedPayment[]
 }
 
 function endOf(event: ThreadEventInput): string {
@@ -82,13 +98,27 @@ const numberOf = (event: ThreadEventInput): string | undefined => {
   return typeof value === 'string' && value ? value : undefined
 }
 
+const numberField = (event: ThreadEventInput, key: string): number | null => {
+  const value = eventData(event)[key]
+  return typeof value === 'number' ? value : null
+}
+
+const dueDateOf = (event: ThreadEventInput): string | null => {
+  const value = eventData(event).dueDate
+  return typeof value === 'string' ? value : null
+}
+
 /**
  * Paruje faktury z wpłatami w dwóch przejściach: najpierw po numerze faktury
  * (dla WSZYSTKICH faktur — inaczej wcześniejsza faktura bez numeru mogłaby
  * „ukraść" wpłatę należącą do późniejszej), potem resztę chronologicznie: z
  * najwcześniejszą wolną wpłatą nie wcześniejszą niż wysyłka.
  */
-function pairInvoices(sent: ThreadEventInput[], paid: ThreadEventInput[], today: string): InvoiceStats[] {
+function pairInvoices(
+  sent: ThreadEventInput[],
+  paid: ThreadEventInput[],
+  today: string
+): { invoices: InvoiceStats[]; unpaired: UnpairedPayment[] } {
   const free = [...paid]
   const matches: (ThreadEventInput | null)[] = sent.map(() => null)
   const take = (index: number) => (index === -1 ? null : free.splice(index, 1)[0])
@@ -101,9 +131,10 @@ function pairInvoices(sent: ThreadEventInput[], paid: ThreadEventInput[], today:
     if (!matches[i]) matches[i] = take(free.findIndex((p) => dayKey(p.start) >= dayKey(invoice.start)))
   })
 
-  return sent.map((invoice, i) => {
+  const invoices = sent.map((invoice, i): InvoiceStats => {
     const sentDay = dayKey(invoice.start)
-    const paidDay = matches[i] ? dayKey(matches[i]!.start) : null
+    const payment = matches[i]
+    const paidDay = payment ? dayKey(payment.start) : null
     const state = paidDay ? 'paid' : sentDay > today ? 'planned' : 'open'
     return {
       state,
@@ -112,8 +143,17 @@ function pairInvoices(sent: ThreadEventInput[], paid: ThreadEventInput[], today:
       number: numberOf(invoice),
       daysToPaid: paidDay ? daysBetween(sentDay, paidDay) : null,
       daysOpen: state === 'open' ? daysBetween(sentDay, today) : null,
+      amountNetto: numberField(invoice, 'amountNetto'),
+      dueDate: dueDateOf(invoice),
+      paidAmount: payment ? numberField(payment, 'amount') : null,
     }
   })
+  const unpaired = free.map((payment) => ({
+    day: dayKey(payment.start),
+    amount: numberField(payment, 'amount'),
+    ...(numberOf(payment) ? { number: numberOf(payment) } : {}),
+  }))
+  return { invoices, unpaired }
 }
 
 /**
@@ -135,6 +175,7 @@ export function threadStats(input: ThreadEventInput[], today: string): ThreadSta
     : events.find((e) => e.kind === 'won' || e.kind === 'lost')
 
   const responseMinutes = lead && reply ? minutesBetween(lead.start, reply.start) : null
+  const paired = pairInvoices(ofKind('invoice_sent'), ofKind('invoice_paid'), today)
 
   return {
     firstDate: events.length ? dayKey(events[0].start) : null,
@@ -147,7 +188,8 @@ export function threadStats(input: ThreadEventInput[], today: string): ThreadSta
     prepDays: distinctDays(ofKind('prep_day')),
     shootDays: distinctDays(ofKind('shoot_day')),
     postDays: distinctDays(ofKind('post_day')),
-    invoices: pairInvoices(ofKind('invoice_sent'), ofKind('invoice_paid'), today),
+    invoices: paired.invoices,
+    unpairedPayments: paired.unpaired,
   }
 }
 
