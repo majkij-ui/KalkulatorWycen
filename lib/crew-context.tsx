@@ -27,9 +27,11 @@ import {
   type CrewMember,
   type CrewRole,
 } from './crew-types'
+import { crewAfterMerge, crewAfterUnmerge, type CrewMergePlan } from './crew-merge'
 import {
   listAllCrewMembers,
   listStoredCrewRoles,
+  mutateCrewMembers,
   restoreCrewMember,
   softDeleteCrewMember,
   upsertCrewMember,
@@ -59,6 +61,10 @@ interface CrewContextValue {
   /** Miękkie usunięcie (`deletedAt`); `restorePerson` je cofa. */
   removePerson: (id: string) => Promise<void>
   restorePerson: (id: string) => Promise<void>
+  /** „Scal osoby": karta połączona, duplikaty miękko usunięte (`mergedInto`) — jeden zapis. */
+  mergePeople: (plan: CrewMergePlan) => Promise<void>
+  /** „Cofnij" scalenia (`crewAfterUnmerge`). */
+  unmergePeople: (plan: CrewMergePlan) => Promise<void>
 }
 
 const CrewContext = createContext<CrewContextValue | null>(null)
@@ -137,6 +143,15 @@ export function CrewProvider({ children }: { children: React.ReactNode }) {
     setAllPeople(await restoreCrewMember(id))
   }, [])
 
+  const mergePeople = useCallback(async (plan: CrewMergePlan) => {
+    setAllPeople(await mutateCrewMembers((all) => crewAfterMerge(all, plan)))
+  }, [])
+
+  const unmergePeople = useCallback(async (plan: CrewMergePlan) => {
+    const now = new Date().toISOString()
+    setAllPeople(await mutateCrewMembers((all) => crewAfterUnmerge(all, plan, now)))
+  }, [])
+
   const value: CrewContextValue = {
     roles,
     activeRoles,
@@ -152,6 +167,8 @@ export function CrewProvider({ children }: { children: React.ReactNode }) {
     savePerson,
     removePerson,
     restorePerson,
+    mergePeople,
+    unmergePeople,
   }
   return <CrewContext.Provider value={value}>{children}</CrewContext.Provider>
 }

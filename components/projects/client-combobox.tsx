@@ -10,12 +10,14 @@
  *    tekst bez dopasowania wraca do poprzedniego wyboru.
  *
  * Dopasowanie i kolejność podpowiedzi: `suggestClients` (bez wielkości liter
- * i polskich znaków).
+ * i polskich znaków). W filtrze listy mogą być też grupy klientów (S2,
+ * klucz `grupa:<id>`) — podpisane „grupa".
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { clientKey, suggestClients, type ClientInfo } from '@/lib/clients'
+import { isGroupScope } from '@/lib/client-groups'
 import { plural } from '@/lib/pl-plural'
 
 function projectsLabel(count: number): string {
@@ -63,7 +65,9 @@ export function ClientCombobox({
 
   const matchFor = (name: string) => {
     const key = clientKey(name)
-    return key ? (directory.find((c) => c.key === key) ?? null) : null
+    if (!key) return null
+    // Grupa ma klucz `grupa:<id>` — wpisaną nazwę porównujemy z jej nazwą.
+    return directory.find((c) => c.key === key) ?? directory.find((c) => isGroupScope(c.key) && clientKey(c.name) === key) ?? null
   }
 
   const commit = (name: string, picked: ClientInfo | null) => {
@@ -186,7 +190,9 @@ export function ClientCombobox({
               }`}
             >
               <span className="min-w-0 truncate">{client.name}</span>
-              <span className="shrink-0 text-[11px] text-zinc-500">{projectsLabel(client.projectCount)}</span>
+              <span className="shrink-0 text-[11px] text-zinc-500">
+                {isGroupScope(client.key) ? `grupa · ${projectsLabel(client.projectCount)}` : projectsLabel(client.projectCount)}
+              </span>
             </li>
           ))}
         </ul>

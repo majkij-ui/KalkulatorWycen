@@ -83,14 +83,42 @@ const roleIdList = z
   .catch([])
   .transform((list) => list.filter((id): id is string => typeof id === 'string' && id.length > 0))
 
+/**
+ * Stawka osoby w jednej roli (S2, plan po jeździe próbnej §3.3): ten sam
+ * człowiek jako operator bierze inaczej niż jako gafer. Stawka 0 = nieznana.
+ */
+export const crewRoleRateSchema = z
+  .object({
+    roleId: z.string().min(1),
+    /** Ile ta osoba bierze ode MNIE za dzień w tej roli (PLN netto). */
+    rate: z.number().finite().nonnegative(),
+    /** Np. „z własnym sprzętem". */
+    note: optionalText,
+  })
+  .passthrough()
+export type CrewRoleRate = z.infer<typeof crewRoleRateSchema>
+
+/** Lista stawek: zły wpis znika, reszta zostaje. */
+const roleRateList = z
+  .array(z.unknown())
+  .catch([])
+  .transform((list) =>
+    list.flatMap((entry) => {
+      const parsed = crewRoleRateSchema.safeParse(entry)
+      return parsed.success ? [parsed.data] : []
+    })
+  )
+
 export const crewMemberSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().catch(''),
     /** Role, w których ta osoba pracuje (`CrewRole.id`). */
     roleIds: roleIdList,
-    /** Ile ta osoba bierze ode MNIE za dzień (PLN netto); brak = nieznane. */
+    /** Ile ta osoba bierze ode MNIE za dzień (PLN netto); brak = nieznane. Dla ról bez własnej stawki. */
     rate: optionalRate,
+    /** Własne stawki w rolach (S2); rola bez wpisu bierze `rate`. */
+    roleRates: roleRateList.optional(),
     contact: crewContactSchema.catch({}),
     city: optionalText,
     notes: optionalText,
@@ -98,6 +126,8 @@ export const crewMemberSchema = z
     retiredAt: optionalText,
     /** Miękkie usunięcie (ISO); „Cofnij" je zdejmuje. */
     deletedAt: optionalText,
+    /** „Scal osoby" (S2): duplikat usunięty przy scaleniu wskazuje osobę, która została. */
+    mergedInto: optionalText,
     createdAt: z.string().catch(''),
     updatedAt: z.string().catch(''),
   })
@@ -234,11 +264,98 @@ export function crewMemberByName(members: CrewMember[], name: string | undefined
   )
 }
 
+/**
+ * Osoba po id. Duplikat scalony przez „Scal osoby" (`mergedInto`) prowadzi do
+ * osoby, która została — także wtedy, gdy wiersz zapisała starsza kopia (np.
+ * wycena otwarta w kalkulatorze w chwili scalania). Usunięty bez scalenia = `null`.
+ * `members` = wszyscy, z usuniętymi.
+ */
+export function crewMemberById(members: CrewMember[], id: string | null | undefined): CrewMember | null {
+  if (!id) return null
+  const byId = new Map(members.map((m) => [m.id, m]))
+  const seen = new Set<string>()
+  let current = byId.get(id)
+  while (current && current.deletedAt && current.mergedInto && !seen.has(current.id)) {
+    seen.add(current.id)
+    current = byId.get(current.mergedInto)
+  }
+  return current && !current.deletedAt ? current : null
+}
+
+// ── Stawki w rolach (S2) ─────────────────────────────────────────────────────
+
+/** Własna stawka osoby w tej roli; `null` = brak (albo 0, czyli nieznana). */
+export function personRoleRate(
+  person: Pick<CrewMember, 'roleRates'> | null | undefined,
+  roleId: string | null | undefined
+): number | null {
+  if (!person || !roleId) return null
+  const entry = (person.roleRates ?? []).find((r) => r.roleId === roleId && r.rate > 0)
+  return entry ? entry.rate : null
+}
+
+/**
+ * Ile osoba bierze ode mnie za dzień w roli: jej stawka w tej roli, potem
+ * jej stawka ogólna. `null` = osoba nie ma stawki (wtedy liczy się rola —
+ * `crewCostRate` w `quote-crew.ts`).
+ */
+export function personRateFor(
+  person: Pick<CrewMember, 'rate' | 'roleRates'> | null | undefined,
+  roleId: string | null | undefined
+): number | null {
+  if (!person) return null
+  const own = personRoleRate(person, roleId)
+  if (own !== null) return own
+  return person.rate !== undefined && person.rate > 0 ? person.rate : null
+}
+
+/**
+ * Stawki do zapisu: jedna na rolę (ostatnia wygrywa, a 0 albo zła liczba ją
+ * kasuje), notatka bez spacji na brzegach.
+ */
+export function normalizeRoleRates(entries: { roleId: string; rate: number; note?: string }[]): CrewRoleRate[] {
+  const byRole = new Map<string, CrewRoleRate>()
+  entries.forEach((entry) => {
+    if (!entry.roleId || !Number.isFinite(entry.rate) || entry.rate <= 0) {
+      byRole.delete(entry.roleId)
+      return
+    }
+    const next: CrewRoleRate = { ...entry, roleId: entry.roleId, rate: entry.rate }
+    const note = entry.note?.trim()
+    if (note) next.note = note
+    else delete next.note
+    byRole.delete(entry.roleId)
+    byRole.set(entry.roleId, next)
+  })
+  return [...byRole.values()]
+}
+
+/**
+ * Role osoby do wyboru w wierszu ekipy: najpierw jej role (w jej
+ * kolejności), potem pozostałe aktywne. Wycofane role osoby też są na
+ * liście — to wciąż jej role.
+ */
+export function rolesForPerson(
+  person: Pick<CrewMember, 'roleIds' | 'roleRates'> | null | undefined,
+  roles: CrewRole[]
+): { own: CrewRole[]; others: CrewRole[] } {
+  const ids = [...(person?.roleIds ?? []), ...(person?.roleRates ?? []).map((r) => r.roleId)]
+  const ownIds = [...new Set(ids)]
+  const byId = new Map(roles.map((r) => [r.id, r]))
+  const own = ownIds.flatMap((id) => {
+    const role = byId.get(id)
+    return role ? [role] : []
+  })
+  const ownSet = new Set(own.map((r) => r.id))
+  return { own, others: activeCrewRoles(roles).filter((r) => !ownSet.has(r.id)) }
+}
+
 export function createCrewMember(
   params: {
     name: string
     roleIds?: string[]
     rate?: number
+    roleRates?: { roleId: string; rate: number; note?: string }[]
     contact?: CrewContact
     city?: string
     notes?: string
@@ -255,6 +372,8 @@ export function createCrewMember(
     updatedAt: iso,
   }
   if (params.rate !== undefined && Number.isFinite(params.rate) && params.rate > 0) member.rate = params.rate
+  const roleRates = normalizeRoleRates(params.roleRates ?? [])
+  if (roleRates.length > 0) member.roleRates = roleRates
   if (params.city?.trim()) member.city = params.city.trim()
   if (params.notes?.trim()) member.notes = params.notes.trim()
   return member
@@ -277,9 +396,10 @@ export function crewPickerOptions(
     .filter((m) => !needle || personKey(m.name).includes(needle))
     .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
   if (!roleId) return { withRole: [], others: list }
+  const hasRole = (m: CrewMember) => m.roleIds.includes(roleId) || (m.roleRates ?? []).some((r) => r.roleId === roleId)
   return {
-    withRole: list.filter((m) => m.roleIds.includes(roleId)),
-    others: list.filter((m) => !m.roleIds.includes(roleId)),
+    withRole: list.filter(hasRole),
+    others: list.filter((m) => !hasRole(m)),
   }
 }
 

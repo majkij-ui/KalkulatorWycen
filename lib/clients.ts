@@ -10,7 +10,8 @@
  * Moduł czysty — testy w `clients.test.ts`.
  */
 
-import { countsTowardRevenue, toYear, type Project, type ProjectContact } from './project-types'
+import { moneyOf, revenueInYear, touchesYear, type MoneyById } from './client-money'
+import { countsTowardRevenue, type Project, type ProjectContact } from './project-types'
 
 /** „ Tchibo  Polska " → „tchibo polska", „Łódź Film" → „lodz film". */
 export function clientKey(name: string): string {
@@ -31,6 +32,11 @@ export interface ClientInfo {
   projectCount: number
   /** Data najnowszego projektu klienta (`YYYY-MM-DD`). */
   lastDate: string
+  /**
+   * Tekst do szukania (znormalizowany jak klucz); brak = `key`. Grupa
+   * klientów (S2) szuka się po nazwie i nazwach członków.
+   */
+  search?: string
 }
 
 /** Najnowszy pierwszy: po dacie księgowej, potem po ostatniej zmianie. */
@@ -79,13 +85,19 @@ export function suggestClients(directory: ClientInfo[], query: string, limit = 8
   if (!q) {
     return [...directory].sort((a, b) => b.lastDate.localeCompare(a.lastDate)).slice(0, limit)
   }
-  const starts = directory.filter((c) => c.key.startsWith(q) || c.key.split(' ').some((w) => w.startsWith(q)))
-  const contains = directory.filter((c) => !starts.includes(c) && c.key.includes(q))
+  const text = (c: ClientInfo) => c.search ?? c.key
+  const starts = directory.filter((c) => text(c).startsWith(q) || text(c).split(' ').some((w) => w.startsWith(q)))
+  const contains = directory.filter((c) => !starts.includes(c) && text(c).includes(q))
   return [...starts, ...contains].slice(0, limit)
 }
 
 export function hasContact(contact: ProjectContact | null | undefined): boolean {
   return !!contact && [contact.name, contact.email, contact.phone].some((v) => typeof v === 'string' && v.trim())
+}
+
+/** Najnowszy z projektów, który ma dane kontaktowe. */
+export function newestWithContact<P extends Pick<Project, 'date' | 'updatedAt' | 'contact'>>(projects: P[]): P | null {
+  return [...projects].filter((p) => hasContact(p.contact)).sort(byRecency)[0] ?? null
 }
 
 /** Najnowszy projekt tego klienta (poza `excludeId`), który ma dane kontaktowe. */
@@ -95,11 +107,7 @@ export function latestContactProject<P extends Pick<Project, 'id' | 'client' | '
   excludeId?: string
 ): P | null {
   if (!key) return null
-  return (
-    [...projects]
-      .filter((p) => p.id !== excludeId && clientKey(p.client ?? '') === key && hasContact(p.contact))
-      .sort(byRecency)[0] ?? null
-  )
+  return newestWithContact(projects.filter((p) => p.id !== excludeId && clientKey(p.client ?? '') === key))
 }
 
 export interface ClientChoice {
@@ -130,24 +138,44 @@ export function applyClientChoice<P extends Pick<Project, 'id' | 'name' | 'clien
 }
 
 export interface ClientRevenue {
-  /** Suma netto projektów W realizacji + Zrealizowanych (ta sama reguła co Finanse). */
+  /**
+   * Przychód projektów W realizacji + Zrealizowanych (ta sama reguła co
+   * Finanse): najlepsza wiedza z pętli pieniędzy, a bez niej plan.
+   */
   revenue: number
-  /** Ile projektów się do niej liczy. */
+  /** Ile projektów się do niej liczy (w roku: z przychodem w tym roku). */
   countedProjects: number
 }
 
-/** „Ile przyniósł ten klient" — opcjonalnie w jednym roku (po dacie księgowej). */
-export function clientRevenue(
-  projects: Pick<Project, 'client' | 'status' | 'date' | 'financials'>[],
-  key: string,
-  year: number | null = null
+/**
+ * „Ile przynieśli ci klienci" (klucze `clientKey`, np. członkowie grupy) —
+ * opcjonalnie w jednym roku. `money` = pieniądze projektów z pętli (T6): rok
+ * po dacie faktury; bez niej plan po dacie księgowej.
+ */
+export function scopeRevenue(
+  projects: Pick<Project, 'id' | 'client' | 'status' | 'date' | 'financials'>[],
+  keys: Iterable<string>,
+  year: number | null = null,
+  money?: MoneyById | null
 ): ClientRevenue {
+  const scope = new Set(keys)
   const out: ClientRevenue = { revenue: 0, countedProjects: 0 }
   projects.forEach((p) => {
-    if (clientKey(p.client ?? '') !== key || !countsTowardRevenue(p.status)) return
-    if (year !== null && toYear(p.date) !== year) return
+    if (!scope.has(clientKey(p.client ?? '')) || !countsTowardRevenue(p.status)) return
+    const m = moneyOf(p, money)
+    if (!touchesYear(m, year)) return
     out.countedProjects += 1
-    out.revenue += p.financials?.sumaNetto ?? 0
+    out.revenue += revenueInYear(m, year)
   })
   return out
+}
+
+/** „Ile przyniósł ten klient" — opcjonalnie w jednym roku. */
+export function clientRevenue(
+  projects: Pick<Project, 'id' | 'client' | 'status' | 'date' | 'financials'>[],
+  key: string,
+  year: number | null = null,
+  money?: MoneyById | null
+): ClientRevenue {
+  return scopeRevenue(projects, [key], year, money)
 }

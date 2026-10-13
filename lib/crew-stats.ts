@@ -5,7 +5,8 @@
  * w projektach w realizacji i zrealizowanych. Wyceny, przegrane i ekipa z
  * planu wyceny się nie liczą — to hipotezy, a nie to, kto naprawdę pojechał.
  *
- * Wiersz kosztu należy do osoby z bazy przez `personId`; starsze wiersze bez
+ * Wiersz kosztu należy do osoby z bazy przez `personId` (duplikat scalony
+ * przez „Scal osoby" prowadzi do osoby, która została); starsze wiersze bez
  * niego dopasowujemy po imieniu (`personKey`: wielkość liter, spacje i polskie
  * znaki bez znaczenia).
  *
@@ -15,7 +16,7 @@
  */
 
 import { costAmount, isCrew, liveCosts, personKey } from './project-costs'
-import { crewMemberByName, liveCrewMembers, type CrewMember } from './crew-types'
+import { crewMemberById, crewMemberByName, liveCrewMembers, type CrewMember } from './crew-types'
 import { countsTowardRevenue, toDateKey, type Project, type ProjectCost } from './project-types'
 import { gearDaysWithCalendarDates } from './realization-days'
 import type { TimelineEvent } from './event-types'
@@ -23,14 +24,29 @@ import type { TimelineEvent } from './event-types'
 type StatsProject = Pick<Project, 'id' | 'name' | 'client' | 'date' | 'status' | 'costs' | 'gearDays' | 'equipment' | 'deletedAt'>
 type DayEvent = Pick<TimelineEvent, 'id' | 'kind' | 'projectId' | 'start' | 'end' | 'deletedAt'>
 
-/** Do kogo z bazy należy wiersz kosztu: po `personId`, a bez niego po imieniu. */
+/**
+ * Do kogo z bazy należy wiersz kosztu: po `personId` (scalony duplikat →
+ * osoba, która została), a bez niego po imieniu. `members` = wszyscy, z
+ * usuniętymi — inaczej scalenie nie ma dokąd prowadzić.
+ */
 export function matchCrewMember(
   cost: Pick<ProjectCost, 'personId' | 'person'>,
   members: CrewMember[]
 ): CrewMember | null {
-  const live = liveCrewMembers(members)
-  if (cost.personId) return live.find((m) => m.id === cost.personId) ?? null
-  return crewMemberByName(live, cost.person)
+  if (cost.personId) return crewMemberById(members, cost.personId)
+  return crewMemberByName(members, cost.person)
+}
+
+/** Jedna rola osoby w statystykach: ile razy, ile dni i ile wypłacone. */
+export interface CrewRoleStats {
+  name: string
+  /** Wiersze kosztów z tą rolą. */
+  count: number
+  /** Dni pracy w tej roli (wiersze przypięte do dnia). */
+  days: number
+  paid: number
+  /** Średnia stawka dzienna w tej roli; `null` bez dni. */
+  avgDayRate: number | null
 }
 
 export interface CrewProjectHistory<P extends StatsProject = StatsProject> {
@@ -53,8 +69,8 @@ export interface CrewMemberStats<P extends StatsProject = StatsProject> {
   paidTotal: number
   /** Średnia stawka dzienna z dni pracy; `null` bez dni. */
   avgDayRate: number | null
-  /** Role z wierszy kosztów, od najczęstszej. */
-  roles: { name: string; count: number }[]
+  /** Role z wierszy kosztów, od najczęstszej (dni, wypłaty i średnia stawka w każdej). */
+  roles: CrewRoleStats[]
   /** Projekty, od najnowszego. */
   history: CrewProjectHistory<P>[]
 }
@@ -83,7 +99,7 @@ export function computeCrewStats<P extends StatsProject>(
       paidTotal: number
       paidThisYear: number
       lastDate: string | null
-      roles: Map<string, { name: string; count: number }>
+      roles: Map<string, { name: string; count: number; days: number; paid: number; dayPaid: number }>
       byProject: Map<string, CrewProjectHistory<P> & { roleSet: Set<string> }>
     }
   >()
@@ -95,7 +111,7 @@ export function computeCrewStats<P extends StatsProject>(
     const dayDates = new Map(gearDaysWithCalendarDates(project, options.events ?? []).map((d) => [d.id, d.date]))
 
     crew.forEach((cost) => {
-      const member = matchCrewMember(cost, live)
+      const member = matchCrewMember(cost, members)
       if (!member) return
       const entry = acc.get(member.id) ?? {
         days: 0,
@@ -119,8 +135,11 @@ export function computeCrewStats<P extends StatsProject>(
       const role = (cost.role ?? '').trim()
       if (role) {
         const key = personKey(role)
-        const roleEntry = entry.roles.get(key) ?? { name: role, count: 0 }
+        const roleEntry = entry.roles.get(key) ?? { name: role, count: 0, days: 0, paid: 0, dayPaid: 0 }
         roleEntry.count += 1
+        roleEntry.days += days
+        roleEntry.paid += amount
+        if (days > 0) roleEntry.dayPaid += amount
         entry.roles.set(key, roleEntry)
       }
 
@@ -161,7 +180,15 @@ export function computeCrewStats<P extends StatsProject>(
           paidThisYear: entry.paidThisYear,
           paidTotal: entry.paidTotal,
           avgDayRate: entry.days > 0 ? entry.dayPaid / entry.days : null,
-          roles: [...entry.roles.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl')),
+          roles: [...entry.roles.values()]
+            .map(({ name, count, days, paid, dayPaid }) => ({
+              name,
+              count,
+              days,
+              paid,
+              avgDayRate: days > 0 ? dayPaid / days : null,
+            }))
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl')),
           history,
         },
       ]
@@ -212,7 +239,6 @@ export function unknownCrewNames(
   members: CrewMember[]
 ): UnknownCrewName[] {
   const live = liveCrewMembers(members)
-  const liveIds = new Set(live.map((m) => m.id))
   const found = new Map<string, UnknownCrewName & { date: string; roleKeys: Set<string> }>()
 
   projects.forEach((project) => {
@@ -220,7 +246,7 @@ export function unknownCrewNames(
     liveCosts(project.costs)
       .filter(isCrew)
       .forEach((cost) => {
-        if (cost.personId && liveIds.has(cost.personId)) return
+        if (cost.personId && crewMemberById(members, cost.personId)) return
         const key = personKey(cost.person)
         if (!key || crewMemberByName(live, cost.person)) return
         const entry = found.get(key) ?? {

@@ -10,13 +10,26 @@
  * Klik w osobę otwiera panel z edycją, statystykami i historią projektów.
  * Imiona wpisane w projektach, których nie ma w bazie, można dodać jednym
  * kliknięciem („Dodaj do bazy") — rekordy powstają dopiero wtedy.
+ * „Scal osoby" (S2) łączy duplikaty w jedną kartę, z „Cofnij".
  */
 
 import { useMemo, useState } from 'react'
-import { ChevronDown, Loader2, Phone, Plus, Search, UserPlus, Users } from 'lucide-react'
+import { ChevronDown, GitMerge, Loader2, Phone, Plus, Search, UserPlus, Users } from 'lucide-react'
 import { useCrew } from '@/lib/crew-context'
+import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
+import { useQuote } from '@/lib/quote-context'
+import {
+  crewMergeKitUpdates,
+  crewMergePatches,
+  crewUnmergeKitUpdates,
+  crewUnmergePatches,
+  restoreQuoteDays,
+  retargetQuoteDays,
+  type CalculatorCrewRef,
+  type CrewMergePlan,
+} from '@/lib/crew-merge'
 import { computeCrewStats, crewRanking, unknownCrewNames, type UnknownCrewName } from '@/lib/crew-stats'
 import { crewRoleByName, type CrewMember } from '@/lib/crew-types'
 import { personKey } from '@/lib/project-costs'
@@ -24,6 +37,7 @@ import { dayLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { CrewMergeSheet } from './crew-merge-sheet'
 import { CrewPersonSheet } from './crew-person-sheet'
 import { CrewRolesSheet } from './crew-roles-sheet'
 import { formatDate, pln } from './crew-format'
@@ -40,7 +54,19 @@ type Sort = (typeof SORTS)[number]['value']
 const ALL = '__all__'
 const NO_ROLE = '__none__'
 
-type SheetState = { type: 'person'; id: string | null } | { type: 'roles' } | null
+type SheetState =
+  | { type: 'person'; id: string | null }
+  | { type: 'roles' }
+  | { type: 'merge'; targetId: string | null }
+  | null
+
+interface Notice {
+  message: string
+  /** Usunięta osoba — „Cofnij" ją przywraca. */
+  undoId?: string
+  /** Scalenie — „Cofnij" przywraca karty i odwołania. */
+  merge?: { plan: CrewMergePlan; calculator: CalculatorCrewRef[] }
+}
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -113,8 +139,11 @@ function UnknownNamesBanner({
 }
 
 export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
-  const { people, allPeople, roles, activeRoles, isLoading, addPerson, restorePerson } = useCrew()
-  const { projects } = useProjectHub()
+  const { people, allPeople, roles, activeRoles, isLoading, addPerson, restorePerson, mergePeople, unmergePeople } =
+    useCrew()
+  const { projects, updateProjects } = useProjectHub()
+  const { kits, updateKits } = useEquipment()
+  const { data: quoteData, updateShootingDay } = useQuote()
   const { allEvents } = useEvents()
 
   const [query, setQuery] = useState('')
@@ -122,11 +151,40 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
   const [sort, setSort] = useState<Sort>('nazwa')
   const [showRetired, setShowRetired] = useState(false)
   const [sheet, setSheet] = useState<SheetState>(null)
-  const [notice, setNotice] = useState<{ message: string; undoId?: string } | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
 
-  const stats = useMemo(() => computeCrewStats(people, projects, { events: allEvents }), [people, projects, allEvents])
+  // Wszyscy (z usuniętymi): wiersz scalonego duplikatu prowadzi do osoby, która została.
+  const stats = useMemo(() => computeCrewStats(allPeople, projects, { events: allEvents }), [allPeople, projects, allEvents])
   const ranking = useMemo(() => crewRanking(people, stats), [people, stats])
-  const unknown = useMemo(() => unknownCrewNames(projects, people), [projects, people])
+  const unknown = useMemo(() => unknownCrewNames(projects, allPeople), [projects, allPeople])
+
+  /**
+   * Zapis scalenia: projekty (jeden zapis), zestawy (jeden zapis), wycena
+   * otwarta w kalkulatorze (żeby „Zapisz" nie przywrócił duplikatu), na
+   * końcu karty ludzi — odwołania wskazują już osobę, która zostaje.
+   */
+  const runMerge = async (plan: CrewMergePlan) => {
+    await updateProjects(crewMergePatches(projects, plan))
+    await updateKits(crewMergeKitUpdates(kits, plan))
+    const calculator = retargetQuoteDays(quoteData.detailedShootingDays ?? [], plan.sourceIds, plan.targetId)
+    calculator.days.forEach(({ dayId, crew }) => updateShootingDay(dayId, 'crew', crew))
+    await mergePeople(plan)
+    setSheet({ type: 'person', id: plan.targetId })
+    const total = plan.sources.length + 1
+    setNotice({
+      message: `Scalono ${total} ${plural(total, 'kartę', 'karty', 'kart')} w „${plan.merged.name}" (${plan.refs.length} ${plural(plan.refs.length, 'odwołanie', 'odwołania', 'odwołań')} w projektach, ${plan.kits.length} ${plural(plan.kits.length, 'zestaw', 'zestawy', 'zestawów')}).`,
+      merge: { plan, calculator: calculator.refs },
+    })
+  }
+
+  const undoMerge = async ({ plan, calculator }: NonNullable<Notice['merge']>) => {
+    await updateProjects(crewUnmergePatches(projects, plan))
+    await updateKits(crewUnmergeKitUpdates(kits, plan))
+    restoreQuoteDays(quoteData.detailedShootingDays ?? [], calculator, plan.targetId).forEach(({ dayId, crew }) =>
+      updateShootingDay(dayId, 'crew', crew)
+    )
+    await unmergePeople(plan)
+  }
   const year = new Date().getFullYear()
 
   const roleName = (id: string) => roles.find((r) => r.id === id)?.name ?? id
@@ -169,7 +227,10 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
 
   const sheetMember =
     sheet?.type === 'person' && sheet.id ? (allPeople.find((m) => m.id === sheet.id && !m.deletedAt) ?? null) : null
-  const sheetOpen = sheet?.type === 'roles' || (sheet?.type === 'person' && (sheet.id === null || sheetMember !== null))
+  const sheetOpen =
+    sheet?.type === 'roles' ||
+    sheet?.type === 'merge' ||
+    (sheet?.type === 'person' && (sheet.id === null || sheetMember !== null))
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -188,13 +249,14 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
           role="status"
         >
           <span className="min-w-0 flex-1">{notice.message}</span>
-          {notice.undoId && (
+          {(notice.undoId || notice.merge) && (
             <button
               type="button"
               onClick={async () => {
-                const id = notice.undoId!
+                const { undoId, merge } = notice
                 setNotice(null)
-                await restorePerson(id)
+                if (merge) await undoMerge(merge)
+                else if (undoId) await restorePerson(undoId)
               }}
               className="font-semibold text-primary outline-none hover:underline focus-visible:underline"
             >
@@ -305,6 +367,18 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
         <Button variant="outline" onClick={() => setSheet({ type: 'roles' })} className="h-9 border-white/10">
           Role
         </Button>
+        {people.length > 1 && (
+          <Button
+            variant="outline"
+            onClick={() => setSheet({ type: 'merge', targetId: null })}
+            className="h-9 gap-1.5 border-white/10"
+            aria-label="Scal osoby"
+            title="Ta sama osoba wpisana kilka razy — połącz karty"
+          >
+            <GitMerge className="size-4" />
+            Scal osoby
+          </Button>
+        )}
         <Button onClick={() => setSheet({ type: 'person', id: null })} className="h-9 gap-2">
           <Plus className="size-4" />
           Dodaj osobę
@@ -376,6 +450,14 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
                 <div className="w-28 shrink-0 text-right tabular-nums">
                   <div className="text-sm font-semibold text-zinc-100">{s ? pln(s.paidTotal) : pln(0)}</div>
                   <div className="text-xs text-zinc-500">{member.rate ? `${pln(member.rate)}/dzień` : 'stawka —'}</div>
+                  {(member.roleRates ?? []).length > 0 && (
+                    <div
+                      className="text-[11px] text-zinc-600"
+                      title={member.roleRates!.map((r) => `${roleName(r.roleId)}: ${pln(r.rate)}${r.note ? ` (${r.note})` : ''}`).join('\n')}
+                    >
+                      + {member.roleRates!.length} {plural(member.roleRates!.length, 'stawka w roli', 'stawki w rolach', 'stawek w rolach')}
+                    </div>
+                  )}
                 </div>
               </button>
             )
@@ -393,9 +475,23 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
           className="overflow-y-auto border-l border-white/10 bg-zinc-950/95 p-5 text-white backdrop-blur-2xl sm:max-w-md"
         >
           <SheetTitle className="sr-only">
-            {sheet?.type === 'roles' ? 'Role' : sheetMember ? sheetMember.name : 'Nowa osoba'}
+            {sheet?.type === 'roles'
+              ? 'Role'
+              : sheet?.type === 'merge'
+                ? 'Scal osoby'
+                : sheetMember
+                  ? sheetMember.name
+                  : 'Nowa osoba'}
           </SheetTitle>
           {sheet?.type === 'roles' && <CrewRolesSheet />}
+          {sheet?.type === 'merge' && (
+            <CrewMergeSheet
+              initialTargetId={sheet.targetId}
+              stats={stats}
+              onMerge={runMerge}
+              onClose={() => setSheet(null)}
+            />
+          )}
           {sheet?.type === 'person' && sheetOpen && (
             <CrewPersonSheet
               key={sheet.id ?? 'new'}
@@ -407,6 +503,7 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
                 setNotice({ message: `Usunięto „${member.name}" z Ekipy.`, undoId: member.id })
               }}
               onOpenProject={onOpenProject}
+              onMerge={(member) => setSheet({ type: 'merge', targetId: member.id })}
             />
           )}
         </SheetContent>

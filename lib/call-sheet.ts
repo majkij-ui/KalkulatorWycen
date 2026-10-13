@@ -45,7 +45,7 @@ import { formatLocalYmd, getDurationMinutes } from './time'
 import { isProjectColorKey } from './calendar-palette'
 import { buildPackingList, type PackingGroup } from './gear-usage'
 import { costsOfDay, isCrew, personKey } from './project-costs'
-import { crewMemberByName, liveCrewMembers, type CrewMember } from './crew-types'
+import { crewMemberById, crewMemberByName, liveCrewMembers, type CrewMember } from './crew-types'
 import type { EquipmentItem, GearDay, Project } from './project-types'
 import type { TimelineEvent } from './event-types'
 
@@ -398,7 +398,6 @@ export function resolveCrew(
   generalCall: number | null
 ): ResolvedCrewRow[] {
   const members = liveCrewMembers(people)
-  const byId = new Map(members.map((m) => [m.id, m]))
   const entries = live(sheet.crew)
   const byCost = new Map<string, CallSheetCrewEntry>()
   entries.forEach((e) => {
@@ -434,7 +433,8 @@ export function resolveCrew(
   const fromRealization = costsOfDay(costs, dayId)
     .filter(isCrew)
     .map((cost) => {
-      const member = cost.personId ? (byId.get(cost.personId) ?? null) : crewMemberByName(members, cost.person)
+      // Scalony duplikat (S2, `mergedInto`) prowadzi do osoby, która została.
+      const member = cost.personId ? crewMemberById(people, cost.personId) : crewMemberByName(members, cost.person)
       const base: CrewValues = {
         name: cost.person?.trim() || member?.name.trim() || '',
         role: cost.role?.trim() ?? '',

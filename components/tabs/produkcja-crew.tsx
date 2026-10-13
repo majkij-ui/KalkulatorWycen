@@ -17,6 +17,7 @@ import {
   CREW_ROLE_GROUPS,
   crewPickerOptions,
   crewRoleGroupLabel,
+  personRateFor,
   type CrewMember,
   type CrewRole,
 } from '@/lib/crew-types'
@@ -204,6 +205,11 @@ function CrewLineRow({
   const { withRole, others } = crewPickerOptions(people, line.roleId)
   const listed = new Set([...withRole, ...others].map((m) => m.id))
   const bucket = crewLineBucket(line)
+  // Stawka osoby w roli tej pozycji (S2), potem jej ogólna.
+  const rateLabel = (m: CrewMember) => {
+    const rate = personRateFor(m, line.roleId)
+    return rate ? ` · ${Math.round(rate)} zł` : ''
+  }
 
   const pickPerson = (id: string) => {
     if (id === NEW_PERSON) return setNewPerson(true)
@@ -244,7 +250,7 @@ function CrewLineRow({
             {withRole.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
-                {m.rate ? ` · ${Math.round(m.rate)} zł` : ''}
+                {rateLabel(m)}
               </option>
             ))}
           </optgroup>
@@ -254,7 +260,7 @@ function CrewLineRow({
             {others.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
-                {m.rate ? ` · ${Math.round(m.rate)} zł` : ''}
+                {rateLabel(m)}
               </option>
             ))}
           </optgroup>

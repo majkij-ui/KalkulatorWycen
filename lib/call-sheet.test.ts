@@ -487,3 +487,18 @@ test('schemat: pola z nowszej wersji przeżywają, uszkodzony wpis listy znika, 
   assert.equal(parsed.crew[0].callTime, undefined, 'zła godzina nie psuje wpisu')
   assert.equal(callSheetSchema.safeParse({ id: 'x', projectId: 'p1' }).success, false, 'bez dnia nie ma call sheetu')
 })
+
+test('osoba scalona w Ekipie (S2): wiersz z id duplikatu bierze kontakt osoby, która została', () => {
+  const merged = [
+    ...people,
+    person('cm-ola2', 'Ola N.', { deletedAt: '2026-10-13', mergedInto: 'cm-ola' }),
+  ]
+  const ctx = context({
+    people: merged,
+    project: { ...context().project, costs: [crew('c-x', { person: 'Ola N.', personId: 'cm-ola2', role: 'Operator' })] },
+  })
+  const [row] = resolveCallSheet(blank(), ctx).crew
+  assert.equal(row.personId, 'cm-ola')
+  assert.equal(row.value.name, 'Ola N.', 'imię z wiersza zostaje')
+  assert.equal(row.value.phone, '600 100 200')
+})

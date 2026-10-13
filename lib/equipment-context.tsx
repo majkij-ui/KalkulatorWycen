@@ -15,7 +15,7 @@ import {
   listEquipment,
   upsertEquipment,
 } from './equipment-catalog'
-import { createGearKit, deleteGearKit, listGearKits, upsertGearKit } from './gear-kits'
+import { createGearKit, deleteGearKit, listGearKits, updateGearKits, upsertGearKit } from './gear-kits'
 import type { EquipmentItem, GearKit } from './project-types'
 
 interface EquipmentContextValue {
@@ -43,6 +43,8 @@ interface EquipmentContextValue {
     crew?: { roleId: string; personId?: string; qty: number }[]
   ) => Promise<GearKit | null>
   updateKit: (kit: GearKit) => Promise<void>
+  /** Kilka zestawów jednym zapisem (np. „Scal osoby"). */
+  updateKits: (kits: GearKit[]) => Promise<void>
   removeKit: (id: string) => Promise<void>
 }
 
@@ -71,6 +73,10 @@ export function EquipmentProvider({ children }: { children: React.ReactNode }) {
 
   const updateKit = useCallback(async (kit: GearKit) => {
     setKits(await upsertGearKit(kit))
+  }, [])
+
+  const updateKits = useCallback(async (next: GearKit[]) => {
+    if (next.length > 0) setKits(await updateGearKits(next))
   }, [])
 
   const removeKit = useCallback(async (id: string) => {
@@ -109,7 +115,7 @@ export function EquipmentProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <EquipmentContext.Provider
-      value={{ items, isLoading, addItem, updateItem, removeItem, kits, addKit, updateKit, removeKit }}
+      value={{ items, isLoading, addItem, updateItem, removeItem, kits, addKit, updateKit, updateKits, removeKit }}
     >
       {children}
     </EquipmentContext.Provider>

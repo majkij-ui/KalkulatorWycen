@@ -1,17 +1,21 @@
 'use client'
 
 /**
- * Strona jednego klienta: kafelki z liczbami, rytm powrotów (z przypomnieniem,
- * gdy przerwa jest dużo dłuższa niż zwykle), wielkość zleceń w czasie,
- * przychód w latach, projekty (klik otwiera projekt), ostatni kontakt i
- * „Scal nazwy". Wszystko liczy `client-stats.ts` — tu tylko widok.
+ * Strona jednego klienta albo grupy klientów (S2): kafelki z liczbami, rytm
+ * powrotów (z przypomnieniem, gdy przerwa jest dużo dłuższa niż zwykle),
+ * wielkość zleceń w czasie, przychód w latach, projekty (klik otwiera
+ * projekt), ostatni kontakt i „Scal nazwy" (tylko klient). Kwoty to najlepsza
+ * wiedza z pętli pieniędzy, jak w Finansach. Wszystko liczy `client-stats.ts`
+ * — tu tylko widok.
  */
 
 import { ArrowLeft, ArrowUpRight, BellRing, Repeat } from 'lucide-react'
-import { describeGap, describeSince, SIZE_TREND_LABELS, type ClientStats } from '@/lib/client-stats'
+import { describeGap, describeSince, SIZE_TREND_LABELS, type ClientStats, type GroupStats } from '@/lib/client-stats'
 import type { ClientMergePlan } from '@/lib/client-merge'
+import { moneyOf, type MoneyById } from '@/lib/client-money'
+import type { ClientGroup } from '@/lib/client-groups'
 import type { crewOnProjects } from '@/lib/crew-stats'
-import { hasContact } from '@/lib/clients'
+import { hasContact, type ClientInfo } from '@/lib/clients'
 import { countsTowardRevenue, leadSourceLabel, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
 import { ProjectSwatch, archivo, mono } from '@/components/calendar/calendar-bits'
@@ -19,6 +23,7 @@ import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
 import { CopyButton, Tile, formatDate, pct, pln } from './client-bits'
 import { SizeBars } from './size-bars'
 import { ClientMerge } from './client-merge'
+import { ClientGroupBox, GroupMembersPanel, type GroupActions } from './client-groups-panel'
 
 const daysLabel = (n: number) => `${Math.round(n)} ${plural(Math.round(n), 'dniu', 'dniach', 'dniach')}`
 
@@ -81,9 +86,11 @@ function ContactCard({ stats }: { stats: ClientStats }) {
   )
 }
 
-function ProjectRow({ project, onOpen }: { project: Project; onOpen?: () => void }) {
+function ProjectRow({ project, money, onOpen }: { project: Project; money?: MoneyById | null; onOpen?: () => void }) {
   const counts = countsTowardRevenue(project.status)
-  const value = project.financials?.sumaNetto
+  // Zlecenie: najlepsza wiedza (faktury albo plan); wycena i nieprzyjęta — kwota z wyceny.
+  const known = counts ? moneyOf(project, money) : null
+  const value = counts ? (known?.revenue ?? undefined) : project.financials?.sumaNetto
   return (
     <button
       type="button"
@@ -107,6 +114,9 @@ function ProjectRow({ project, onOpen }: { project: Project; onOpen?: () => void
         style={mono}
       >
         {value !== undefined ? pln(value) : '—'}
+        {known?.revenueBasis === 'invoices' && (
+          <div className="text-[10px] font-normal text-zinc-500">z faktur</div>
+        )}
       </div>
       {onOpen && <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />}
     </button>
@@ -147,23 +157,43 @@ function CrewOnJobs({ crew }: { crew: ClientCrew }) {
   )
 }
 
+function isGroupStats(stats: ClientStats | GroupStats): stats is GroupStats {
+  return 'group' in stats
+}
+
 export function ClientPage({
   stats,
   projects,
+  money,
   crew,
+  groups,
+  directory,
+  groupActions,
   onBack,
   onOpenProject,
+  onOpenClient,
+  onOpenGroup,
   onMerge,
 }: {
-  stats: ClientStats
+  /** Klient albo grupa klientów (`groupStats`). */
+  stats: ClientStats | GroupStats
   projects: Project[]
+  /** Pieniądze projektów z pętli (T6) — kwoty zleceń jak w Finansach. */
+  money?: MoneyById | null
   /** Ekipa przy zleceniach klienta; `null` = nie liczono. */
   crew?: ClientCrew | null
+  groups: ClientGroup[]
+  /** Klienci (do dodawania do grupy). */
+  directory: ClientInfo[]
+  groupActions: GroupActions
   onBack: () => void
   onOpenProject?: (id: string) => void
+  onOpenClient: (key: string) => void
+  onOpenGroup: (group: ClientGroup) => void
   onMerge: (plan: ClientMergePlan) => Promise<void>
 }) {
   const { rhythm, outcomes, payments, size } = stats
+  const group = isGroupStats(stats) ? stats : null
   const jobs = outcomes.won
   const source = stats.firstSource
   const projectsById = new Map(projects.map((p) => [p.id, p]))
@@ -180,7 +210,7 @@ export function ClientPage({
           Klienci
         </button>
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-zinc-500">
-          Klient
+          {group ? 'Grupa klientów' : 'Klient'}
           {stats.repeat && (
             <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-px normal-case tracking-normal text-emerald-300">
               <Repeat className="size-3" />
@@ -192,13 +222,28 @@ export function ClientPage({
           {stats.name}
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
+          {group && `${group.members.length} ${plural(group.members.length, 'klient', 'klientów', 'klientów')} · `}
           {outcomes.total} {plural(outcomes.total, 'projekt', 'projekty', 'projektów')}
           {' · '}
           {jobs} {plural(jobs, 'zlecenie', 'zlecenia', 'zleceń')}
-          {' · '}
-          pierwszy <span style={mono}>{formatDate(source.date)}</span>
+          {source.date && (
+            <>
+              {' · '}
+              pierwszy <span style={mono}>{formatDate(source.date)}</span>
+            </>
+          )}
         </p>
       </div>
+
+      {!group && (
+        <ClientGroupBox
+          clientKeyValue={stats.key}
+          clientName={stats.name}
+          groups={groups}
+          actions={groupActions}
+          onOpenGroup={onOpenGroup}
+        />
+      )}
 
       {rhythm.nudge && rhythm.medianGapDays !== null && rhythm.monthsSinceLast !== null && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3" role="status">
@@ -222,14 +267,23 @@ export function ClientPage({
           ]}
           warn={
             stats.missingFinancials > 0
-              ? `${stats.missingFinancials} ${plural(stats.missingFinancials, 'zlecenie', 'zlecenia', 'zleceń')} bez policzonych finansów`
+              ? `${stats.missingFinancials} ${plural(stats.missingFinancials, 'zlecenie', 'zlecenia', 'zleceń')} bez kwoty (ani planu, ani faktur)`
               : undefined
           }
         />
         <Tile
           label="Zysk"
           value={pln(stats.profit)}
-          lines={[stats.marginPct === null ? 'brak zleceń' : `marża ${pct(stats.marginPct)}`, 'z planu w wycenie']}
+          lines={[
+            stats.marginPct === null ? 'brak zleceń' : `marża ${pct(stats.marginPct)}`,
+            jobs === 0
+              ? ''
+              : stats.invoicedJobs === jobs
+                ? 'przychód z faktur, jak w Finansach'
+                : stats.invoicedJobs === 0
+                  ? 'z planu w wycenie (brak faktur)'
+                  : `${stats.invoicedJobs} z ${jobs} ${plural(jobs, 'zlecenia', 'zleceń', 'zleceń')} z faktur, reszta z planu`,
+          ]}
         />
         <Tile
           label="Skuteczność wycen"
@@ -269,9 +323,20 @@ export function ClientPage({
         <Tile
           label="Pierwszy kontakt"
           value={source.source ? leadSourceLabel(source.source) : 'nieustalone'}
-          lines={[`„${source.projectName || 'Bez nazwy'}", ${formatDate(source.date)}`]}
+          lines={source.projectId ? [`„${source.projectName || 'Bez nazwy'}", ${formatDate(source.date)}`] : []}
         />
       </div>
+
+      {group && (
+        <GroupMembersPanel
+          group={group.group}
+          members={group.members}
+          groups={groups}
+          directory={directory}
+          actions={groupActions}
+          onOpenClient={onOpenClient}
+        />
+      )}
 
       <Section
         title="Wielkość zleceń"
@@ -332,7 +397,11 @@ export function ClientPage({
             const project = projectsById.get(p.id)
             return project ? (
               <li key={p.id}>
-                <ProjectRow project={project} onOpen={onOpenProject ? () => onOpenProject(p.id) : undefined} />
+                <ProjectRow
+                  project={project}
+                  money={money}
+                  onOpen={onOpenProject ? () => onOpenProject(p.id) : undefined}
+                />
               </li>
             ) : null
           })}
@@ -349,7 +418,7 @@ export function ClientPage({
         <ContactCard stats={stats} />
       </Section>
 
-      <ClientMerge key={stats.key} stats={stats} projects={projects} onMerge={onMerge} />
+      {!group && <ClientMerge key={stats.key} stats={stats} projects={projects} onMerge={onMerge} />}
     </div>
   )
 }

@@ -68,10 +68,11 @@ test('statystyki tylko z rzeczywistych kosztów projektów w realizacji i zreali
   assert.equal(s.paidThisYear, 800 + 900 + 2000, 'listopad 2025 to zeszły rok')
   assert.equal(s.avgDayRate, (800 + 900 + 1400) / 4, 'średnia tylko z dni pracy')
   assert.equal(s.lastDate, '2026-08-15')
+  // Podział na role (S2): dni, wypłaty i średnia stawka w każdej roli.
   assert.deepEqual(s.roles, [
-    { name: 'Gafer', count: 2 },
-    { name: 'Montaż', count: 1 },
-    { name: 'Operator B', count: 1 },
+    { name: 'Gafer', count: 2, days: 3, paid: 2200, avgDayRate: 2200 / 3 },
+    { name: 'Montaż', count: 1, days: 0, paid: 2000, avgDayRate: null },
+    { name: 'Operator B', count: 1, days: 1, paid: 900, avgDayRate: 900 },
   ])
   assert.deepEqual(
     s.history.map((h) => [h.project.id, h.days, h.paid, h.roles]),
@@ -153,4 +154,16 @@ test('ekipa przy projektach klienta: tylko te projekty, tylko zlecenia; imiona s
     'Piotr był tylko w wycenie — nie liczy się'
   )
   assert.deepEqual(outside, ['Kasia'], 'Ania tylko w wycenie')
+})
+
+test('podział na role: koszt projektu bez dnia liczy się do wypłat roli, ale nie do jej średniej dziennej', () => {
+  const people = [member('a', 'Ola')]
+  const projects = [
+    project('p1', 'done', '2026-03-10', [
+      crew('c1', 'Ola', 1000, { role: 'Montażysta' }),
+      crew('c2', 'Ola', 3000, { role: 'Montażysta', dayId: undefined }),
+    ]),
+  ]
+  const [role] = computeCrewStats(people, projects, { now: NOW }).get('a')!.roles
+  assert.deepEqual(role, { name: 'Montażysta', count: 2, days: 1, paid: 4000, avgDayRate: 1000 })
 })

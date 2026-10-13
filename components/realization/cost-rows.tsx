@@ -8,6 +8,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { parseAmount } from '@/lib/event-draft'
+import { useCrew } from '@/lib/crew-context'
+import { costRowRolePatch } from '@/lib/crew-rates'
+import { crewMemberById, rolesForPerson } from '@/lib/crew-types'
 import { costAmount, type CrewSuggestion } from '@/lib/project-costs'
 import { COST_CATEGORIES, costCategoryLabel, type ProjectCost } from '@/lib/project-types'
 import { pln } from '@/components/calendar/calendar-bits'
@@ -75,7 +78,8 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 
 /**
  * Osoba z ekipy: osoba z bazy Ekipa albo wpisana tekstem (`PersonPicker`),
- * rola (podpowiedzi z listy ról), stawka za dzień.
+ * rola (podpowiedzi z listy ról — przy osobie z bazy najpierw jej role), stawka
+ * za dzień. Zmiana roli przy osobie z bazy bierze jej stawkę w nowej roli (S2).
  */
 export function CrewRow({
   cost,
@@ -92,18 +96,24 @@ export function CrewRow({
   onChange: (patch: Partial<ProjectCost>) => void
   onRemove: () => void
 }) {
+  const ownListId = useId()
+  const { allPeople, roles } = useCrew()
   const quantity = cost.quantity ?? 1
+  const member = crewMemberById(allPeople, cost.personId)
+  const { own, others } = rolesForPerson(member, roles)
+  const personal = own.length > 0
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
       <PersonPicker cost={cost} outsiders={outsiders} onChange={onChange} className="w-full sm:w-auto sm:flex-[3]" />
       <input
         value={cost.role ?? ''}
-        list={roleListId}
+        list={personal ? ownListId : roleListId}
         placeholder="Rola"
         aria-label="Rola"
-        onChange={(e) => onChange({ role: e.target.value })}
+        onChange={(e) => onChange(costRowRolePatch(cost, e.target.value, member, roles))}
         className={`${fieldClass} flex-[2]`}
       />
+      {personal && <CrewRoleDatalist id={ownListId} names={[...own, ...others].map((r) => r.name)} />}
       {quantity !== 1 && (
         <span className="shrink-0 text-xs tabular-nums text-zinc-500" title="Liczba dni z importu">
           {String(quantity).replace('.', ',')} ×
