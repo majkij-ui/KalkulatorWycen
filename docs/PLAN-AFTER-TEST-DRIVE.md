@@ -2,7 +2,7 @@
 
 Builds on [PLAN-CALENDAR-AND-THREADS.md](PLAN-CALENDAR-AND-THREADS.md) (§3.4 rules, §6 tracks, §7
 decisions) and [PLAN-GEAR.md](PLAN-GEAR.md). Nothing here is built yet. Recommendations come first in each
-decision; M.J. confirms before a session starts.
+decision. Decisions A–F were confirmed by M.J. on 2026-10-13 (see each section).
 
 ## 1. What came out of testing
 
@@ -21,17 +21,19 @@ decision; M.J. confirms before a session starts.
 
 ## 2. Root causes of the two bugs (checked in code and data)
 
-- **#5 Recurring banner.** The banner counts library quotes that no project points back to
-  (`pendingQuotes` → `readMigratedIds`). The S-AI library quote was migrated on 8.10 into project
-  `p-1791701624673-7mau8nz`; on 11.10 that project was deleted as a duplicate of the real S-AI job. The hub
-  passes only non-deleted projects, so the quote counts as „not moved" again. Fix: `readMigratedIds` reads
-  soft-deleted projects too (same rule as the inbox: a deleted result must not resurrect its source), plus
-  „Pomiń" on the banner for a quote you never want as a project.
+- **#5 Recurring banner — not reproduced yet.** First suspect was the migration banner („Znaleziono N
+  zapisanych wycen"): the S-AI library quote's project `p-1791701624673-7mau8nz` was deleted on 11.10 as a
+  duplicate. But the start-up count already includes deleted projects (`listAllProjects`), so on today's
+  data it is 0, and no other start-up notice in the hub talks about an unsaved quote. Waiting for the exact
+  wording / a screenshot from M.J. (and which app: the hub or the old QuoteGen).
 - **#4 Jumping thread.** Groups are sorted by the newest date among their **pending** proposals
   (`groupProposals`, `lib/inbox.ts`). Accepting the newest items re-sorts the group lower; a leftover
   `project_update` (contact) often has no date and drops to the bottom. Fix: a stable order for the session
   (sort by the group's newest date over all its proposals, handled ones included) and keep a group in place
-  until it is empty.
+  until it is empty. **Fixed 2026-10-13** (`3c8249c`): a second cause was found — once a thread's new
+  project was accepted, the rest of the thread (e.g. a contact update without a thread id) fell back to a
+  group „by client" at the end of the list. Grouping, titles and order now come from all proposals in the
+  files (`pendingProposals().all`); only the waiting ones are shown.
 
 ## 3. Proposed design
 
@@ -45,12 +47,21 @@ decision; M.J. confirms before a session starts.
   is a fact, and as an **average per project** in that period: overhead of the period spread over its jobs,
   so each job shows „after overheads".
 - Unfinished periods are labelled „wstępnie" (overheads still to come).
-- **Decision A — how overheads are spread over jobs:** **by revenue share** in the period (recommended:
-  standard, a big job carries more), or equally per job, or per shoot day.
-- **Decision B — gear purchases in layer 2:** **spread over a useful life** (recommended: 36 months
-  default, editable per item; a laptop 24), so a camera bought in May doesn't wipe out Q2 margins; the
-  cash view (what left the account in that month) stays in Finance's monthly result. The alternative is the
-  whole price in the month of purchase.
+- **Decision A — confirmed 2026-10-13:** overheads are spread **by revenue share** (share of revenue =
+  share of overheads). Layer 2 per project is meaningful **for a year only**: the year view (closed, or the
+  current year marked „wstępnie") shows each job after overheads; month / quarter / half views show layer 1
+  per project and the period's overheads as totals, not per job.
+- **Decision B — confirmed 2026-10-13:** a Finance toggle **„Rozłóż duże zakupy sprzętu"**. On: every
+  purchase of **5,000 zł netto or more** (threshold editable) is spread evenly over **36 months** from its
+  purchase month; cheaper items count in full in their month. Off: the cash view, each purchase in full in
+  its month (how the year's shopping hit the account). Layer 2 per project uses the spread view; the toggle
+  switches every number on the screen, and the report says which view it shows.
+  - Consequence to show clearly: with the spread view, 2026 also carries the remaining months of 2024–2025
+    purchases (e.g. the RED Komodo pack, 57,000 zł from 04.2024, adds about 1,583 zł a month until
+    03.2027), while 2026 purchases weigh less in 2026.
+  - An item sold or retired early: the not-yet-spread rest, minus the sale price, lands in that month
+    (needs a sale price field; until then retirement just stops the spreading).
+  - Management view only: tax depreciation rules (10,000 zł threshold for fixed assets) are not modelled.
 - **One source for gear purchases:** the catalogue (purchase price + date). Today they are typed by hand
   as fixed costs „Sprzęt" (34 „other" entries in `finances.json`, some of them gear). Moving them to the
   catalogue goes through a reviewed patch, never silently, to avoid counting twice.
@@ -66,8 +77,8 @@ decision; M.J. confirms before a session starts.
   - the month-by-month fixed costs below (today's list moved here, easier to add and edit);
   - categories beyond ZUS / Marketing / Inne: Oprogramowanie, Bank, Biuro / księgowość, Telefon i internet,
     Ubezpieczenia, Sprzęt (from the catalogue).
-- **Decision C:** a subscription's months count **automatically** (recommended), and a month can be
-  overridden with the amount actually paid (FX, price change); or each month must be confirmed.
+- **Decision C — confirmed 2026-10-13:** a subscription's months count **automatically**; any month can be
+  corrected to what actually happened (amount paid, FX, a skipped or paused month).
 - Today's recurring manual entries (ZUS, Oprogramowanie, Opłaty bankowe, FPD) become subscriptions via a
   reviewed patch, with the past months kept as they are.
 
@@ -83,7 +94,11 @@ decision; M.J. confirms before a session starts.
 ### 3.4 Client groups (#3)
 
 - New `client-groups.json`: `{ id, name, members: clientKey[] }`. This is the one exception to „no client
-  file" (decision 3): it stores a grouping, not clients. **Decision D:** OK to add it (recommended).
+  file" (decision 3): it stores a grouping, not clients. **Decision D — confirmed 2026-10-13.** Why it was a
+  question at all: decision 3 kept clients as a plain field so there is nothing to maintain. A group file is
+  the first thing that has to stay in step with client names: renaming a client through „Scal nazwy" must
+  move its membership (built in), and typing a new spelling in a project header silently leaves the group
+  (the client page shows „poza grupą" so it's visible).
 - Klienci: a group is one row with its members inside (each keeps its name and own page). The group page
   shows the stats over all members: revenue, return rhythm, last job, win rate, payments.
 - Filters by group in Projekty and, after 3.1, in Finance and the report. „Scal nazwy" keeps the group
@@ -100,8 +115,8 @@ decision; M.J. confirms before a session starts.
 
 ### 3.6 Quotes in EUR (#8) and the PDF (#9)
 
-- **Decision E:** the quote's currency is chosen per quote; in EUR you type and see every price in EUR
-  (recommended). The rate is frozen per quote (NBP on a chosen day, editable). Finance stays in PLN at that
+- **Decision E — confirmed 2026-10-13:** the quote's currency is chosen per quote; in EUR you type and see
+  every price in EUR. The rate is frozen per quote (NBP on a chosen day, editable). Finance stays in PLN at that
   rate until an invoice gives the real amount.
 - The session first **audits every money display** (calculator tabs, totals, plan, PDF rows and texts) and
   lists the mixed PLN / zł spots before changing anything. Old PLN quotes must calculate and print exactly
@@ -117,8 +132,8 @@ decision; M.J. confirms before a session starts.
   - the previous period for comparison.
 - Exports:
   - **PDF** through the call sheet's desktop path;
-  - **one Markdown file** with the same tables and a JSON block (**Decision F**, recommended), made for
-    pasting into a conversation with an AI agent.
+  - **one Markdown file** with the same tables and a JSON block (**Decision F — confirmed 2026-10-13**),
+    made for pasting into a conversation with an AI agent.
 - The stats in Finance absorb the money-related part of T7 (response time and conversion stay in
   Marketing).
 
@@ -142,6 +157,19 @@ decision; M.J. confirms before a session starts.
 - The report (S5) reads everything, so it comes last.
 - T9c also edits the calculator, so it waits until S3 is merged.
 
-**Data before S4:** fill in purchase prices and dates in the catalogue (including the Zaplecze items),
-and add the four missing invoices (S-AI, JHJ, Morris & Lloyd, CIONET wywiady). Otherwise layer 1 and
-layer 2 rest on plans.
+**Data:** as of 2026-10-13 all 18 catalogue items have a purchase price (15 with a date; 9 at 5,000 zł or
+more). Sessions build with whatever is there: every number is derived on read, so M.J. can correct
+prices, dates and amounts by hand later without breaking anything. Still missing before S4: the four
+invoices (S-AI, JHJ, Morris & Lloyd, CIONET wywiady), rental rates, and the Zaplecze items.
+
+## 5. S1 as built
+
+*(not built yet — S1 writes here)*
+
+## 6. S2 as built
+
+*(not built yet — S2 writes here)*
+
+## 7. S3 as built
+
+*(not built yet — S3 writes here)*
