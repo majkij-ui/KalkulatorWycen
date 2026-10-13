@@ -6,8 +6,9 @@
  * Chronologicznie (najnowsze u góry), ze statusem oznaczonym kolorem i trzema
  * filtrami z notatek: wszystko / tylko projekty / tylko wyceny. Nieprzyjęte
  * wyceny są domyślnie ukryte (przełącznik obok filtrów), a gdy są widoczne,
- * ich kwoty są szare — nie liczą się do wyników firmy. Do tego klient (z jego
- * przychodem) i rok — wybór zapamiętuje się między uruchomieniami.
+ * ich kwoty są szare — nie liczą się do wyników firmy. Do tego klient albo
+ * grupa klientów (S2) z przychodem — najlepsza wiedza z pętli pieniędzy, jak
+ * w Finansach — i rok; wybór zapamiętuje się między uruchomieniami.
  *
  * Usunięcie jest miękkie i zabiera ze sobą wątek projektu; „Cofnij" przywraca
  * jedno i drugie (`use-project-deletion.ts`).
@@ -24,8 +25,11 @@ import {
   type Project,
   type ProjectFilter,
 } from '@/lib/project-types'
-import { clientDirectory, clientRevenue } from '@/lib/clients'
+import { clientDirectory, scopeRevenue } from '@/lib/clients'
+import { clientScope, groupDirectory } from '@/lib/client-groups'
 import { filterProjectList, lostInScope, projectYears } from '@/lib/project-list'
+import { useClientGroups } from '@/lib/use-client-groups'
+import { useProjectMoney } from '@/lib/use-project-money'
 import { ProjectStatusBadge } from './project-status-badge'
 import { PaidToggle } from './paid-toggle'
 import { ClientCombobox } from './client-combobox'
@@ -302,15 +306,22 @@ export function ProjectList() {
   const [creating, setCreating] = useState(false)
   const [deleted, setDeleted] = useState<{ project: Project; eventCount: number } | null>(null)
 
-  const directory = useMemo(() => clientDirectory(projects), [projects])
+  const { groups } = useClientGroups()
+  const money = useProjectMoney()
+  const clients = useMemo(() => clientDirectory(projects), [projects])
+  // Grupy klientów (S2) są na tej samej liście wyboru co klienci.
+  const directory = useMemo(() => [...clients, ...groupDirectory(groups, clients)], [clients, groups])
   const years = useMemo(() => projectYears(projects), [projects])
-  // Zapamiętany klient, którego już nie ma (zmiana nazwy, usunięcie) — lista pokazuje wszystkich.
+  // Zapamiętany klient (albo grupa), którego już nie ma (zmiana nazwy, rozwiązanie) — lista pokazuje wszystkich.
   const selectedClient = directory.find((c) => c.key === listClient) ?? null
+  const scope = clientScope(selectedClient?.key, groups)
   const year = listYear !== null && years.includes(listYear) ? listYear : null
-  const query = { filter, hideLost, client: selectedClient?.key ?? '', year, search }
+  const query = { filter, hideLost, client: selectedClient?.key ?? '', groups, year, search }
   const rows = filterProjectList(projects, query)
   const lostCount = lostInScope(projects, query)
-  const revenue = selectedClient ? clientRevenue(projects, selectedClient.key, year) : null
+  const revenue = scope ? scopeRevenue(projects, scope.keys, year, money) : null
+  const memberNames =
+    scope?.kind === 'group' ? scope.keys.map((key) => clients.find((c) => c.key === key)?.name ?? key) : []
   const narrowed = !!selectedClient || year !== null || !!search.trim()
 
   const handleCreate = async () => {
@@ -407,6 +418,9 @@ export function ProjectList() {
       {selectedClient && revenue && (
         <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl border border-white/5 bg-zinc-900/30 px-4 py-3">
           <span className="font-semibold text-zinc-100">{selectedClient.name}</span>
+          {memberNames.length > 0 && (
+            <span className="text-xs text-zinc-500">grupa: {memberNames.join(', ')}</span>
+          )}
           <span className="text-sm text-zinc-400">
             przychód{year !== null ? ` w ${year}` : ''}:{' '}
             <span className="font-semibold tabular-nums text-zinc-100">{formatPln(revenue.revenue)}</span>
@@ -414,7 +428,7 @@ export function ProjectList() {
           <span className="text-xs text-zinc-500">
             {revenue.countedProjects}{' '}
             {plural(revenue.countedProjects, 'projekt wliczony', 'projekty wliczone', 'projektów wliczonych')} (w
-            realizacji i zrealizowane, jak w Finansach)
+            realizacji i zrealizowane, z faktur albo z planu — jak w Finansach{year !== null ? ', rok po dacie faktury' : ''})
           </span>
         </div>
       )}
