@@ -29,3 +29,16 @@ export async function fetchEurPlnRate(): Promise<{ rate: number; effectiveDate: 
     effectiveDate: typeof r.effectiveDate === 'string' ? r.effectiveDate : '',
   }
 }
+
+/**
+ * Bieżący kurs średni NBP (tabela A) dla dowolnej waluty — kurs subskrypcji
+ * w Finansach (S1). Błędy lecą do wywołującego, jak wyżej.
+ */
+export async function fetchNbpMidRate(code: string): Promise<{ rate: number; effectiveDate: string }> {
+  const url = `https://api.nbp.pl/api/exchangerates/rates/A/${encodeURIComponent(code.toUpperCase())}/?format=json`
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`NBP responded ${res.status}`)
+  const r = ((await res.json()) as NbpResponse).rates?.[0]
+  if (!r || typeof r.mid !== 'number' || !Number.isFinite(r.mid) || r.mid <= 0) throw new Error('Malformed NBP response')
+  return { rate: r.mid, effectiveDate: typeof r.effectiveDate === 'string' ? r.effectiveDate : '' }
+}

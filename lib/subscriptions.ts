@@ -296,13 +296,13 @@ export function pastChargesToKeep(sub: Subscription, costs: FixedCost[], current
     .map((charge) => subscriptionCorrection(sub, charge.month, charge.amount))
 }
 
-/** Czy zmiana subskrypcji zmienia kwoty albo miesiące rat (a nie tylko nazwę czy notatkę). */
-export function changesCharges(before: Subscription, after: Subscription): boolean {
-  return (
-    chargePln(before) !== chargePln(after) ||
-    intervalMonths(before) !== intervalMonths(after) ||
-    before.startDate !== after.startDate
-  )
+/**
+ * Czy zmiana to nowa cena (kwota w złotych albo cykl) — wtedy formularz pyta
+ * „od teraz czy wszystkie miesiące". Zmiana daty startu to poprawka startu,
+ * nazwa czy notatka nie ruszają rat.
+ */
+export function changesPrice(before: Subscription, after: Subscription): boolean {
+  return chargePln(before) !== chargePln(after) || intervalMonths(before) !== intervalMonths(after)
 }
 
 /**

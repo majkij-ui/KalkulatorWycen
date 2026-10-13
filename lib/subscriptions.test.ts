@@ -11,7 +11,7 @@ import type { FixedCost } from './project-types'
 import { subscriptionSchema, type Subscription } from './subscription-types'
 import {
   addMonths,
-  changesCharges,
+  changesPrice,
   chargeInMonth,
   effectiveFixedCosts,
   fixedCostsInYear,
@@ -106,6 +106,7 @@ test('5. waluta bez kursu, nieznany cykl, brak startu: nie liczy się i mówi dl
   assert.equal(subscriptionProblem(sub({ cadence: 'weekly' })), 'cadence', 'cykl z nowszej wersji')
   assert.equal(subscriptionProblem(sub({ cadence: 'custom' })), 'cadence', 'co N bez N')
   assert.equal(subscriptionProblem(sub({ startDate: '01.10.2026' })), 'start')
+  assert.equal(subscriptionProblem({ ...sub(), startDate: '2026-10' }), 'start', 'szkic z formularza, bez schematu')
   assert.equal(subscriptionProblem(sub({ currency: 'GBP', rate: 5.2 })), null, 'inna waluta z kursem się liczy')
   assert.equal(subscriptionProblem(sub()), null)
 })
@@ -177,6 +178,8 @@ test('13. usunięta subskrypcja: raty znikają, poprawki (prawdziwe płatności)
   const zus = { ...sub(), deletedAt: '2026-10-13T10:00:00.000Z' }
   const costs = fixedCostsInYear([subscriptionCorrection(zus, '2026-02', 1417.14)], [zus], 2026)
   assert.deepEqual(months(costs), ['2026-02'])
+  assert.deepEqual(subscriptionCharges(zus, '2026-01', '2026-12'), [], 'także poza Finansami (podpowiedzi, „auto")')
+  assert.equal(chargeInMonth(zus, '2026-03'), null)
 })
 
 test('14. ręczne pozycje bez subskrypcji zostają; ostrzeżenie przed podwójnym liczeniem', () => {
@@ -197,6 +200,11 @@ test('14. ręczne pozycje bez subskrypcji zostają; ostrzeżenie przed podwójny
   assert.equal(effective.filter((c) => !c.derived).length, 5, 'ręczne zostają, usunięta nie')
   assert.deepEqual(months(effective.filter((c) => c.derived)), ['2026-08', '2026-10', '2026-11', '2026-12'])
   assert.deepEqual(possibleDoubles(sub({ name: 'Bank', category: 'other' }), [cost('2026-02', 10, { label: 'Inne' })]), [])
+  assert.deepEqual(
+    possibleDoubles(sub({ name: 'TV', category: 'other' }), [cost('2026-02', 60, { label: 'Opłata za TVN Player' })]),
+    [],
+    'krótka nazwa nie łapie przypadkowych opisów'
+  )
 })
 
 test('15. nowa cena od teraz: minione miesiące zostają po starej, od bieżącego nowa', () => {
@@ -207,7 +215,7 @@ test('15. nowa cena od teraz: minione miesiące zostają po starej, od bieżące
   keep.forEach((c) => assert.equal(c.amount, 100))
 
   const after = { ...before, amount: 120 }
-  assert.equal(changesCharges(before, after), true)
+  assert.equal(changesPrice(before, after), true)
   const costs = fixedCostsInYear([august, ...keep], [after], 2026)
   assert.deepEqual(
     ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'].map((m) => inMonth(costs, m)[0].amount),
@@ -216,13 +224,15 @@ test('15. nowa cena od teraz: minione miesiące zostają po starej, od bieżące
   assert.deepEqual(pastChargesToKeep(sub({ startDate: '2026-10-01' }), [], '2026-10'), [], 'start w bieżącym miesiącu')
 })
 
-test('15b. zmiana nazwy czy notatki nie rusza rat; poprawka ceny bez „od teraz" zmienia wszystkie miesiące', () => {
+test('15b. zmiana nazwy, notatki, końca czy startu to nie nowa cena; poprawka ceny bez „od teraz" zmienia wszystkie miesiące', () => {
   const s = sub()
-  assert.equal(changesCharges(s, { ...s, name: 'ZUS społeczny', notes: 'x' }), false)
-  assert.equal(changesCharges(s, { ...s, endDate: '2026-12-31' }), false)
-  assert.equal(changesCharges(s, { ...s, rate: 4 }), false, 'kurs nie dotyczy PLN')
-  assert.equal(changesCharges(s, { ...s, cadence: 'yearly' }), true)
-  assert.equal(changesCharges(s, { ...s, startDate: '2026-01-15' }), true)
+  assert.equal(changesPrice(s, { ...s, name: 'ZUS społeczny', notes: 'x' }), false)
+  assert.equal(changesPrice(s, { ...s, endDate: '2026-12-31' }), false)
+  assert.equal(changesPrice(s, { ...s, startDate: '2026-01-15' }), false, 'poprawka startu')
+  assert.equal(changesPrice(s, { ...s, rate: 4 }), false, 'kurs nie dotyczy PLN')
+  assert.equal(changesPrice(s, { ...s, currency: 'EUR', amount: 1417.14, rate: 1 }), false, 'ta sama kwota w złotych')
+  assert.equal(changesPrice(s, { ...s, cadence: 'yearly' }), true)
+  assert.equal(changesPrice(s, { ...s, amount: 1500 }), true)
   const fixed = { ...s, amount: 1500 }
   assert.ok(fixedCostsInYear([], [fixed], 2026).every((c) => c.amount === 1500))
 })
@@ -254,6 +264,8 @@ test('18. poprawka liczy się w kategorii swojej subskrypcji (zmiana kategorii n
   assert.equal(summarizeFixedCosts(fixedCostsInYear([stored], [fpd], 2026), YEAR_2026).byCategory.software, undefined)
   const orphan = inMonth(fixedCostsInYear([stored], [], 2026), '2026-03')[0]
   assert.equal(orphan.category, 'software', 'bez subskrypcji — tak, jak zapisano')
+  const deleted = { ...fpd, deletedAt: '2026-10-13T10:00:00.000Z' }
+  assert.equal(inMonth(fixedCostsInYear([stored], [deleted], 2026), '2026-03')[0].category, 'software', 'usunięta też')
 })
 
 test('19. Finanse: wynik firmy, wykres i kafle liczą raty; miesiące sumują się do roku', () => {

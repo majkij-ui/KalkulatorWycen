@@ -40,8 +40,6 @@ const store = createCollectionStore<FixedCost>({
 export const listFixedCosts = store.list
 export const upsertFixedCost = store.upsert
 export const replaceAllFixedCosts = store.replaceAll
-/** @deprecated twarde usunięcie — znika razem ze starym panelem (S1). */
-export const deleteFixedCost = store.remove
 
 /** Dopisuje kilka pozycji jednym zapisem (np. minione raty przy zmianie ceny). */
 export function addFixedCosts(costs: FixedCost[]): Promise<FixedCost[]> {
