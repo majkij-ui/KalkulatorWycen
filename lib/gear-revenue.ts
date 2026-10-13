@@ -17,14 +17,10 @@
  */
 
 import { getProductionEkipaCastSprzetNetto } from './quote-calc'
-import { isRentalCostKey, resolveProfitSections } from './profit-calc'
+import { isRentalCostKey } from './profit-calc'
 import { quoteGearFigures } from './quote-gear'
-import {
-  computeQuoteTotals,
-  computeTotalCrewDays,
-  resolveSnapshot,
-  type FinancialsSource,
-} from './quote-financials'
+import { quotePlnPlan, resolveSnapshot, type FinancialsSource } from './quote-financials'
+import { toPln } from './quote-currency'
 
 export interface GearRevenue {
   /** Kwota za sprzęt w wycenie, przeskalowana do faktycznego przelewu. */
@@ -46,19 +42,20 @@ export function snapshotGearRevenue(snapshot: FinancialsSource | null | undefine
   if (!resolved) return null
   const { data, pricing, margin } = resolved
 
-  const { sprzetNetto } = getProductionEkipaCastSprzetNetto(data, margin, pricing)
-  const { sumaNetto } = computeQuoteTotals(data, margin, pricing)
+  // Wycena w EUR (S3): kwoty dla klienta w euro × kurs; koszty z planu w zł.
+  const { views, sumaNettoPln: sumaNetto, sections } = quotePlnPlan(data, pricing, margin)
+  const { money, client } = views
+  const { sprzetNetto } = getProductionEkipaCastSprzetNetto(client.data, margin, client.pricing)
   const transfer = data.profitTransferAmount ?? sumaNetto
   const scale = sumaNetto > 0 ? transfer / sumaNetto : 1
-  const charged = Math.max(0, sprzetNetto * scale)
+  const charged = Math.max(0, toPln(sprzetNetto, money) * scale)
 
   const byItem = new Map<string, number>()
-  quoteGearFigures(data).byItem.forEach((amount, itemId) => {
-    if (amount > 0) byItem.set(itemId, amount * scale)
+  quoteGearFigures(client.data).byItem.forEach((amount, itemId) => {
+    if (amount > 0) byItem.set(itemId, toPln(amount, money) * scale)
   })
   const itemized = [...byItem.values()].reduce((sum, amount) => sum + amount, 0)
 
-  const { sections } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))
   const rentedIn = sections
     .flatMap((section) => section.lines)
     .filter((line) => isRentalCostKey(line.key))

@@ -16,6 +16,7 @@ import { dayCrewFigures } from './quote-crew'
 import { computeProfitSummary, resolveProfitSections } from './profit-calc'
 import { safeArray, safeNum } from './safe-numbers'
 import type { ProjectFinancials } from './project-types'
+import { clientPricing, clientQuoteData, costQuoteData, quoteMoney, toPln, type QuoteMoney } from './quote-currency'
 
 const VAT_RATE = 0.23
 
@@ -183,6 +184,36 @@ export function resolveSnapshot(
   return { data, pricing, margin }
 }
 
+/**
+ * Dwa widoki wyceny (S3): `client` w walucie wyceny (ceny dla klienta,
+ * kalkulator, PDF) i `cost` w PLN (plan kosztów, finanse). Wycena w PLN ma
+ * oba widoki identyczne z danymi — te same obiekty.
+ */
+export interface QuoteViews {
+  money: QuoteMoney
+  client: { data: QuoteData; pricing: PricingConfigShape }
+  cost: QuoteData
+}
+
+export function quoteViews(data: QuoteData, pricing: PricingConfigShape): QuoteViews {
+  const money = quoteMoney(data)
+  return {
+    money,
+    client: { data: clientQuoteData(data, money), pricing: clientPricing(pricing, money) },
+    cost: costQuoteData(data, money),
+  }
+}
+
+/** Plan wyceny w PLN: przychód (suma × kurs albo kwota przelewu), koszty, zysk. */
+export function quotePlnPlan(data: QuoteData, pricing: PricingConfigShape, margin: number) {
+  const views = quoteViews(data, pricing)
+  const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
+  const sumaNettoPln = toPln(totals.sumaNetto, views.money)
+  const profit = resolveProfitSections(views.cost, pricing, computeTotalCrewDays(data))
+  const summary = computeProfitSummary(data.profitTransferAmount ?? sumaNettoPln, data.profitTaxRatePercent, profit.totalCost)
+  return { views, totals, sumaNettoPln, sections: profit.sections, totalCost: profit.totalCost, summary }
+}
+
 export function computeSnapshotFinancials(
   snapshot: FinancialsSource | null | undefined,
   now: Date = new Date()
@@ -190,11 +221,7 @@ export function computeSnapshotFinancials(
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return null
   const { data, pricing, margin } = resolved
-
-  const totals = computeQuoteTotals(data, margin, pricing)
-  const { totalCost } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))
-  const transferAmount = data.profitTransferAmount ?? totals.sumaNetto
-  const summary = computeProfitSummary(transferAmount, data.profitTaxRatePercent, totalCost)
+  const { summary } = quotePlnPlan(data, pricing, margin)
 
   return {
     sumaNetto: summary.sumaNetto,
