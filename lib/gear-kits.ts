@@ -23,6 +23,12 @@ export const listGearKits = store.list
 export const upsertGearKit = store.upsert
 export const deleteGearKit = store.remove
 
+/** Kilka zestawów jednym zapisem (np. „Scal osoby"); zestawy spoza listy zostają. */
+export function updateGearKits(updated: GearKit[]): Promise<GearKit[]> {
+  const byId = new Map(updated.map((kit) => [kit.id, kit]))
+  return store.mutate((all) => all.map((kit) => byId.get(kit.id) ?? kit))
+}
+
 /**
  * Nowy zestaw z pozycji dnia (sztuki sumowane, pozycje bez powtórzeń), z
  * ekipą dnia, gdy jest (T9b): ta sama rola i osoba sumuje liczbę osób.

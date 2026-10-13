@@ -68,10 +68,11 @@ test('statystyki tylko z rzeczywistych kosztów projektów w realizacji i zreali
   assert.equal(s.paidThisYear, 800 + 900 + 2000, 'listopad 2025 to zeszły rok')
   assert.equal(s.avgDayRate, (800 + 900 + 1400) / 4, 'średnia tylko z dni pracy')
   assert.equal(s.lastDate, '2026-08-15')
+  // Podział na role (S2): dni, wypłaty i średnia stawka w każdej roli.
   assert.deepEqual(s.roles, [
-    { name: 'Gafer', count: 2 },
-    { name: 'Montaż', count: 1 },
-    { name: 'Operator B', count: 1 },
+    { name: 'Gafer', count: 2, days: 3, paid: 2200, avgDayRate: 2200 / 3 },
+    { name: 'Montaż', count: 1, days: 0, paid: 2000, avgDayRate: null },
+    { name: 'Operator B', count: 1, days: 1, paid: 900, avgDayRate: 900 },
   ])
   assert.deepEqual(
     s.history.map((h) => [h.project.id, h.days, h.paid, h.roles]),

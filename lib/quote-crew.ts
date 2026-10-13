@@ -5,7 +5,8 @@
  * (`ShootingDay.crew`): rolę („operator") i opcjonalnie osobę („Łukasz").
  *
  *   cena dla klienta = stawka ROLI × osoby × marża z nagłówka  (decyzja 7)
- *   mój koszt        = stawka osoby → koszt roli → stawka roli  (pozycja planu)
+ *   mój koszt        = stawka osoby w tej roli → stawka osoby → koszt roli
+ *                      → stawka roli  (pozycja planu; S2 dodało stawkę w roli)
  *
  * Nazwy i stawki są ZAMROŻONE w pozycji (jak sprzęt w G5); zmiana roli albo
  * osoby w bazie nie zmienia wysłanej oferty — „zaktualizuj stawki" to
@@ -17,20 +18,26 @@
 
 import { safeArray, safeNum } from './safe-numbers'
 import { createQuoteCrewLineId, type QuoteCrewLine, type QuoteData, type ShootingDay } from './quote-types'
-import { crewRoleByName, type CrewMember, type CrewRole } from './crew-types'
+import { crewRoleByName, personRateFor, type CrewMember, type CrewRole } from './crew-types'
 import { isCrew, type NewCost } from './project-costs'
 import type { ProjectCost } from './project-types'
 
-type RoleRates = Pick<CrewRole, 'clientRate' | 'costRate'>
-type PersonRate = Pick<CrewMember, 'rate'>
+type RoleRates = Pick<CrewRole, 'clientRate' | 'costRate'> & { id?: string }
+type PersonRate = Pick<CrewMember, 'rate' | 'roleRates'>
 
-/** Mój koszt osoby-dnia: stawka osoby, potem koszt roli, potem stawka roli (jak dziś). */
+/**
+ * Mój koszt osoby-dnia: stawka osoby w tej roli, potem jej stawka ogólna,
+ * potem koszt roli, potem stawka roli (jak dziś). Rolę wskazuje `role.id`,
+ * a gdy roli nie ma w bazie — `roleId` (np. z zamrożonej pozycji).
+ */
 export function crewCostRate(
   role: RoleRates | null | undefined,
   person: PersonRate | null | undefined,
-  fallbackClientRate = 0
+  fallbackClientRate = 0,
+  roleId: string | undefined = role?.id
 ): number {
-  if (person?.rate !== undefined && person.rate > 0) return person.rate
+  const own = personRateFor(person, roleId)
+  if (own !== null) return own
   if (role?.costRate !== undefined) return role.costRate
   if (role) return role.clientRate
   return Math.max(0, safeNum(fallbackClientRate, 0))
@@ -39,7 +46,7 @@ export function crewCostRate(
 /** Nowa pozycja: nazwy i stawki z roli i osoby TERAZ (zamrożone). */
 export function createQuoteCrewLine(
   role: Pick<CrewRole, 'id' | 'name' | 'group' | 'clientRate' | 'costRate'>,
-  person?: Pick<CrewMember, 'id' | 'name' | 'rate'> | null,
+  person?: Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates'> | null,
   qty = 1
 ): QuoteCrewLine {
   const line: QuoteCrewLine = {
@@ -65,17 +72,17 @@ export function createQuoteCrewLine(
  */
 export function withCrewPerson(
   line: QuoteCrewLine,
-  person: Pick<CrewMember, 'id' | 'name' | 'rate'> | null,
+  person: Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates'> | null,
   role: RoleRates | null | undefined
 ): QuoteCrewLine {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { personId, personName, ...rest } = line
-  if (!person) return { ...rest, costRate: crewCostRate(role, null, line.clientRate) }
+  if (!person) return { ...rest, costRate: crewCostRate(role, null, line.clientRate, line.roleId) }
   return {
     ...rest,
     personId: person.id,
     personName: person.name,
-    costRate: crewCostRate(role, person, line.clientRate),
+    costRate: crewCostRate(role, person, line.clientRate, line.roleId),
     qty: 1,
   }
 }
@@ -142,7 +149,7 @@ export function hasLegacyCrew(
 // ── Aktualność stawek ────────────────────────────────────────────────────────
 
 type RoleLike = Pick<CrewRole, 'id' | 'name' | 'group' | 'clientRate' | 'costRate'>
-type PersonLike = Pick<CrewMember, 'id' | 'name' | 'rate' | 'deletedAt'>
+type PersonLike = Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates' | 'deletedAt'>
 
 /** Pozycja z bieżącymi nazwami i stawkami z bazy (rola albo osoba usunięta → bez zmian). */
 function refreshedLine(line: QuoteCrewLine, roles: Map<string, RoleLike>, people: Map<string, PersonLike>): QuoteCrewLine {
@@ -159,7 +166,9 @@ function refreshedLine(line: QuoteCrewLine, roles: Map<string, RoleLike>, people
   if (livePerson) next.personName = livePerson.name
   // Osoba usunięta z bazy: jej stawka zostaje zamrożona; inaczej koszt z bazy.
   next.costRate =
-    line.personId && !livePerson ? line.costRate : crewCostRate(role ?? null, livePerson ?? null, next.clientRate)
+    line.personId && !livePerson
+      ? line.costRate
+      : crewCostRate(role ?? null, livePerson ?? null, next.clientRate, line.roleId)
   return next
 }
 

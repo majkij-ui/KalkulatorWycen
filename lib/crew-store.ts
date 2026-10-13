@@ -41,6 +41,8 @@ export const upsertCrewRole = rolesStore.upsert
 /** Wszyscy ludzie, z usuniętymi. */
 export const listAllCrewMembers = crewStore.list
 export const upsertCrewMember = crewStore.upsert
+/** Odczyt–zmiana–zapis całej listy ludzi jednym ruchem w kolejce („Scal osoby"). */
+export const mutateCrewMembers = crewStore.mutate
 
 export function softDeleteCrewMember(id: string, deletedAt: string): Promise<CrewMember[]> {
   return crewStore.mutate((all) => all.map((m) => (m.id === id ? { ...m, deletedAt, updatedAt: deletedAt } : m)))

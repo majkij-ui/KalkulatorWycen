@@ -6,14 +6,16 @@
  * dalej działa (osoba spoza bazy); imię w wierszu jest zamrożone do
  * wyświetlania, a powiązanie trzyma `personId`.
  *
- * Wybór osoby ustawia `personId`, imię i domyślną stawkę z jej karty. Pisanie
- * innego imienia zrywa powiązanie — to już inna osoba.
+ * Wybór osoby ustawia `personId`, imię i stawkę: jej stawkę w roli wiersza,
+ * potem ogólną (S2, `costRowPersonPatch`); wiersz bez roli dostaje pierwszą
+ * rolę osoby. Pisanie innego imienia zrywa powiązanie — to już inna osoba.
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Plus, UserCheck } from 'lucide-react'
 import { useCrew } from '@/lib/crew-context'
-import { crewMemberByName, crewPickerOptions, crewRoleByName, type CrewMember } from '@/lib/crew-types'
+import { crewMemberByName, crewPickerOptions, crewRoleByName, personRateFor, type CrewMember } from '@/lib/crew-types'
+import { costRowPersonPatch } from '@/lib/crew-rates'
 import { personKey, type CrewSuggestion } from '@/lib/project-costs'
 import type { ProjectCost } from '@/lib/project-types'
 import { pln } from '@/components/calendar/calendar-bits'
@@ -49,6 +51,11 @@ export function PersonPicker({
   const linked = cost.personId ? (people.find((m) => m.id === cost.personId && !m.deletedAt) ?? null) : null
   const role = crewRoleByName(roles, cost.role)
   const roleName = (roleId: string) => roles.find((r) => r.id === roleId)?.name ?? ''
+  // Stawka przy imieniu: ta, którą wybór wpisze w wiersz (w roli wiersza, potem ogólna).
+  const rateText = (member: CrewMember) => {
+    const rate = personRateFor(member, role?.id)
+    return rate ? pln(rate) : ''
+  }
 
   // Dopóki wiersz ma powiązaną osobę i nikt nie pisze, pokazujemy całą listę.
   const query = linked && personKey(value) === personKey(linked.name) ? '' : value
@@ -80,12 +87,7 @@ export function PersonPicker({
   }, [query])
 
   const pickMember = (member: CrewMember) => {
-    onChange({
-      personId: member.id,
-      person: member.name,
-      ...(member.rate ? { unitCost: member.rate } : {}),
-      ...(!cost.role?.trim() && member.roleIds.length ? { role: roleName(member.roleIds[0]) } : {}),
-    })
+    onChange(costRowPersonPatch(cost, member, roles))
   }
 
   const choose = async (option: Option) => {
@@ -218,7 +220,7 @@ export function PersonPicker({
                         {option.member.id === linked?.id && <span className="ml-1.5 text-[11px] text-emerald-400">wybrana</span>}
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
-                        {[option.member.roleIds.map(roleName).filter(Boolean).slice(0, 2).join(', '), option.member.rate ? pln(option.member.rate) : '']
+                        {[option.member.roleIds.map(roleName).filter(Boolean).slice(0, 2).join(', '), rateText(option.member)]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>
