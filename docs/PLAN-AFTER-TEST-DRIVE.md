@@ -168,7 +168,151 @@ invoices (S-AI, JHJ, Morris & Lloyd, CIONET wywiady), rental rates, and the Zapl
 
 ## 6. S2 as built
 
-*(not built yet — S2 writes here)*
+*(2026-10-13, branch `claude/grupy-role-hub-8145ba` on top of `90e913a`; not merged.)*
+
+### Data (additive, passthrough, no version bump)
+
+- `CrewMember.roleRates?: { roleId, rate, note? }[]` — lenient list (a bad entry is dropped, a missing field
+  stays missing), rate 0 = unknown. `CrewMember.mergedInto?` on a duplicate soft-deleted by „Scal osoby".
+- `client-groups.json` (`createCollectionStore`, web key `nonoise-client-groups-v1`, in `SCHEMAS` of
+  `npm run data`): `{ id, name, members: clientKey[], createdAt, updatedAt, deletedAt? }`. Members are compared
+  through `clientKey`, so a typed name also matches. Dissolving is soft (`deletedAt`) with „Cofnij".
+- Nothing else is stored: revenue, group stats and „poza grupą" are derived.
+
+### One person, several roles (3.3)
+
+My cost when a person is picked, everywhere (quote lines, „zaktualizuj stawki", kits in the quote and in
+Realizacja, Realizacja rows): **rate for that role → person.rate → role.costRate → role.clientRate**
+(`crewCostRate`, `personRateFor`). The client price stays the role's (decision 7).
+
+| Realizacja crew row | Picking a person from Ekipa |
+|---|---|
+| role X, person has a rate for X | that rate |
+| role X, no rate for X, person has a day rate | the day rate |
+| role X, person has no rates, row empty | role X's cost (else its client rate) |
+| role X, person has no rates, amount typed | the amount stays |
+| no role, person has roles | their first role, rate as above |
+| role not in Ekipa („Operator B") | person's day rate, else unchanged |
+| role changed to another Ekipa role on a linked row | the person's rate in the new role (full chain) |
+| same role, other spelling / free-text person | amount unchanged |
+
+- Pickers show each person's rate for the line's role; a linked row suggests the person's roles first.
+- Ekipa person sheet: an own rate and note per role (placeholder = what counts instead), the day rate is
+  „dla ról bez własnej stawki". Stats per role: days, pay, average day rate. The list shows „+ N stawki w rolach".
+
+### „Scal osoby"
+
+Ekipa › „Scal osoby" (or „Scal z…" on a person): suggestions by first name (Łukasz ×N), tick the cards, pick
+who stays (default: most days, then projects, then oldest), preview the merged card and what gets rewired,
+confirm. Writes, in this order, each one queued write on fresh data: projects (`updateProjects` →
+`patchProjects`), kits (`updateGearKits`), the quote open in the calculator (so a later „Zapisz" doesn't bring
+the duplicate back), then people.
+
+- Rewired: `Project.costs[].personId` (also soft-deleted rows, and rows **without** `personId` that matched a
+  duplicate by name — otherwise they would drop to „spoza bazy"), crew lines in `Project.quote` snapshots
+  (`ShootingDay.crew`), `GearKit.crew` (same role + person after the merge = one entry; other fields kept).
+  Call sheets point at cost rows (`costId`), not people — nothing to rewrite.
+- Frozen names (`person`, `personName`) stay as typed. The kept card gets the union of roles and role rates;
+  empty fields (rate, phone, e-mail, city) are filled from the first duplicate that has them; a rate that
+  doesn't fit („stawka 1 500 zł", a clashing role rate) goes to the notes with „Scalono z „…" (date)".
+- Duplicates: `deletedAt` + `mergedInto`. `crewMemberById` follows `mergedInto`, so stats, call-sheet contacts
+  and the Realizacja crew row still find the kept person when an older copy writes a stale id (deleted projects
+  are not rewritten; they resolve this way after a restore).
+- „Cofnij" (notice on the Ekipa list) restores each reference, kit and card exactly, but only where nothing
+  changed since (the row still points at the kept person, the kit still has the merged crew, the card was not
+  edited).
+
+### Client groups (3.4, decision D)
+
+- A client is in at most one group: adding moves it. `lib/client-groups.ts` is the shared lookup for S4/S5:
+  a client filter value is a client key **or** `grupa:<id>` — `clientScope`, `scopeKeys`, `inClientScope`,
+  `clientScopeOf` (the bucket a project counts under in per-client tables), `groupDirectory` (picker entries).
+- Klienci list: a group is one row (numbers over all members) with its members inside, each opening its own
+  page; search finds a group by its name or a member; tiles count a group as one client.
+- Group page: the client stats over all members (revenue and share, profit, win rate, return rhythm and last
+  job, size bars, payments, first contact, crew on the jobs, projects with each one's spelling), members with
+  their own numbers (✕ removes), „Dodaj klienta do grupy", similar names outside the group, rename, dissolve
+  with „Cofnij". A member without projects stays listed („brak projektów").
+- Client page: „W grupie …" with a link and „Wyjmij z grupy"; „Dodaj do grupy klientów…" (existing or new).
+- **„Poza grupą"**: a client outside every group whose name looks like a member (`looksLikeSameClient`, the
+  „Scal nazwy" hint: a shared meaningful word or one name starting the other) shows a banner with „Dodaj do
+  grupy". A new spelling with nothing in common (e.g. a full legal name) is not caught.
+- „Scal nazwy" keeps memberships in step:
+
+| Merge | Group membership afterwards |
+|---|---|
+| spellings of a member → a new spelling | the group holds the new key in the member's place |
+| an outside client → a member's name | unchanged (the member is already in the group) |
+| a member → an outside client's name | the group holds the new key |
+| members of two groups | the result stays where the target already was; else the first group of the merged clients (page first); the other group loses them |
+| „Cofnij" | each group's previous members, where untouched since |
+
+- Projekty: groups are in the client picker (found by member names, labelled „grupa"); the banner names the
+  members; the choice is remembered as `grupa:<id>` (an unknown/dissolved group shows everyone).
+
+### T6 glue (Klienci revenue and the Projekty filter)
+
+Klienci (list, tiles, client and group pages: revenue, share, years, profit, margin, size bars, project amounts)
+and the Projekty client banner read the money loop's best-known numbers (`projectMoney`): invoices when complete,
+else plan + extras; a year = the revenue pieces dated in it (invoice date), so an extra invoiced in January
+counts there. Profit = best-known revenue − tax − costs (Realizacja when entered). „Bez kwoty" = a job with
+neither plan nor invoice. `lib/client-money.ts` takes only types from `money-loop` (which imports
+`client-stats`); the ledger is built once per screen (`useProjectMoney`). Without it the plan is used, which is
+exactly what the loop gives a project without invoices — the old tests pass unchanged.
+
+### Code and tests
+
+- Pure: `crew-types.ts` (roleRates, `personRateFor`, `normalizeRoleRates`, `rolesForPerson`, `crewMemberById`),
+  `crew-rates.ts` (Realizacja rows), `crew-merge.ts`, `quote-crew.ts` (`crewCostRate` takes the role id — small),
+  `crew-stats.ts` (per-role stats, merged ids), `client-groups.ts`, `client-money.ts`, `client-stats.ts`
+  (stats over a set of keys, `groupStats`, `clientListRows`), `clients.ts` (`scopeRevenue`), `project-list.ts`.
+  Store/hooks: `client-groups-store.ts`, `use-client-groups.ts`, `use-project-money.ts`.
+- UI: `components/crew/` (person sheet, `crew-merge-sheet.tsx`, section), `components/realization/` (picker,
+  role field), `produkcja-crew.tsx` (rate labels only), `components/clients/` (`client-groups-panel.tsx`, list,
+  page), `components/projects/` (filter, picker).
+- 496 tests (+42): `crew-rates`, `crew-merge`, `client-groups`, `client-groups-store` (web path), money-loop and
+  group cases in `client-stats`, group filter in `project-list`, per-role stats, merged person on a call sheet.
+  Deliberate mutations: 62 across the pure modules, 61 caught; the survivor is equivalent (an unknown
+  `grupa:<id>` cannot equal a client key). `npm run data -- apply` accepts a minimal group and a crew record
+  with `roleRates`, and refuses a group with a bad member. Typecheck clean apart from the known legacy
+  `quote-pdf-document.tsx`. The static export was **not** built in this session (main session).
+- Verified in the browser preview on seeded localStorage (restored byte for byte afterwards): list with a group
+  row, group page numbers checked by hand (profit after Realizacja costs, year share, payment median), „poza
+  grupą" → „Dodaj do grupy", „Scal nazwy" of a member into a new spelling and „Cofnij", creating „PHH + PHN +
+  Interferie" from a client page and adding members by search, dissolve + „Cofnij", Projekty filter by group
+  and best-known revenue for a year, role rates on the person sheet, Realizacja pick and role change, the
+  quote's person select, „Scal osoby" with preview, „Cofnij", and a merge from „Scal z…" while the quote was
+  open in the calculator; phone width without horizontal scroll; no console errors.
+
+### Real data (read-only, 13.10.2026)
+
+- Spellings: „CIONET", „DE Group Sp. z o.o.", „Polski Holding Hotelowy Sp. z o.o.", „PHN Property Management
+  Sp. z o.o.", „Interferie S.A.". Patch for the main session (dry run accepted: +2 in `client-groups.json`):
+  ids `cg-cionet-de-group` (`cionet`, `de group sp. z o.o.`) and `cg-phh-phn-interferie`
+  (`polski holding hotelowy sp. z o.o.`, `phn property management sp. z o.o.`, `interferie s.a.`).
+- With the groups: CIONET + DE Group 23,020 zł (6 projects, 5 jobs, 3 from invoices, median 23 days to pay),
+  PHH + PHN + Interferie 7,018 zł (5 jobs, all from invoices, one invoice open). No names „poza grupą".
+- The money loop changes no client's revenue today (every invoice equals its plan; 167,813 zł either way).
+- Ekipa has Łukasz **twice** („op bez sprzętu" 1,200, „ze sprzętem" 1,500, same three roles), no cost rows,
+  kits or quote lines yet — merging is safe at any time. The difference is gear, not role: recommended model is
+  one Łukasz at 1,200 plus a role „Operator z własnym sprzętem" (own client rate) where he has 1,500; „Scal z…"
+  keeps the 1,500 in the notes so nothing is lost. Open question for M.J.
+
+### Check in the desktop app
+
+1. `client-groups.json` is created on the first group change and survives a restart; `npm run data` patch
+   above applies with the hub closed.
+2. „Scal osoby" with real data: `crew.json`, `projects.json` and `gear-kits.json` written once each; „Cofnij".
+3. The open quote after a merge: „Zapisz" keeps the kept person.
+4. Window focus reload while the Klienci group page is open (groups reload on focus).
+
+### Known limits / follow-ups
+
+- „Cofnij" for both merges lives in the notice until you leave the screen (as elsewhere).
+- Groups in Finance and the report are S4/S5 (`clientScope` / `clientScopeOf` are ready).
+- The old quote library (`quotes.json`, one S-AI record, not written by the hub) is not rewritten by „Scal osoby".
+- One rate per role; „with / without gear" for the same role would need several rates per role (see above).
+- The phone top-bar section icons have no accessible names (pre-existing).
 
 ## 7. S3 as built
 
