@@ -38,6 +38,18 @@ test('klient po kluczu znormalizowanym: różne pisownie razem', () => {
   assert.deepEqual(names(filterProjectList(PROJECTS, { ...ALL, client: 'lodz film' })), ['Żółty film'])
 })
 
+test('grupa klientów (S2): projekty wszystkich członków; rozwiązana albo nieznana grupa nie pasuje do niczego', () => {
+  const groups = [
+    { id: 'cg-1', name: 'Kawa i film', members: ['tchibo', 'Łódź Film'], createdAt: '', updatedAt: '' },
+    { id: 'cg-2', name: 'Stara', members: ['tchibo'], createdAt: '', updatedAt: '', deletedAt: 'x' },
+  ]
+  const query = { ...ALL, client: 'grupa:cg-1', groups }
+  assert.deepEqual(names(filterProjectList(PROJECTS, query)), ['Spot jesienny', 'Event', 'Katalog', 'Żółty film'])
+  assert.equal(lostInScope(PROJECTS, query), 1)
+  assert.deepEqual(filterProjectList(PROJECTS, { ...ALL, client: 'grupa:cg-2', groups }), [])
+  assert.deepEqual(filterProjectList(PROJECTS, { ...ALL, client: 'grupa:cg-1' }), [], 'bez listy grup')
+})
+
 test('rok po dacie księgowej; filtry łączą się ze statusem', () => {
   assert.deepEqual(names(filterProjectList(PROJECTS, { ...ALL, year: 2025 })), ['Katalog'])
   assert.deepEqual(
@@ -74,4 +86,6 @@ test('parseListPrefs: poprawny zapis wraca, wszystko inne → domyślne', () => 
   assert.deepEqual(parseListPrefs('[]'), { filter: 'all', client: '', year: null })
   assert.deepEqual(parseListPrefs(JSON.stringify({ filter: 'lead', client: 5, year: '2026' })), DEFAULT_LIST_PREFS)
   assert.deepEqual(parseListPrefs(JSON.stringify({ year: 2026.5 })).year, null)
+  // Wybrana grupa zostaje dosłownie (id grupy nie przechodzi przez `clientKey`).
+  assert.equal(parseListPrefs(JSON.stringify({ client: 'grupa:cg-AbC' })).client, 'grupa:cg-AbC')
 })

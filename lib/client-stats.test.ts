@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  clientListRows,
   clientOutcomes,
   clientPayments,
   clientRhythm,
@@ -9,11 +10,17 @@ import {
   clientSummaries,
   describeGap,
   describeSince,
+  groupStats,
+  listClientRows,
   listClients,
   median,
   monthsBetween,
+  totalRevenue,
   type ClientEvent,
 } from './client-stats'
+import { scopeRevenue } from './clients'
+import type { ClientGroup } from './client-groups'
+import { moneyLedger } from './money-loop'
 import type { Project } from './project-types'
 
 const TODAY = '2026-10-10'
@@ -332,4 +339,184 @@ test('describeGap / describeSince: dni, tygodnie, miesiące, lata z odmianą', (
   assert.equal(describeGap(1826), 'co ~5 lat')
   assert.equal(describeSince(0), 'w tym miesiącu')
   assert.equal(describeSince(7), '7 mies. temu')
+})
+
+// ── Najlepsza wiedza z pętli pieniędzy (S2, glue po T6) ───────────────────────
+
+/** Plan jak z wyceny: ryczałt 8,5 %, koszty z planu. */
+const plan = (sumaNetto: number, koszty = 0) => {
+  const podatek = sumaNetto * 0.085
+  return { sumaNetto, koszty, podatek, zysk: sumaNetto - podatek - koszty, marzaPct: 0, computedAt: '' }
+}
+
+let evSeq = 0
+const money = (kind: string, start: string, projectId: string, data: Record<string, unknown> = {}) => ({
+  id: `m${++evSeq}`,
+  kind,
+  start,
+  projectId,
+  data,
+})
+
+const ledger = (projects: Project[], events: ReturnType<typeof money>[]) =>
+  new Map(moneyLedger(projects, events, TODAY).map((m) => [m.id, m]))
+
+test('pętla: przychód klienta = faktury (gdy pełne), rok po dacie faktury, zysk po kosztach z Realizacji', () => {
+  const equal = project({ client: 'Tchibo', date: '2026-02-01', financials: plan(10_000) })
+  // Koszty z Realizacji wyższe niż plan (6 000 > 5 000) — liczą się od razu.
+  const lower = project({
+    client: 'Tchibo',
+    date: '2026-03-01',
+    financials: plan(20_000, 5_000),
+    costs: [{ id: 'c1', category: 'ekipa', unitCost: 6_000 }],
+  })
+  const extraLater = project({ client: 'Tchibo', date: '2025-11-20', financials: plan(8_000) })
+  const advance = project({ client: 'Tchibo', status: 'won', date: '2026-06-01', financials: plan(30_000) })
+  const nothing = project({ client: 'Tchibo', status: 'won', date: '2026-07-01' })
+  const other = project({ client: 'Inny', date: '2026-04-01', financials: plan(40_000) })
+  const projects = [equal, lower, extraLater, advance, nothing, other]
+  const events = [
+    money('invoice_sent', '2026-02-05', equal.id, { amountNetto: 10_000 }),
+    // Rabat po wycenie: zrealizowany, faktura niższa — liczy się faktura.
+    money('invoice_sent', '2026-03-10', lower.id, { amountNetto: 18_000 }),
+    // Dodatek zafakturowany w następnym roku: oba lata.
+    money('invoice_sent', '2025-11-25', extraLater.id, { amountNetto: 8_000 }),
+    money('extra_sale', '2026-01-15', extraLater.id, { what: 'surówka', amountNetto: 2_000 }),
+    money('invoice_sent', '2026-01-20', extraLater.id, { amountNetto: 2_000 }),
+    // Zaliczka w realizacji: plan, aż do Zrealizowanego.
+    money('invoice_sent', '2026-06-05', advance.id, { amountNetto: 9_000 }),
+  ]
+  const m = ledger(projects, events)
+  const s = clientStats(projects, [], 'tchibo', TODAY, m)!
+
+  assert.equal(s.revenue, 10_000 + 18_000 + 10_000 + 30_000)
+  assert.equal(s.missingFinancials, 1, 'zlecenie bez planu i faktur: brak kwoty, nie 0 zł z planu')
+  assert.equal(s.invoicedJobs, 3)
+  assert.deepEqual(
+    s.years.map((y) => [y.year, y.revenue, y.jobs]),
+    [
+      [2026, 10_000 + 18_000 + 2_000 + 30_000, 5],
+      [2025, 8_000, 1],
+    ]
+  )
+  // Udział w roku liczony z przychodu firmy w tym roku (z Innym).
+  assert.equal(s.years[0].sharePct, (60_000 / (60_000 + 40_000)) * 100)
+  assert.equal(totalRevenue(projects, 2025, m), 8_000)
+  // Zysk = najlepsza wiedza: przychód − podatek − koszty (plan, bo brak kosztów w Realizacji).
+  const expectedProfit = [equal, lower, extraLater, advance].reduce((sum, p) => sum + m.get(p.id)!.profit!, 0)
+  assert.equal(s.profit, expectedProfit)
+  assert.ok(Math.abs(m.get(lower.id)!.profit! - (18_000 - 18_000 * 0.085 - 6_000)) < 0.001)
+  assert.ok(Math.abs(m.get(equal.id)!.profit! - (10_000 - 850)) < 0.001)
+  // Słupki wielkości: wartości z najlepszej wiedzy.
+  assert.deepEqual(
+    s.size.points.map((point) => point.value),
+    [10_000, 10_000, 18_000, 30_000]
+  )
+  // Bez faktur wszystko jak dotąd (plan) — ta sama liczba, co bez mapy.
+  const planOnly = clientStats(projects, [], 'tchibo', TODAY, ledger(projects, []))!
+  const noMap = clientStats(projects, [], 'tchibo', TODAY)!
+  assert.equal(planOnly.revenue, noMap.revenue)
+  assert.deepEqual(planOnly.years, noMap.years)
+})
+
+test('pętla: filtr klienta w Projektach liczy najlepszą wiedzę, rok po kawałkach przychodu', () => {
+  const a = project({ client: 'Tchibo', date: '2025-12-15', financials: plan(10_000) })
+  const b = project({ client: 'Tchibo', status: 'won', date: '2026-02-01' })
+  const m = ledger([a, b], [money('invoice_sent', '2026-01-10', a.id, { amountNetto: 11_000 })])
+  assert.deepEqual(scopeRevenue([a, b], ['tchibo'], null, m), { revenue: 11_000, countedProjects: 2 })
+  assert.deepEqual(scopeRevenue([a, b], ['tchibo'], 2026, m), { revenue: 11_000, countedProjects: 2 })
+  assert.deepEqual(scopeRevenue([a, b], ['tchibo'], 2025, m), { revenue: 0, countedProjects: 0 })
+  // Bez pętli — jak dawniej: plan po dacie księgowej.
+  assert.deepEqual(scopeRevenue([a, b], ['tchibo'], 2025), { revenue: 10_000, countedProjects: 1 })
+})
+
+// ── Grupy klientów (S2) ──────────────────────────────────────────────────────
+
+const GROUP: ClientGroup = {
+  id: 'cg-1',
+  name: 'CIONET + DE Group',
+  members: ['cionet', 'de group sp. z o.o.', 'stara nazwa'],
+  createdAt: '',
+  updatedAt: '',
+}
+
+function groupProjects() {
+  return [
+    project({ client: 'CIONET', date: '2025-06-01', financials: plan(10_000), leadSource: 'polecenie', name: 'Pierwszy' }),
+    project({ client: 'CIONET', status: 'lost', date: '2025-09-01', financials: plan(5_000) }),
+    project({ client: 'DE Group Sp. z o.o.', date: '2026-01-10', financials: plan(20_000) }),
+    project({
+      client: 'DE Group Sp. z o.o.',
+      date: '2026-04-10',
+      financials: plan(30_000),
+      contact: { name: 'Ewa', email: 'ewa@de.pl', phone: '' },
+    }),
+    project({ client: 'cionet', status: 'quote', date: '2026-09-01', financials: plan(9_000) }),
+    project({ client: 'Tchibo', date: '2026-02-01', financials: plan(40_000) }),
+  ]
+}
+
+test('strona grupy: liczby po wszystkich członkach — przychód, udział, powroty, trend, skuteczność, płatności, kontakt', () => {
+  const projects = groupProjects()
+  const events: ClientEvent[] = [
+    ev('invoice_sent', '2026-01-12', projects[2].id),
+    ev('invoice_paid', '2026-02-11', projects[2].id), // 30 dni
+    ev('invoice_sent', '2025-06-03', projects[0].id),
+    ev('invoice_paid', '2025-06-13', projects[0].id), // 10 dni
+  ]
+  const s = groupStats(projects, events, GROUP, TODAY)
+  assert.equal(s.key, 'grupa:cg-1')
+  assert.equal(s.name, 'CIONET + DE Group')
+  assert.equal(s.revenue, 60_000)
+  assert.equal(s.sharePct, 60)
+  assert.deepEqual(s.outcomes, { total: 5, open: 1, won: 3, lost: 1, winRatePct: 75 })
+  assert.deepEqual(s.rhythm.jobDates, ['2025-06-01', '2026-01-10', '2026-04-10'])
+  assert.equal(s.rhythm.lastJobDate, '2026-04-10')
+  assert.equal(s.rhythm.openQuoteSinceLast, true)
+  assert.equal(s.size.trend, 'rosnie')
+  assert.equal(s.payments.medianDays, 20)
+  assert.equal(s.firstSource.projectName, 'Pierwszy')
+  assert.equal(s.contact?.contact.name, 'Ewa')
+  assert.equal(s.repeat, true)
+  assert.deepEqual(
+    s.members.map((m) => [m.key, m.name, m.projectCount, m.jobCount, m.revenue, m.empty]),
+    [
+      ['cionet', 'CIONET', 3, 1, 10_000, false],
+      ['de group sp. z o.o.', 'DE Group Sp. z o.o.', 2, 2, 50_000, false],
+      ['stara nazwa', 'stara nazwa', 0, 0, 0, true],
+    ]
+  )
+  // Pojedynczy członek dalej ma swoją stronę z własnymi liczbami.
+  assert.equal(clientStats(projects, events, 'cionet', TODAY)!.revenue, 10_000)
+  // Grupa bez żadnego projektu też ma stronę.
+  const empty = groupStats(projects, [], { ...GROUP, members: ['nikt'] }, TODAY)
+  assert.equal(empty.revenue, 0)
+  assert.deepEqual(empty.projects, [])
+})
+
+test('lista Klienci: grupa to jeden wiersz z członkami w środku; szukanie po członku; sortowanie po liczbach grupy', () => {
+  const projects = groupProjects()
+  const rows = clientListRows(projects, [GROUP, { ...GROUP, id: 'cg-old', deletedAt: 'x' }], TODAY)
+  assert.deepEqual(
+    rows.map((r) => [r.kind, r.summary.key, r.summary.revenue]),
+    [
+      ['group', 'grupa:cg-1', 60_000],
+      ['client', 'tchibo', 40_000],
+    ]
+  )
+  const group = rows[0]
+  assert.equal(group.kind === 'group' && group.members.length, 3)
+  assert.equal(group.summary.projectCount, 5)
+  assert.equal(group.summary.jobCount, 3)
+  assert.equal(group.summary.lastDate, '2026-09-01')
+  assert.equal(group.summary.repeat, true)
+  assert.deepEqual(listClientRows(rows, 'przychod', 'de grou').map((r) => r.summary.key), ['grupa:cg-1'])
+  assert.deepEqual(listClientRows(rows, 'przychod', 'cionet + de').map((r) => r.summary.key), ['grupa:cg-1'])
+  assert.deepEqual(listClientRows(rows, 'przychod', 'tchi').map((r) => r.summary.key), ['tchibo'])
+  assert.deepEqual(listClientRows(rows, 'ostatnio').map((r) => r.summary.key), ['grupa:cg-1', 'tchibo'])
+  // Bez grup lista jest taka jak dawniej.
+  assert.deepEqual(
+    clientListRows(projects, [], TODAY).map((r) => r.summary.key),
+    clientSummaries(projects, TODAY).map((c) => c.key)
+  )
 })

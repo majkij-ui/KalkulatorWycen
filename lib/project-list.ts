@@ -4,18 +4,23 @@
  * Filtry z notatek (wszystko / tylko projekty / tylko wyceny, „Ukryj
  * nieprzyjęte") plus klient i rok z T3. Klienta filtrujemy po kluczu
  * znormalizowanym (`clientKey`), więc „Tchibo" i „tchibo " to ten sam wybór.
+ * Zamiast klienta można wybrać grupę klientów (S2): `grupa:<id>` =
+ * projekty wszystkich jej członków (`client-groups.ts`).
  *
  * Moduł czysty — testy w `project-list.test.ts`.
  */
 
 import { clientKey } from './clients'
+import { isGroupScope, scopeKeys, type ClientGroup } from './client-groups'
 import { PROJECT_FILTERS, matchesFilter, toYear, type Project, type ProjectFilter } from './project-types'
 
 export interface ProjectListQuery {
   filter: ProjectFilter
   hideLost: boolean
-  /** Klucz klienta (`clientKey`); pusty = wszyscy. */
+  /** Klucz klienta (`clientKey`) albo `grupa:<id>`; pusty = wszyscy. */
   client: string
+  /** Grupy klientów — potrzebne, gdy `client` wskazuje grupę. */
+  groups?: ClientGroup[]
   /** Rok daty księgowej; `null` = wszystkie lata. */
   year: number | null
   /** Tekst z wyszukiwarki (nazwa albo klient). */
@@ -26,7 +31,11 @@ type ListedProject = Pick<Project, 'name' | 'client' | 'status' | 'date'>
 
 /** Filtry poza statusem — wspólne dla listy i licznika ukrytych nieprzyjętych. */
 function matchesScope(project: ListedProject, query: ProjectListQuery): boolean {
-  if (query.client && clientKey(project.client ?? '') !== query.client) return false
+  if (query.client) {
+    // Grupa, której nie ma (rozwiązana), nie pasuje do niczego — ekran pokazuje wtedy wszystkich.
+    const keys = scopeKeys(query.client, query.groups ?? []) ?? new Set<string>()
+    if (!keys.has(clientKey(project.client ?? ''))) return false
+  }
   if (query.year !== null && toYear(project.date) !== query.year) return false
   const q = clientKey(query.search ?? '')
   if (q && !clientKey(project.name ?? '').includes(q) && !clientKey(project.client ?? '').includes(q)) return false
@@ -82,7 +91,7 @@ export function parseListPrefs(raw: string | null): ProjectListPrefs {
   const r = value as Record<string, unknown>
   return {
     filter: (PROJECT_FILTERS as readonly unknown[]).includes(r.filter) ? (r.filter as ProjectFilter) : 'all',
-    client: typeof r.client === 'string' ? clientKey(r.client) : '',
+    client: typeof r.client === 'string' ? (isGroupScope(r.client) ? r.client : clientKey(r.client)) : '',
     year: typeof r.year === 'number' && Number.isInteger(r.year) && r.year > 1900 && r.year < 3000 ? r.year : null,
   }
 }

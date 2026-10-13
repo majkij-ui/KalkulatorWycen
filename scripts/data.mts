@@ -60,6 +60,7 @@ import { plural } from '../lib/pl-plural'
 import { campaignSchema } from '../lib/marketing-types'
 import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
 import { callSheetSchema } from '../lib/call-sheet-types'
+import { clientGroupSchema } from '../lib/client-groups'
 import {
   equipmentItemSchema,
   fixedCostSchema,
@@ -81,6 +82,7 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'crew-roles.json': crewRoleSchema,
   'crew.json': crewMemberSchema,
   'call-sheets.json': callSheetSchema,
+  'client-groups.json': clientGroupSchema,
 }
 
 type Item = Record<string, unknown> & { id: string }
