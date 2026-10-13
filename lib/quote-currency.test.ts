@@ -279,3 +279,42 @@ test('etykiety: „zł" po polsku, „PLN" po angielsku, „€" w obu; zapis ja
   assert.equal(formatMoney(1852.5, 'EUR', { decimals: 0 }), '1853 €')
   assert.equal(formatMoney(12345, 'EUR', { decimals: 0 }), '12\u00a0345 €')
 })
+
+test('tam i z powrotem bez edycji: kwoty wpisane wracają co do grosza, w obie strony', () => {
+  const pln = mergeQuoteDataPartial({
+    cateringRate: 100,
+    overtimeHourlyRate: 150,
+    extraRevisionPrice: 200,
+    actorRightsTransferAmount: 1500,
+    detailedShootingDays: [day({ dayAdjustment: -500, externalRentals: [{ id: 'r', label: 'Cooke', amount: 900 }] })],
+  })
+  const eur = switchQuoteCurrency(pln, 'EUR', { rate: 4.3806 })
+  assert.equal(eur.overtimeHourlyRate, 34)
+  const back = switchQuoteCurrency(eur, 'PLN')
+  assert.equal(back.cateringRate, 100)
+  assert.equal(back.overtimeHourlyRate, 150)
+  assert.equal(back.extraRevisionPrice, 200)
+  assert.equal(back.actorRightsTransferAmount, 1500)
+  assert.equal(back.detailedShootingDays[0].dayAdjustment, -500)
+  assert.equal(back.detailedShootingDays[0].externalRentals![0].amount, 900)
+  // I znów na EUR: te same euro co za pierwszym razem, także po zmianie kursu w międzyczasie.
+  const again = switchQuoteCurrency(back, 'EUR', { rate: 4.5 })
+  assert.equal(again.overtimeHourlyRate, 34)
+  assert.equal(again.actorRightsTransferAmount, 342)
+})
+
+test('tam i z powrotem po edycji: zmieniona kwota przelicza się po kursie, reszta wraca dokładnie', () => {
+  const pln = mergeQuoteDataPartial({ cateringRate: 100, overtimeHourlyRate: 150 })
+  const eur = { ...switchQuoteCurrency(pln, 'EUR', { rate: 4 }), cateringRate: 30 }
+  const back = switchQuoteCurrency(eur, 'PLN')
+  assert.equal(back.cateringRate, 120)
+  assert.equal(back.overtimeHourlyRate, 150)
+})
+
+test('nowy dzień albo nowa wypożyczalnia po przełączeniu przeliczają się zwykle', () => {
+  const pln = mergeQuoteDataPartial({ detailedShootingDays: [day({ id: 'a', dayAdjustment: -400 })] })
+  const eur = switchQuoteCurrency(pln, 'EUR', { rate: 4 })
+  const withDay = { ...eur, detailedShootingDays: [...eur.detailedShootingDays, day({ id: 'b', dayAdjustment: -25 })] }
+  const back = switchQuoteCurrency(withDay, 'PLN')
+  assert.deepEqual(back.detailedShootingDays.map((d) => d.dayAdjustment), [-400, -100])
+})

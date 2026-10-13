@@ -326,6 +326,16 @@ export interface QuoteData {
   /** Dzień tabeli NBP, z której pochodzi kurs (YYYY-MM-DD); brak = wpisany ręcznie. */
   exchangeRateDate?: string
   exchangeRateSource?: 'nbp' | 'manual'
+  /**
+   * Kwoty wpisane w wycenie sprzed ostatniej zmiany waluty: powrót bez ich
+   * edycji przywraca je co do grosza (PLN → EUR → PLN nie zmienia 150 zł w 149 zł).
+   */
+  currencySwitchMemo?: {
+    /** Waluta, z której przełączono. */
+    from: 'PLN' | 'EUR'
+    /** Pole → [kwota przed zmianą, kwota po zmianie]. */
+    amounts: Record<string, [number, number]>
+  }
 }
 
 export const defaultQuoteData: QuoteData = {

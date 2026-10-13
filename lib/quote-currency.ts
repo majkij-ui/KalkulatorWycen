@@ -104,27 +104,48 @@ export const TYPED_AMOUNT_FIELDS = [
   'overtimeHourlyRate',
 ] as const satisfies readonly (keyof QuoteData)[]
 
-type AmountMapper = (amount: number) => number
+/** `path` — stały adres pola, np. `cateringRate`, `day:<id>:dayAdjustment`, `rental:<dzień>:<id>`. */
+type AmountMapper = (amount: number, path: string) => number
 
 function mapTypedAmounts(data: QuoteData, map: AmountMapper): QuoteData {
   const next: QuoteData = { ...data }
   for (const field of TYPED_AMOUNT_FIELDS) {
     const value = data[field]
-    if (typeof value === 'number' && Number.isFinite(value)) next[field] = map(value)
+    if (typeof value === 'number' && Number.isFinite(value)) next[field] = map(value, field)
   }
   next.detailedShootingDays = safeArray<ShootingDay>(data.detailedShootingDays).map((day) => {
     const nextDay: ShootingDay = { ...day }
     if (typeof day.dayAdjustment === 'number' && Number.isFinite(day.dayAdjustment)) {
-      nextDay.dayAdjustment = map(day.dayAdjustment)
+      nextDay.dayAdjustment = map(day.dayAdjustment, `day:${day.id}:dayAdjustment`)
     }
     if (Array.isArray(day.externalRentals)) {
       nextDay.externalRentals = day.externalRentals.map((rental) =>
-        typeof rental.amount === 'number' && Number.isFinite(rental.amount) ? { ...rental, amount: map(rental.amount) } : rental
+        typeof rental.amount === 'number' && Number.isFinite(rental.amount)
+          ? { ...rental, amount: map(rental.amount, `rental:${day.id}:${rental.id}`) }
+          : rental
       )
     }
     return nextDay
   })
   return next
+}
+
+/**
+ * Przeliczenie kwot wpisanych przy zmianie waluty z zapamiętaniem par
+ * (przed, po). Powrót do waluty, z której przełączono, przywraca kwotę sprzed
+ * zmiany, jeśli od tamtej pory jej nie ruszano; zmienioną przelicza `convert`.
+ */
+function convertTypedAmounts(data: QuoteData, from: QuoteCurrency, to: QuoteCurrency, convert: (amount: number) => number): QuoteData {
+  const memo = data.currencySwitchMemo
+  const restoring = memo && memo.from === to ? memo.amounts : null
+  const amounts: Record<string, [number, number]> = {}
+  const converted = mapTypedAmounts(data, (amount, path) => {
+    const remembered = restoring?.[path]
+    const value = remembered && remembered[1] === amount ? remembered[0] : convert(amount)
+    amounts[path] = [amount, value]
+    return value
+  })
+  return { ...converted, currencySwitchMemo: { from, amounts } }
 }
 
 // ── Widoki wyceny ────────────────────────────────────────────────────────────
@@ -197,8 +218,9 @@ export interface ExchangeRateChoice {
 /**
  * Przełącza walutę wyceny. Kwoty wpisane w wycenie przeliczają się RAZ po
  * kursie i zaokrąglają do pełnych jednostek (euro albo złotych); cennik,
- * katalog i role nie wymagają przeliczenia (są w zł). Powrót do PLN zostawia
- * kurs w danych — przy ponownym przejściu na EUR podpowiada się sam.
+ * katalog i role nie wymagają przeliczenia (są w zł). Powrót bez edycji tych
+ * kwot przywraca je dokładnie (`currencySwitchMemo`). Powrót do PLN zostawia
+ * kurs w danych.
  */
 export function switchQuoteCurrency(data: QuoteData, next: QuoteCurrency, choice?: ExchangeRateChoice): QuoteData {
   const from = quoteMoney(data)
@@ -208,11 +230,11 @@ export function switchQuoteCurrency(data: QuoteData, next: QuoteCurrency, choice
     const converted =
       from.currency === 'EUR'
         ? data
-        : mapTypedAmounts(data, (amount) => Math.round(amount / to.rate))
+        : convertTypedAmounts(data, 'PLN', 'EUR', (amount) => Math.round(amount / to.rate))
     return withRate({ ...converted, currency: 'EUR' }, choice)
   }
   if (from.currency === 'PLN') return data.currency === 'EUR' ? { ...data, currency: 'PLN' } : data
-  const converted = mapTypedAmounts(data, (amount) => Math.round(amount * from.rate))
+  const converted = convertTypedAmounts(data, 'EUR', 'PLN', (amount) => Math.round(amount * from.rate))
   return { ...converted, currency: 'PLN' }
 }
 
