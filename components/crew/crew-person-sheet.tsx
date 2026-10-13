@@ -489,6 +489,7 @@ export function CrewPersonSheet({
               variant="outline"
               onClick={() => onMerge(member)}
               className="h-8 gap-1.5 border-white/10 text-xs"
+              aria-label="Scal z inną osobą"
               title="Ta sama osoba wpisana kilka razy — połącz karty"
             >
               <GitMerge className="size-3.5" />

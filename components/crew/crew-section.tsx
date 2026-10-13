@@ -372,6 +372,7 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
             variant="outline"
             onClick={() => setSheet({ type: 'merge', targetId: null })}
             className="h-9 gap-1.5 border-white/10"
+            aria-label="Scal osoby"
             title="Ta sama osoba wpisana kilka razy — połącz karty"
           >
             <GitMerge className="size-4" />

@@ -121,7 +121,7 @@ test('karta po scaleniu: pola docelowej wygrywają, braki uzupełnia pierwszy du
   assert.equal(merged.createdAt, BEZ.createdAt)
   assert.equal(
     merged.notes,
-    'Scalono z „Łukasz - ze sprzętem" (13.10.2026): stawka 1500 zł · ma Ronina.\nScalono z „Łukasz" (13.10.2026).'
+    'Scalono z „Łukasz - ze sprzętem" (13.10.2026): stawka 1\u00a0500 zł · ma Ronina.\nScalono z „Łukasz" (13.10.2026).'
   )
   // Docelowa bez stawki bierze pierwszą stawkę duplikatu; ta sama stawka nie trafia do notatki.
   const noRate = mergedCrewMember(member('t', 'T'), [member('s', 'S', { rate: 700 })], AT)
@@ -130,7 +130,7 @@ test('karta po scaleniu: pola docelowej wygrywają, braki uzupełnia pierwszy du
   // Sprzeczna stawka w roli zostaje przy docelowej, duplikatu w notatce.
   const clash = mergedCrewMember(SAM, [member('s', 'S', { roleRates: [{ roleId: 'rezOp', rate: 1400 }] })], AT, () => 'ReżOp')
   assert.deepEqual(clash.roleRates?.[0], { roleId: 'rezOp', rate: 1300 })
-  assert.match(clash.notes!, /ReżOp 1400 zł/)
+  assert.match(clash.notes!, /ReżOp 1\s400 zł/)
 })
 
 test('planCrewMerge: brak docelowej, brak duplikatów albo duplikat usunięty → null; docelowa wśród duplikatów się nie liczy', () => {

@@ -96,7 +96,7 @@ export function crewDuplicateGroups(members: CrewMember[]): CrewMember[][] {
 
 // ── Karta po scaleniu ────────────────────────────────────────────────────────
 
-const plnText = (amount: number) => `${amount.toLocaleString('pl-PL')} zł`
+const plnText = (amount: number) => `${amount.toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
 
 function dateText(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split('-')
