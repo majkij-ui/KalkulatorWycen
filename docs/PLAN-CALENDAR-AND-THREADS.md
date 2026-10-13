@@ -467,6 +467,11 @@ or if a type chip stops standing out (≥ 4.5:1) against any project tile.
 The first usable milestone is **T1 + T2 + T3**: a calendar you can fill by hand and project threads
 that start at the lead. T4 then fills in 2026 for you.
 
+**2026-10-13 — after the first test drive:** the next plan lives in
+[PLAN-AFTER-TEST-DRIVE.md](PLAN-AFTER-TEST-DRIVE.md) (two bugs with root causes, margin layers,
+subscriptions, client groups, role rates per person, gear that never goes on set, EUR quotes, period
+report; sessions S1–S5).
+
 **Merged and installed 2026-10-11:** T6 (money loop, §6e) and T5b (call sheet, §6f; its section was
 also numbered 6e on its branch and is renumbered). 453 tests. On the real data, read-only: all 10 saved
 quotes compute identically before and after; Finance 2026 = 159,613 zł revenue and 76,571 zł project
