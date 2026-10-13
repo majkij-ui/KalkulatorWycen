@@ -127,6 +127,11 @@ test('nowa grupa i dodanie członka przenoszą klienta z innej grupy (klient jes
   assert.equal(moved.find((g) => g.id === 'cg-22')!.members.length, 2)
   assert.equal(moved.find((g) => g.id === 'cg-1')!.updatedAt, NOW)
   assert.equal(addGroupMembers(GROUPS, 'nie-ma', ['x'], NOW), GROUPS)
+  // Rozwiązana grupa zostaje nietknięta — jej „Cofnij" przywraca pełny skład.
+  const dissolved = { ...PHH, deletedAt: NOW }
+  const withDissolved = addGroupMembers([CIONET, dissolved], 'cg-1', ['interferie s.a.'], NOW)
+  assert.equal(withDissolved[1], dissolved)
+  assert.deepEqual(withDissolved[0].members, [...CIONET.members, 'interferie s.a.'])
 })
 
 test('usunięcie członka, zmiana nazwy, rozwiązanie z „Cofnij" tylko tego rozwiązania', () => {
@@ -186,6 +191,8 @@ test('poza grupą: nowa pisownia podobna do członka, spoza grup; klient w grupi
   assert.equal(strayGroup(GROUPS, 'interferie medical spa')?.id, 'cg-22')
   assert.equal(strayGroup(GROUPS, 'de group'), CIONET)
   assert.equal(strayGroup(GROUPS, 'cionet'), null, 'członek nie jest „poza"')
+  // Członek jednej grupy podobny do członka innej — dalej nie jest „poza grupą".
+  assert.equal(strayGroup([CIONET, group('cg-x', 'Inna', ['cionet polska'])], 'cionet'), null)
   assert.equal(strayGroup(GROUPS, 'tchibo'), null)
   assert.equal(strayGroup(GROUPS, 'polska akcja humanitarna'), null, '„Polska" i forma prawna nic nie znaczą')
   const directory = clientDirectory([p('1', 'CIONET'), p('2', 'CIONET Polska'), p('3', 'Tchibo'), p('4', 'Interferie Medical SPA')])

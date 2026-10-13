@@ -148,6 +148,7 @@ test('Realizacja: wiersz bez roli bierze pierwszą rolę osoby i jej stawkę w t
   const patch = costRowPersonPatch({ role: '', unitCost: 0 }, LUKASZ, ROLES)
   assert.equal(patch.role, 'Operator')
   assert.equal(patch.unitCost, 1500)
+  assert.equal(costRowPersonPatch({ role: '  ', unitCost: 0 }, LUKASZ, ROLES).role, 'Operator', 'same spacje = brak roli')
   const noRoles = costRowPersonPatch({ role: '  ', unitCost: 0 }, person({ roleIds: [], rate: 800 }), ROLES)
   assert.equal('role' in noRoles, false)
   assert.equal(noRoles.unitCost, 800)
@@ -182,12 +183,15 @@ test('crewMemberById: scalony duplikat prowadzi do osoby, która została; zwyk�
     person({ id: 'd', deletedAt: 'x' }),
     person({ id: 'e', deletedAt: 'x', mergedInto: 'f' }),
     person({ id: 'f', deletedAt: 'x', mergedInto: 'e' }),
+    // Żywa karta ze starym wskazaniem (np. po „Cofnij" w innej wersji) jest sobą.
+    person({ id: 'g', mergedInto: 'a' }),
   ]
   assert.equal(crewMemberById(members, 'a')?.id, 'a')
   assert.equal(crewMemberById(members, 'b')?.id, 'a')
   assert.equal(crewMemberById(members, 'c')?.id, 'a')
   assert.equal(crewMemberById(members, 'd'), null)
   assert.equal(crewMemberById(members, 'e'), null)
+  assert.equal(crewMemberById(members, 'g')?.id, 'g')
   assert.equal(crewMemberById(members, 'zz'), null)
   assert.equal(crewMemberById(members, undefined), null)
 })

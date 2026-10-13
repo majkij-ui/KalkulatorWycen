@@ -77,7 +77,7 @@ export function withCrewPerson(
 ): QuoteCrewLine {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { personId, personName, ...rest } = line
-  if (!person) return { ...rest, costRate: crewCostRate(role, null, line.clientRate, line.roleId) }
+  if (!person) return { ...rest, costRate: crewCostRate(role, null, line.clientRate) }
   return {
     ...rest,
     personId: person.id,

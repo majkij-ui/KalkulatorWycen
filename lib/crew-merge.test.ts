@@ -103,6 +103,8 @@ test('crewDuplicateGroups: to samo pierwsze imię (bez polskich znaków i myśln
     ]
   )
   assert.deepEqual(crewDuplicateGroups([OLA]), [])
+  // Jednoliterowe „imię" (inicjał) to za mało, żeby zgadywać.
+  assert.deepEqual(crewDuplicateGroups([member('j1', 'J.'), member('j2', 'J Kowalski')]), [])
 })
 
 test('karta po scaleniu: pola docelowej wygrywają, braki uzupełnia pierwszy duplikat, stawki, które się nie mieszczą, idą do notatki', () => {
@@ -142,6 +144,11 @@ test('planCrewMerge: brak docelowej, brak duplikatów albo duplikat usunięty �
     null
   )
   assert.deepEqual(planCrewMerge({ ...base, targetId: 'cm-bez', sourceIds: ['cm-ze', 'cm-bez', 'cm-ze'] })!.sourceIds, ['cm-ze'])
+  // Jeden z duplikatów zniknął w międzyczasie (usunięty w innym oknie) — nic nie scalamy po cichu.
+  assert.equal(
+    planCrewMerge({ ...base, members: [BEZ, { ...ZE, deletedAt: 'x' }, SAM], targetId: 'cm-bez', sourceIds: ['cm-ze', 'cm-sam'] }),
+    null
+  )
 })
 
 test('scalenie przepina wiersze Realizacji (po id i po imieniu, także usunięte), zostawia imiona i obce wiersze', () => {
@@ -152,7 +159,7 @@ test('scalenie przepina wiersze Realizacji (po id i po imieniu, także usunięte
       crew('c3', 'Ola', { personId: 'cm-ola' }),
       crew('c4', 'Łukasz - op bez sprzętu', { personId: 'cm-bez' }),
       crew('c5', 'Łukasz - ze sprzętem', { personId: 'cm-ze', deletedAt: 'y' }),
-      { id: 'c6', category: 'dojazd', label: 'Łukasz', unitCost: 50 }, // nie ekipa — imię nic nie znaczy
+      { id: 'c6', category: 'dojazd', person: 'Łukasz', unitCost: 50 }, // nie ekipa — imię nic nie znaczy
     ]),
     project('p2', [crew('c7', 'Ola', { personId: 'cm-ola' })]),
   ]
@@ -176,7 +183,7 @@ test('scalenie przepina wiersze Realizacji (po id i po imieniu, także usunięte
       ['c3', 'cm-ola', 'Ola'],
       ['c4', 'cm-bez', 'Łukasz - op bez sprzętu'],
       ['c5', 'cm-bez', 'Łukasz - ze sprzętem'],
-      ['c6', undefined, undefined],
+      ['c6', undefined, 'Łukasz'],
     ]
   )
   assert.equal(costs[4].deletedAt, 'y')

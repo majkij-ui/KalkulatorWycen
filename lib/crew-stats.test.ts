@@ -155,3 +155,15 @@ test('ekipa przy projektach klienta: tylko te projekty, tylko zlecenia; imiona s
   )
   assert.deepEqual(outside, ['Kasia'], 'Ania tylko w wycenie')
 })
+
+test('podział na role: koszt projektu bez dnia liczy się do wypłat roli, ale nie do jej średniej dziennej', () => {
+  const people = [member('a', 'Ola')]
+  const projects = [
+    project('p1', 'done', '2026-03-10', [
+      crew('c1', 'Ola', 1000, { role: 'Montażysta' }),
+      crew('c2', 'Ola', 3000, { role: 'Montażysta', dayId: undefined }),
+    ]),
+  ]
+  const [role] = computeCrewStats(people, projects, { now: NOW }).get('a')!.roles
+  assert.deepEqual(role, { name: 'Montażysta', count: 2, days: 1, paid: 4000, avgDayRate: 1000 })
+})
