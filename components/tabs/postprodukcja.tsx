@@ -27,6 +27,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
+import { usePriceDisplay } from '@/lib/price-display'
 import { DEFAULT_PRICING, DEFAULT_FORMAT_KEY, REPORTAZ_FORMAT_KEY } from '@/lib/pricing-config'
 import { cn } from '@/lib/utils'
 import type {
@@ -193,11 +194,13 @@ function DeliverableCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { pricingConfig, updatePricingValue } = useQuote()
+  const display = usePriceDisplay()
   const pc = pricingConfig.postprodukcja
 
   const formatKey = toFormatKey(del.format)
   const unitPrice: number = typeof pc[formatKey] === 'number' ? (pc[formatKey] as number) : 0
-  const lineTotal = unitPrice * del.ilosc
+  // Razem w walucie wyceny (S3): cena z cennika w EUR to pełne euro.
+  const lineTotal = display.toDisplay(unitPrice) * del.ilosc
   const isFormatModified = formatKey in DP.postprodukcja
     ? unitPrice !== DP.postprodukcja[formatKey]
     : false
@@ -274,7 +277,7 @@ function DeliverableCard({
           />
           {del.ilosc > 1 && (
             <span className="text-xs text-zinc-500 whitespace-nowrap">
-              × {del.ilosc} = {lineTotal.toLocaleString('pl-PL')} zł
+              × {del.ilosc} = {lineTotal.toLocaleString('pl-PL')} {display.unit}
             </span>
           )}
           {canRemove && (
@@ -363,6 +366,8 @@ function FormatManagerDialog({
     removeCustomFormat,
     formatCurrency,
   } = useQuote()
+  // Cennik formatów jest w zł; w wycenie w EUR pokazujemy i przyjmujemy euro (S3).
+  const display = usePriceDisplay()
   const [newName, setNewName] = useState('')
   const [newPrice, setNewPrice] = useState('')
   const [editingFormatKey, setEditingFormatKey] = useState<string | null>(null)
@@ -373,7 +378,7 @@ function FormatManagerDialog({
     const name = newName.trim()
     const price = Number(newPrice)
     if (!name || Number.isNaN(price) || price < 0) return
-    addCustomFormat(name, price)
+    addCustomFormat(name, display.fromDisplay(price))
     setNewName('')
     setNewPrice('')
   }
@@ -382,7 +387,7 @@ function FormatManagerDialog({
     const name = newName.trim()
     const price = Number(newPrice)
     if (!editingFormatKey || !name || Number.isNaN(price) || price < 0) return
-    editCustomFormat(editingFormatKey, name, price)
+    editCustomFormat(editingFormatKey, name, display.fromDisplay(price))
     setNewName('')
     setNewPrice('')
     setEditingFormatKey(null)
@@ -391,7 +396,7 @@ function FormatManagerDialog({
   const handleEdit = (formatKey: string) => {
     setEditingFormatKey(formatKey)
     setNewName(formatLabel(formatKey))
-    setNewPrice(String(getFormatStandardPrice(formatKey)))
+    setNewPrice(String(display.toDisplay(getFormatStandardPrice(formatKey))))
   }
 
   const handleClose = (next: boolean) => {
@@ -425,7 +430,7 @@ function FormatManagerDialog({
               type="number"
               min={0}
               step={100}
-              placeholder="Cena (Standard)"
+              placeholder={`Cena (${display.unit})`}
               value={newPrice}
               onChange={(e) => setNewPrice(e.target.value)}
               className="w-28 border-white/10 bg-zinc-900/50 text-white placeholder:text-zinc-500"
@@ -451,7 +456,7 @@ function FormatManagerDialog({
                     className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-zinc-900/30 px-3 py-2"
                   >
                     <span className="text-sm text-white">{displayName}</span>
-                    <span className="tabular-nums text-sm text-zinc-400">{formatCurrency(standardPrice)}</span>
+                    <span className="tabular-nums text-sm text-zinc-400">{formatCurrency(display.toDisplay(standardPrice))}</span>
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
                         type="button"
@@ -495,6 +500,7 @@ export function PostprodukcjaTab() {
     updateDeliverable,
     availableFormats,
     pricingConfig,
+    clientPricing,
     updatePricingValue,
     formatCurrency,
   } = useQuote()
@@ -508,7 +514,7 @@ export function PostprodukcjaTab() {
   const sliderStep = unit === 'dni' ? 0.5 : 1
   const crudeRateKey = unit === 'dni' ? 'montazZaDzien' : 'montazZaGodzine'
   const crudeRate: number = typeof pc[crudeRateKey] === 'number' ? (pc[crudeRateKey] as number) : 0
-  const crudeTotal = count * crudeRate
+  const crudeTotal = count * (clientPricing.postprodukcja[crudeRateKey] ?? 0)
 
   return (
     <motion.div

@@ -12,6 +12,8 @@
 import { useMemo, useState } from 'react'
 import { Check, Gift, Layers, Minus, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { useQuote } from '@/lib/quote-context'
+import { usePriceDisplay } from '@/lib/price-display'
+import { currencyUnit, priceFromPln } from '@/lib/quote-currency'
 import { useEquipment } from '@/lib/equipment-context'
 import { useCrew } from '@/lib/crew-context'
 import { addKitCrewToQuote, kitCrewFromLines } from '@/lib/quote-crew'
@@ -55,9 +57,10 @@ function amountOf(text: string): number {
 
 /** Rabat na sprzęt, sumy, PDF i odświeżenie stawek — nad dniami zdjęciowymi. */
 export function GearQuotePanel() {
-  const { data, updateField, updateShootingDay, formatCurrency } = useQuote()
+  const { data, clientData, updateField, updateShootingDay, formatCurrency } = useQuote()
   const { items } = useEquipment()
-  const figures = useMemo(() => quoteGearFigures(data), [data])
+  // Kwoty w walucie wyceny (S3): stawki z katalogu (zł) w EUR jako pełne euro.
+  const figures = useMemo(() => quoteGearFigures(clientData), [clientData])
   const days = data.detailedShootingDays ?? []
   const stale = useMemo(() => staleGearLines(days, items), [days, items])
   const noRate = useMemo(() => {
@@ -142,7 +145,7 @@ export function GearQuotePanel() {
       {noRate > 0 && (
         <p className="mt-2 text-xs text-amber-300/80">
           {noRate} {noRate === 1 ? 'pozycja nie ma' : 'pozycje nie mają'} stawki rentalowej w katalogu, więc liczy się
-          za 0 zł. Uzupełnij stawkę w sekcji Sprzęt, potem „zaktualizuj".
+          za 0. Uzupełnij stawkę w sekcji Sprzęt, potem „zaktualizuj".
         </p>
       )}
     </div>
@@ -158,7 +161,7 @@ export function DayGearSection({
   day: ShootingDay
   onUpdate: <K extends keyof ShootingDay>(field: K, value: ShootingDay[K]) => void
 }) {
-  const { data, formatCurrency } = useQuote()
+  const { data, clientData, formatCurrency, money } = useQuote()
   const { items, kits, addKit } = useEquipment()
   // Zestawy niosą też ekipę (T9b): dodanie zestawu dokłada role i ludzi do dnia.
   const { quoteRoles: roles, people } = useCrew()
@@ -168,7 +171,9 @@ export function DayGearSection({
   const rentals = day.externalRentals ?? []
   const discount = data.gearDiscountPercent
   const factor = 1 - discount / 100
-  const figures = dayGearFigures(day, discount)
+  // Ceny dnia w walucie wyceny (S3): ten sam dzień z przeliczonymi stawkami.
+  const clientDay = clientData.detailedShootingDays.find((d) => d.id === day.id) ?? day
+  const figures = dayGearFigures(clientDay, discount)
 
   const setGear = (next: QuoteGearLine[]) => onUpdate('gear', next)
   const setRentals = (next: QuoteExternalRental[]) => onUpdate('externalRentals', next)
@@ -194,7 +199,8 @@ export function DayGearSection({
           {lines.map((line) => {
             const item = byId.get(line.itemId)
             const owned = item ? unitsOwned(item) : line.qty
-            const value = line.rate * line.qty
+            const rate = priceFromPln(line.rate, money)
+            const value = rate * line.qty
             const charged = line.gratis ? 0 : value * factor
             return (
               <li
@@ -207,7 +213,7 @@ export function DayGearSection({
                     {!item && <span className="ml-1.5 text-[10px] text-amber-300/70">usunięty z katalogu</span>}
                   </div>
                   <div className="text-[11px] text-zinc-500">
-                    {line.rate > 0 ? `${formatCurrency(line.rate)}/dzień${line.qty > 1 ? ' za szt.' : ''}` : 'bez stawki'}
+                    {line.rate > 0 ? `${formatCurrency(rate)}/dzień${line.qty > 1 ? ' za szt.' : ''}` : 'bez stawki'}
                   </div>
                 </div>
                 {owned > 1 || line.qty > 1 ? (
@@ -282,7 +288,7 @@ export function DayGearSection({
               <Input
                 inputMode="decimal"
                 value={rental.amount ? String(rental.amount) : ''}
-                placeholder="zł"
+                placeholder={currencyUnit(money.currency)}
                 onChange={(e) =>
                   setRentals(rentals.map((r) => (r.id === rental.id ? { ...r, amount: amountOf(e.target.value) } : r)))
                 }
@@ -380,6 +386,7 @@ function GearPicker({
   onKit: (kit: GearKit) => void
 }) {
   const [query, setQuery] = useState('')
+  const display = usePriceDisplay()
   const inDay = new Set(lines.map((l) => l.itemId))
   const needle = normalize(query.trim())
 
@@ -472,7 +479,7 @@ function GearPicker({
                       {units > 1 && <span className="ml-1 text-xs text-zinc-500">×{units}</span>}
                     </span>
                     <span className={`text-[11px] tabular-nums ${item.rentalDayRate > 0 ? 'text-zinc-500' : 'text-amber-300/70'}`}>
-                      {item.rentalDayRate > 0 ? `${Math.round(item.rentalDayRate)} zł` : 'bez stawki'}
+                      {item.rentalDayRate > 0 ? `${Math.round(display.toDisplay(item.rentalDayRate))} ${display.unit}` : 'bez stawki'}
                     </span>
                   </button>
                 )

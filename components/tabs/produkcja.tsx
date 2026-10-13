@@ -207,9 +207,11 @@ function DayCard({
   onRemove: () => void
   canRemove: boolean
 }) {
-  const { data, pricingConfig, updatePricingValue, marginMultiplier, formatCurrency } = useQuote()
+  const { data, pricingConfig, clientData, clientPricing, updatePricingValue, marginMultiplier, formatCurrency } = useQuote()
   const pc = pricingConfig.produkcja
   const crewNames = day.crewNames ?? {}
+  // Ceny dnia w walucie wyceny (S3): ten sam dzień z przeliczonymi stawkami.
+  const clientDay = clientData.detailedShootingDays.find((d) => d.id === day.id) ?? day
   // Stare pola sprzętu (kamery, standard/rental…) tylko gdy dzień ich używa.
   const [showLegacy, setShowLegacy] = useState(() => hasLegacyGear(day))
   // Stare liczniki ekipy (ReżOp … Statysta) tak samo — T9b.
@@ -221,11 +223,11 @@ function DayCard({
 
   // Live day subtotal displayed at the bottom of the card. Sprzęt z katalogu i
   // wypożyczalnia bez marży (lib/quote-gear.ts), tak jak w sumie wyceny.
-  const gear = dayGearFigures(day, data.gearDiscountPercent)
+  const gear = dayGearFigures(clientDay, data.gearDiscountPercent)
   // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki.
-  const crew = dayCrewFigures(day)
+  const crew = dayCrewFigures(clientDay)
   const dayBaseNetto =
-    computeShootingDayNet(day, pc) * marginMultiplier +
+    computeShootingDayNet(clientDay, clientPricing.produkcja) * marginMultiplier +
     (crew.ekipa + crew.obsada) * marginMultiplier +
     gear.charged +
     gear.external
@@ -407,12 +409,12 @@ function DayCard({
 }
 
 export function ProdukcjaTab() {
-  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, updatePricingValue, formatCurrency } = useQuote()
+  const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, clientPricing, updatePricingValue, formatCurrency } = useQuote()
   const pc = pricingConfig.produkcja
   const isDetailed = data.isDetailedProdukcja
   const days = data.detailedShootingDays ?? []
   const dniZdjeciowe = Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))
-  const crudeDaysTotal = dniZdjeciowe * pc.stawkaOperatoraSzybkaWycena
+  const crudeDaysTotal = dniZdjeciowe * clientPricing.produkcja.stawkaOperatoraSzybkaWycena
 
   return (
     <motion.div

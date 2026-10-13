@@ -11,8 +11,8 @@
  * co w planie; ryczałt ten sam co w planie.
  */
 
-import { crewLineKey, isRentalCostKey, resolveProfitSections, computeProfitSummary, type ProfitLine } from './profit-calc'
-import { computeQuoteTotals, computeTotalCrewDays, resolveSnapshot, type FinancialsSource } from './quote-financials'
+import { crewLineKey, isRentalCostKey, resolveProfitSections, type ProfitLine } from './profit-calc'
+import { quotePlnPlan, quoteViews, resolveSnapshot, computeTotalCrewDays, type FinancialsSource } from './quote-financials'
 import { isBlankQuoteData } from './project-save'
 import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts } from './project-costs'
 import type { Project, ProjectCost, ProjectFinancials } from './project-types'
@@ -86,9 +86,7 @@ export function planFromQuote(snapshot: FinancialsSource | null | undefined): Pl
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return null
   const { data, pricing, margin } = resolved
-  const totals = computeQuoteTotals(data, margin, pricing)
-  const { sections, totalCost } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))
-  const summary = computeProfitSummary(data.profitTransferAmount ?? totals.sumaNetto, data.profitTaxRatePercent, totalCost)
+  const { sections, summary } = quotePlnPlan(data, pricing, margin)
   return {
     source: 'quote',
     revenue: summary.sumaNetto,
@@ -232,7 +230,7 @@ export function plannedCrew(snapshot: FinancialsSource | null | undefined): Plan
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return []
   const { data, pricing } = resolved
-  const { sections } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))
+  const { sections } = resolveProfitSections(quoteViews(data, pricing).cost, pricing, computeTotalCrewDays(data))
   const lines = sections.flatMap((s) => s.lines).filter((line) => line.isCost && !line.isCustom)
 
   if (!data.isDetailedProdukcja) {

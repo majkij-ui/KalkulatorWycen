@@ -10,6 +10,15 @@
       ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "export",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/serve-export.mjs",
+        "3010"
+      ],
+      "port": 3010
     }
   ]
 }

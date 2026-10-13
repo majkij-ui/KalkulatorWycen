@@ -443,6 +443,103 @@ exactly what the loop gives a project without invoices — the old tests pass un
 - One rate per role; „with / without gear" for the same role would need several rates per role (see above).
 - The phone top-bar section icons have no accessible names (pre-existing).
 
-## 7. S3 as built
+## 7. S3 as built *(2026-10-13, branch `claude/s3-currency-pdf-export-18e90b`)*
 
-*(not built yet — S3 writes here)*
+**Audit first (shown to M.J. before building).** Every money display was listed: header total and tab chips,
+price-list prices in every tab, quick-mode totals, day totals, G5 gear and T9b crew lines, Dodatkowe (fuel,
+catering, lodging, actor fee, revisions, overtime), the plan (old Profit), Realizacja, project list, Finance, the
+PDF tab and the printed PDF. The calculator was all zł; EUR existed only on the PDF. Mixed or glitchy spots found:
+- terms in EUR PDFs printed PLN amounts with „zł"/„PLN" baked into the templates (the one real EUR-on-PDF quote in
+  the hub, Tchibo, prints „150 PLN net" next to € amounts);
+- the actor-fee line always said „zł"/„PLN"; descriptions written before a flip kept the old currency;
+- the English PDF printed amounts in „zł" but its terms in „PLN";
+- flipping PLN → EUR → PLN rounded twice, and a rate change after a flip, raised a false „Ceny w PDF różnią się"
+  warning, whose text showed EUR numbers with „zł";
+- without an NBP fetch the rate silently stayed 4.30;
+- nothing outside the PDF could show the EUR total. Tchibo: the PDF says 1,460 € (rows edited by hand), the
+  calculator 5,600 zł (1,281 €), Finance 5,600 zł;
+- net-first (#9) was already in the hub since 18.08 (`9b755df`); the old QuoteGen still makes gross the big
+  orange number, so the PDF in note #9 most likely came from the old app.
+
+**Decided with M.J. (2026-10-13):** converted price-list values round to **whole euros**; labels **„zł" in
+Polish, „PLN" in English, „€" in both**; **my costs stay in zł** in the calculator and the plan.
+
+**Data (additive, no version bump; old quotes have none of it and read as PLN):**
+- `QuoteData.currency?: 'PLN' | 'EUR'`, `exchangeRate?` (zł per 1 €), `exchangeRateDate?` (NBP table day),
+  `exchangeRateSource?: 'nbp' | 'manual'`, `currencySwitchMemo?` (typed amounts before/after the last switch).
+- `LocalPdfState.followsQuote?`: drafts built since S3; a draft without it is the old EUR-on-PDF mode.
+
+**Where amounts live** (`lib/quote-currency.ts`):
+
+| Amount | Stored in | In an EUR quote |
+|---|---|---|
+| Price list (incl. formats), catalogue gear rate on the line, crew role rate on the line | PLN, always | shown and computed as zł ÷ rate, **whole euros**; a price typed in € is saved as € × rate (whole euros come back exactly) |
+| Typed in the quote: day adjustment, rental amount, actor fee, catering and lodging rate, revision and overtime price | the quote's currency | € as typed; a rate change does not move them |
+| My costs: person rate, role cost, plan overrides and own items, transfer amount, fuel price | PLN, always | zł; fuel passes to the client price at the exact rate |
+| Financials (`sumaNetto`, costs, tax, profit), plan, gear revenue | PLN | revenue = quote total × frozen rate; costs from the PLN view (typed € amounts × rate) |
+
+**Real-life cases → behaviour** (each has a test):
+
+| Case | What happens |
+|---|---|
+| Old PLN quote (any shape) | identical numbers and PDF — both views are the same objects (`quote-currency-legacy.test.ts`) |
+| Old EUR-on-PDF quote (Tchibo) | stays a PLN quote; the PDF prints exactly as before; banner: „Przełącz wycenę na EUR po kursie 4,3699" or „Wróć do PLN na PDF" |
+| PLN → EUR | rate from NBP (today's table fetched on open, any day selectable) or typed; typed amounts convert once to whole euros |
+| EUR → PLN | typed amounts × rate to whole złoty; **unedited ones come back exactly** (150 zł → 34 € → 150 zł) |
+| Rate changed in EUR | price-list, gear and role prices follow; typed € amounts stay; the PDF warns if its prices now differ |
+| Currency switched with a PDF draft | row prices from the calculator in the new currency; hand-edited prices converted at the rate; hand-edited descriptions kept; a notice says so |
+| EUR quote saved | financials in zł (Tchibo-like quick quote at 4,3699: 1,852.50 € → 8,095.24 zł; costs 5,100 zł as in PLN) |
+| Transfer amount set in the plan | it is zł and replaces total × rate, as in PLN |
+
+**Screens:**
+- Calculator header: PLN | EUR switch next to the margin slider; in EUR „kurs 4,3806 · NBP z 13.10.2026" (click to
+  change the rate) and „≈ 14 199 zł" under the total. The panel explains what converts. The digit roll no longer
+  eats the space before „zł"/„€", and a currency switch does not flash a delta.
+- All tabs show prices in the quote currency (InlinePrice through `lib/price-display.tsx`); crew lines show „421 €/dzień
+  · mój koszt 1200 zł"; Dodatkowe labels say „(€)"; fuel stays „zł/l" with „≈ 0,12 €/km".
+- Plan (Realizacja): all zł, plus „Wycena w EUR: 1 852,50 € × kurs 4,3699 = 8 095,24 zł".
+- Price list dialog stays in zł and says so in an EUR quote.
+- PDF tab: the same currency switch (the old „Waluta PDF" toggle, rate field and NBP button are gone, except
+  through the legacy banner); row inputs show their unit; the stale-price warning uses the PDF currency.
+- PDF and preview: net leads; VAT and gross are a quiet line (normal weight, muted, smaller).
+
+**Code:** `lib/quote-currency.ts` (rules, views, switch, memo, labels), `lib/quote-financials.ts` (`quoteViews`,
+`quotePlnPlan`, `buildQuoteBreakdown`), `lib/pdf-draft.ts` (PDF draft moved out of the tab: build, coerce,
+`reconcilePdfCurrency`, `isLegacyEurDraft`), `lib/pdf-texts-config.ts` (`buildTermsAndConditions` with money),
+`lib/pdf-currency.ts`, `lib/nbp-fx.ts` (chosen day), `lib/price-display.tsx`, `components/quote-currency-control.tsx`;
+the context exposes `money`, `clientData`, `clientPricing`, `costData`, `sumaNettoPln`, `breakdownPln`,
+`formatPln`, `setQuoteCurrency`, `setExchangeRate`. `produkcja-crew.tsx` changed for display only (S2 also edits it).
+
+**Tests:** 487 (454 before): `quote-currency-legacy.test.ts` (golden, 4 fixtures: old-app v2 snapshot, hub quote
+with G5 gear and T9b crew, quick quote, old EUR-on-PDF quote — financials, totals, PDF split, plan lines and plan,
+planned crew, gear revenue, PDF rows and descriptions PL/EN, terms, restored legacy rows and their calculator
+reference; values from the code before S3; one deliberate change: the English PDF in PLN now says „PLN" in the
+gear-value sentence too), `quote-currency.test.ts` (17), `pdf-draft.test.ts` (9), `nbp-fx.test.ts` (3).
+49 deliberate mutations, 47 caught; 2 are equivalent today (the memo direction guard, which only matters with a
+third currency; planned crew reading the client view, whose crew cost rates equal the PLN view).
+
+**Verified** on the production export (`npm run build`, served by `scripts/serve-export.mjs`, launch config
+„export") in the browser on seeded localStorage: a hub quote with gear, crew, rental, discount, catering, actor fee
+and day adjustment (14,199 zł → EUR at NBP 4.3806 = 3,241 €, every tab, crew and gear lines, day total and PDF rows
+checked by hand; terms 34 € / 46 €; no „zł" in the EUR PDF; back to PLN with a hand-edited row: notice, row
+converted, and after the memo fix exactly 14,199 zł again); the Tchibo-shaped old quote (prints 150/630/260/420 =
+1,460 €, banner, switch to EUR keeps the rows, saved financials 8,095.24 zł, plan all zł); NBP fetch for today;
+no console errors besides the missing Vercel analytics script. The hub data folder was only read.
+
+**Desktop-only checks for the main session** (Tauri app):
+1. „Pobierz z NBP" in the currency panel works in WKWebView (new range URL on the same host as before).
+2. „Pobierz PDF" for an EUR quote: native save dialog, file written, „€" renders in Archivo / JetBrains Mono in the
+   html2canvas capture, page cuts still at row boundaries, quiet VAT/gross line legible.
+3. The date field and the popover in the sticky header (z-index, focus) in the app window.
+4. On the real data: Tchibo opens with the legacy banner and prints as before; nothing changes unless a banner
+   button is clicked.
+5. After merging S2: crew lines in an EUR quote still show the client rate in € and „mój koszt" in zł.
+
+**Known limits / next:**
+- Free text is not converted („500PLN netto" typed in Opcje dodatkowe stays as typed).
+- Invoices stay in zł in the money loop: an EUR job's plan is total × frozen rate until an invoice (in zł) replaces
+  it; FX differences show as Δ. Invoice amounts in EUR are not modelled.
+- The kit and role databases stay in zł (new-role form „zł / dzień"); only the quote converts.
+- Rate edits do not rewrite descriptions already in a draft (as with any calculator change since T9b); the stale
+  warning shows when prices differ.
+- The calculator's tab strip overflows by a few pixels below ~900 px (existed before S3).

@@ -13,6 +13,7 @@ import { Counter } from '@/components/counter'
 import { GlassCard } from '@/components/glass-card'
 import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
+import { currencyUnit, fromPln } from '@/lib/quote-currency'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import { computeFuelRatePerKm } from '@/lib/profit-calc'
 import { dayActorCount } from '@/lib/quote-crew'
@@ -66,8 +67,10 @@ function LogistykaRow({ label, icon: Icon, children }: { label: string; icon: Re
 }
 
 export function DodatkoweTab() {
-  const { data, updateField, calculateTotalCrewDays, pricingConfig, updatePricingValue, breakdown, formatCurrency } = useQuote()
+  const { data, updateField, calculateTotalCrewDays, pricingConfig, updatePricingValue, breakdown, formatCurrency, money } = useQuote()
   const totalCrewDays = calculateTotalCrewDays()
+  // Kwoty wpisane tutaj są w walucie wyceny (S3); paliwo to mój koszt w zł.
+  const unit = currencyUnit(money.currency)
   const pc = pricingConfig.dodatkowe
 
   const dodPhase = breakdown.find(p => p.category === 'Dodatkowe')
@@ -162,6 +165,11 @@ export function DodatkoweTab() {
                 <span className="tabular-nums text-zinc-400">
                   {computeFuelRatePerKm(data).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                   zł/km
+                  {money.currency !== 'PLN' && (
+                    <>
+                      {' '}(≈ {fromPln(computeFuelRatePerKm(data), money).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {unit}/km)
+                    </>
+                  )}
                 </span>
               </div>
               {travelNetto > 0 && (
@@ -206,7 +214,7 @@ export function DodatkoweTab() {
                   className="overflow-hidden space-y-3 pl-9"
                 >
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                    <span className="text-sm text-zinc-400">Stawka za osobodzień (PLN)</span>
+                    <span className="text-sm text-zinc-400">Stawka za osobodzień ({unit})</span>
                     <Counter
                       compact
                       label=""
@@ -308,7 +316,7 @@ export function DodatkoweTab() {
                   className="overflow-hidden space-y-3 pl-9"
                 >
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                    <span className="text-sm text-zinc-400">Stawka za osobodzień (PLN)</span>
+                    <span className="text-sm text-zinc-400">Stawka za osobodzień ({unit})</span>
                     <Counter
                       compact
                       label=""
@@ -457,7 +465,7 @@ export function DodatkoweTab() {
                   <div className="flex flex-wrap items-center gap-4 pl-9">
                     <div className="flex items-center gap-2">
                       <Label htmlFor="actor-rights-amount" className="text-xs text-zinc-400 whitespace-nowrap">
-                        Kwota za aktora (PLN)
+                        Kwota za aktora ({unit})
                       </Label>
                       <Input
                         id="actor-rights-amount"
@@ -525,7 +533,7 @@ export function DodatkoweTab() {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}{' '}
-                        zł
+                        {unit}
                       </span>{' '}
                       (doliczone do Produkcji, bez marży)
                     </div>
@@ -592,7 +600,7 @@ export function DodatkoweTab() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Label htmlFor="extra-revision-price" className="text-xs text-zinc-400 whitespace-nowrap">
-                          Koszt dodatkowej rundy (PLN)
+                          Koszt dodatkowej rundy ({unit})
                         </Label>
                         <Input
                           id="extra-revision-price"
@@ -651,7 +659,7 @@ export function DodatkoweTab() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Label htmlFor="overtime-hourly-rate" className="text-xs text-zinc-400 whitespace-nowrap">
-                          Koszt nadgodziny (PLN/osobę)
+                          Koszt nadgodziny ({unit}/osobę)
                         </Label>
                         <Input
                           id="overtime-hourly-rate"
@@ -689,7 +697,11 @@ export function DodatkoweTab() {
           <Textarea
             value={data.opcjeDodatkowe}
             onChange={(e) => updateField('opcjeDodatkowe', e.target.value)}
-            placeholder={'np. - ujęcia z drona FPV: 1000 zł\n- dodatkowa wersja 9:16 (Reels): 800 zł'}
+            placeholder={
+              money.currency === 'EUR'
+                ? 'np. - ujęcia z drona FPV: 250 €\n- dodatkowa wersja 9:16 (Reels): 190 €'
+                : 'np. - ujęcia z drona FPV: 1000 zł\n- dodatkowa wersja 9:16 (Reels): 800 zł'
+            }
             className="bg-black/40 border-white/10 resize-none min-h-[100px] text-sm text-white placeholder:text-zinc-500"
           />
         </GlassCard>

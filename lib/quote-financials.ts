@@ -11,11 +11,12 @@
 
 import { defaultQuoteData, type QuoteData, type ShootingDay } from './quote-types'
 import { migratePricingConfig, DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
-import { getTotals } from './quote-calc'
+import { getBreakdownWithPricing, getTotals, type LineItemRow, type PhaseBreakdown } from './quote-calc'
 import { dayCrewFigures } from './quote-crew'
 import { computeProfitSummary, resolveProfitSections } from './profit-calc'
 import { safeArray, safeNum } from './safe-numbers'
 import type { ProjectFinancials } from './project-types'
+import { clientPricing, clientQuoteData, costQuoteData, quoteMoney, toPln, type QuoteMoney } from './quote-currency'
 
 const VAT_RATE = 0.23
 
@@ -103,6 +104,53 @@ export function computeQuoteTotals(
   }
 }
 
+/**
+ * Fazy wyceny z cateringiem i noclegami dopisanymi do „Dodatkowe" — to, co
+ * pokazują zakładki kalkulatora i z czego powstają wiersze PDF.
+ */
+export function buildQuoteBreakdown(
+  data: QuoteData,
+  marginMultiplier: number,
+  pricing: PricingConfigShape
+): PhaseBreakdown[] {
+  const { cateringCost, lodgingCost } = computeQuoteTotals(data, marginMultiplier, pricing)
+  const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricing)
+  if (!(cateringCost > 0 || lodgingCost > 0)) return baseBreakdown
+  const autoCrewDays = computeTotalCrewDays(data)
+  const phases = baseBreakdown.map((p) => ({ ...p, items: [...(p.items ?? [])] }))
+  const dodIndex = phases.findIndex((p) => p.category === 'Dodatkowe')
+  if (dodIndex === -1) return baseBreakdown
+  const dod = phases[dodIndex]
+  const extraItems: LineItemRow[] = []
+  if (cateringCost > 0) {
+    const qty = data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays
+    extraItems.push({
+      label: 'Catering',
+      value: `${qty} osobodni`,
+      quantity: qty,
+      unitPriceNet: data.cateringRate,
+      lineNetto: cateringCost,
+    })
+  }
+  if (lodgingCost > 0) {
+    const qty = data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays
+    extraItems.push({
+      label: 'Noclegi',
+      value: `${qty} osobodni`,
+      quantity: qty,
+      unitPriceNet: data.lodgingRate,
+      lineNetto: lodgingCost,
+    })
+  }
+  const newItems = [...dod.items, ...extraItems]
+  phases[dodIndex] = {
+    ...dod,
+    items: newItems,
+    phaseNetto: newItems.reduce((s, i) => s + i.lineNetto, 0),
+  }
+  return phases
+}
+
 /** Minimalny kształt migawki potrzebny do policzenia finansów (jak `loadQuoteSnapshot`). */
 export interface FinancialsSource {
   data?: Partial<QuoteData>
@@ -136,6 +184,36 @@ export function resolveSnapshot(
   return { data, pricing, margin }
 }
 
+/**
+ * Dwa widoki wyceny (S3): `client` w walucie wyceny (ceny dla klienta,
+ * kalkulator, PDF) i `cost` w PLN (plan kosztów, finanse). Wycena w PLN ma
+ * oba widoki identyczne z danymi — te same obiekty.
+ */
+export interface QuoteViews {
+  money: QuoteMoney
+  client: { data: QuoteData; pricing: PricingConfigShape }
+  cost: QuoteData
+}
+
+export function quoteViews(data: QuoteData, pricing: PricingConfigShape): QuoteViews {
+  const money = quoteMoney(data)
+  return {
+    money,
+    client: { data: clientQuoteData(data, money), pricing: clientPricing(pricing, money) },
+    cost: costQuoteData(data, money),
+  }
+}
+
+/** Plan wyceny w PLN: przychód (suma × kurs albo kwota przelewu), koszty, zysk. */
+export function quotePlnPlan(data: QuoteData, pricing: PricingConfigShape, margin: number) {
+  const views = quoteViews(data, pricing)
+  const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
+  const sumaNettoPln = toPln(totals.sumaNetto, views.money)
+  const profit = resolveProfitSections(views.cost, pricing, computeTotalCrewDays(data))
+  const summary = computeProfitSummary(data.profitTransferAmount ?? sumaNettoPln, data.profitTaxRatePercent, profit.totalCost)
+  return { views, totals, sumaNettoPln, sections: profit.sections, totalCost: profit.totalCost, summary }
+}
+
 export function computeSnapshotFinancials(
   snapshot: FinancialsSource | null | undefined,
   now: Date = new Date()
@@ -143,11 +221,7 @@ export function computeSnapshotFinancials(
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return null
   const { data, pricing, margin } = resolved
-
-  const totals = computeQuoteTotals(data, margin, pricing)
-  const { totalCost } = resolveProfitSections(data, pricing, computeTotalCrewDays(data))
-  const transferAmount = data.profitTransferAmount ?? totals.sumaNetto
-  const summary = computeProfitSummary(transferAmount, data.profitTaxRatePercent, totalCost)
+  const { summary } = quotePlnPlan(data, pricing, margin)
 
   return {
     sumaNetto: summary.sumaNetto,

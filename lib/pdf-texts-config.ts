@@ -1,7 +1,7 @@
 /**
  * User-editable text strings that appear in the PDF output.
  * Company info is shown in the printable quote header.
- * Terms templates are used by getTermsAndConditions() in quote-context.
+ * Terms templates are used by buildTermsAndConditions() (via getTermsAndConditions() in quote-context).
  *
  * Each field has a `_en` twin for the English-language PDF mode. Both are edited
  * side-by-side in the PDF Texts modal; the language toggle on the PDF preview
@@ -120,14 +120,107 @@ export function savePdfTextsConfig(config: PdfTextsConfig): void {
   }
 }
 
+/**
+ * Waluta kwot w punktach „Uwagi" (S3). Szablony mają walutę wpisaną po
+ * tokenie („{rate} zł", „{rate} PLN"); token razem z tą jednostką zamienia się
+ * na kwotę z jednostką waluty PDF. W PLN bez jednostki w szablonie — sama
+ * liczba, jak dotąd.
+ */
+export interface TermsMoney {
+  currency: 'PLN' | 'EUR'
+  /** Przeliczenie kwoty z wyceny na walutę PDF (tylko szkic sprzed S3: PLN → EUR). */
+  convert?: (amount: number) => number
+}
+
+const TERMS_PLN: TermsMoney = { currency: 'PLN' }
+
+function termUnit(currency: TermsMoney['currency'], lang: 'pl' | 'en'): string {
+  if (currency === 'EUR') return '€'
+  return lang === 'en' ? 'PLN' : 'zł'
+}
+
+function renderMoneyToken(
+  tpl: string,
+  token: string,
+  amount: number,
+  money: TermsMoney,
+  lang: 'pl' | 'en'
+): string {
+  const value = money.convert ? money.convert(amount) : amount
+  const unit = termUnit(money.currency, lang)
+  const pattern = new RegExp(`\\{${token}\\}(\\s*(?:zł|PLN|EUR|€)(?![\\p{L}]))?`, 'u')
+  return tpl.replace(pattern, (_match, unitPart?: string) =>
+    unitPart || money.currency !== 'PLN' ? `${String(value)} ${unit}` : String(value)
+  )
+}
+
 /** Replace {hours} and {rate} tokens in termOvertime */
-export function renderTermOvertime(template: string, hours: number, rate: number): string {
+export function renderTermOvertime(
+  template: string,
+  hours: number,
+  rate: number,
+  money: TermsMoney = TERMS_PLN,
+  lang: 'pl' | 'en' = 'pl'
+): string {
   const tpl = typeof template === 'string' ? template : DEFAULT_PDF_TEXTS.termOvertime
-  return tpl.replace('{hours}', String(hours)).replace('{rate}', String(rate))
+  return renderMoneyToken(tpl.replace('{hours}', String(hours)), 'rate', rate, money, lang)
 }
 
 /** Replace {count} and {price} tokens in termRevisions */
-export function renderTermRevisions(template: string, count: number, price: number): string {
+export function renderTermRevisions(
+  template: string,
+  count: number,
+  price: number,
+  money: TermsMoney = TERMS_PLN,
+  lang: 'pl' | 'en' = 'pl'
+): string {
   const tpl = typeof template === 'string' ? template : DEFAULT_PDF_TEXTS.termRevisions
-  return tpl.replace('{count}', String(count)).replace('{price}', String(price))
+  return renderMoneyToken(tpl.replace('{count}', String(count)), 'price', price, money, lang)
+}
+
+/** Pola wyceny, od których zależą punkty „Uwagi" w PDF. */
+export interface TermsQuoteFields {
+  copyrightType: 'licencja' | 'przekazanie'
+  includeOvertimeInfo: boolean
+  standardDayHours: number
+  overtimeHourlyRate: number
+  includeRevisionsInfo: boolean
+  includedRevisions: number
+  extraRevisionPrice: number
+}
+
+/** Punkty „Uwagi" w PDF z aktywnych przełączników wyceny, w języku PDF. */
+export function buildTermsAndConditions(
+  data: TermsQuoteFields,
+  pdfTexts: PdfTextsConfig,
+  lang: 'pl' | 'en' = 'pl',
+  /** Waluta PDF: wycena w EUR podaje kwoty w euro, stary szkic EUR przelicza z PLN. */
+  money: TermsMoney = TERMS_PLN
+): string[] {
+  const isEn = lang === 'en'
+  // Pick EN twin when active, but fall back gracefully to PL (and finally
+  // an empty string handled below) if a saved config is missing the EN field.
+  const pickEn = (en: string | undefined, pl: string | undefined): string =>
+    (typeof en === 'string' && en.trim() ? en : (typeof pl === 'string' ? pl : ''))
+  const tplLicencja = isEn ? pickEn(pdfTexts.termLicencja_en, pdfTexts.termLicencja) : (pdfTexts.termLicencja ?? '')
+  const tplPrzekazanie = isEn ? pickEn(pdfTexts.termPrzekazanie_en, pdfTexts.termPrzekazanie) : (pdfTexts.termPrzekazanie ?? '')
+  const tplOvertime = isEn ? pickEn(pdfTexts.termOvertime_en, pdfTexts.termOvertime) : (pdfTexts.termOvertime ?? '')
+  const tplRevisions = isEn ? pickEn(pdfTexts.termRevisions_en, pdfTexts.termRevisions) : (pdfTexts.termRevisions ?? '')
+  const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
+
+  const out: string[] = []
+  if (data.copyrightType === 'licencja' && tplLicencja) {
+    out.push(tplLicencja)
+  }
+  if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
+    out.push(tplPrzekazanie)
+  }
+  if (data.includeOvertimeInfo && tplOvertime) {
+    out.push(renderTermOvertime(tplOvertime, data.standardDayHours, data.overtimeHourlyRate, money, lang))
+  }
+  if (data.includeRevisionsInfo && tplRevisions) {
+    out.push(renderTermRevisions(tplRevisions, data.includedRevisions, data.extraRevisionPrice, money, lang))
+  }
+  if (tplNetto) out.push(tplNetto)
+  return out
 }

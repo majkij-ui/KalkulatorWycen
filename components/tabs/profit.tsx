@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { GlassCard } from '@/components/glass-card'
 import { useQuote } from '@/lib/quote-context'
+import { formatRate } from '@/lib/quote-currency'
 import {
   resolveProfitSections,
   computeProfitSummary,
@@ -125,7 +126,7 @@ function CostLineRow({ line, formatCurrency, onToggle, onQuantity, onUnitCost, o
           value={line.unitCost}
           onChange={(e) => onUnitCost(parseNonNegative(e.target.value))}
           className={`${numInputClass} w-24`}
-          aria-label="Stawka jednostkowa (PLN netto)"
+          aria-label="Stawka jednostkowa (zł netto)"
         />
         <span className="text-xs text-zinc-500">zł</span>
       </div>
@@ -262,16 +263,29 @@ function FuelCostRow({ line, fuelPrice, consumption, ratePerKm, formatCurrency, 
 }
 
 export function ProfitTab() {
-  const { data, updateField, totals, formatCurrency, pricingConfig, calculateTotalCrewDays, breakdown } = useQuote()
+  // Plan jest zawsze w zł (S3): koszty z danych w PLN, przychód = suma wyceny × kurs.
+  const {
+    data,
+    costData,
+    updateField,
+    totals,
+    sumaNettoPln,
+    formatPln: formatCurrency,
+    formatCurrency: formatQuoteCurrency,
+    money,
+    pricingConfig,
+    calculateTotalCrewDays,
+    breakdownPln: breakdown,
+  } = useQuote()
   const autoCrewDays = calculateTotalCrewDays()
 
   const { sections, totalCost } = useMemo(
-    () => resolveProfitSections(data, pricingConfig, autoCrewDays),
-    [data, pricingConfig, autoCrewDays]
+    () => resolveProfitSections(costData, pricingConfig, autoCrewDays),
+    [costData, pricingConfig, autoCrewDays]
   )
   // Kwota przelewu: ręczne nadpisanie (jeśli ustawione) albo suma netto z kalkulatora.
   const transferOverridden = data.profitTransferAmount != null
-  const transferAmount = data.profitTransferAmount ?? totals.sumaNetto
+  const transferAmount = data.profitTransferAmount ?? sumaNettoPln
   const summary = computeProfitSummary(transferAmount, data.profitTaxRatePercent, totalCost)
 
   const [openSections, setOpenSections] = useState<Record<ProfitSectionKey, boolean>>({
@@ -448,7 +462,7 @@ export function ProfitTab() {
                     <button
                       type="button"
                       onClick={() => updateField('profitTransferAmount', null)}
-                      title={`Przywróć sumę z wyceny (${formatCurrency(totals.sumaNetto)})`}
+                      title={`Przywróć sumę z wyceny (${formatCurrency(sumaNettoPln)})`}
                       aria-label="Przywróć sumę z wyceny"
                       className="text-zinc-500 transition-colors hover:text-white"
                     >
@@ -464,14 +478,20 @@ export function ProfitTab() {
                     value={Math.max(0, Number(transferAmount) || 0)}
                     onChange={(e) => updateField('profitTransferAmount', parseNonNegative(e.target.value))}
                     className={`${numInputClass} w-32`}
-                    aria-label="Kwota przelewu (netto PLN)"
+                    aria-label="Kwota przelewu (zł netto)"
                   />
                   <span className="text-xs text-zinc-500">zł</span>
                 </div>
               </div>
               {transferOverridden && (
                 <p className="text-right text-[11px] text-zinc-600">
-                  Suma z wyceny: <span className="tabular-nums">{formatCurrency(totals.sumaNetto)}</span>
+                  Suma z wyceny: <span className="tabular-nums">{formatCurrency(sumaNettoPln)}</span>
+                </p>
+              )}
+              {money.currency !== 'PLN' && (
+                <p className="text-right text-[11px] text-zinc-600">
+                  Wycena w EUR: {formatQuoteCurrency(totals.sumaNetto)} × kurs {formatRate(money.rate)} ={' '}
+                  <span className="tabular-nums">{formatCurrency(sumaNettoPln)}</span>
                 </p>
               )}
               <div className="flex items-center justify-between gap-6">

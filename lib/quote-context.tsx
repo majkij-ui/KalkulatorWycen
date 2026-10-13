@@ -5,13 +5,23 @@ import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay
 import type { PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
-import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRevisions } from './pdf-texts-config'
+import { getPdfTextsConfig, savePdfTextsConfig, buildTermsAndConditions, type TermsMoney } from './pdf-texts-config'
 import type { PortfolioCatalogueEntry } from './portfolio-catalogue'
 import { getPortfolioCatalogue, savePortfolioCatalogue } from './portfolio-catalogue'
 import type { PdfLang } from './pdf-i18n'
-import { getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
-import { safeNum } from './safe-numbers'
-import { computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial } from './quote-financials'
+import { formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
+import { buildQuoteBreakdown, computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial, quoteViews } from './quote-financials'
+import {
+  formatMoney,
+  quoteMoney,
+  switchQuoteCurrency,
+  toPln,
+  withRate,
+  type ExchangeRateChoice,
+  type QuoteCurrency,
+  type QuoteMoney,
+} from './quote-currency'
+import { PriceDisplayProvider } from './price-display'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
 import { buildPersistedSnapshot } from './storage'
 import {
@@ -30,15 +40,33 @@ interface QuoteContextValue {
   saveTemplate: (name: string) => void
   deleteTemplate: (id: string) => void
   loadTemplate: (id: string) => void
+  /** Sumy oferty w walucie wyceny (EUR w wycenie w euro). */
   totals: Totals
+  /** Kwota w walucie wyceny, np. „1 500,00 zł" / „351,00 €". */
   formatCurrency: (amount: number) => string
+  /** Kwota zawsze w zł — koszty, plan, finanse. */
+  formatPln: (amount: number) => string
   isCalculating: boolean
+  // Waluta wyceny (S3) — zasady w lib/quote-currency.ts
+  money: QuoteMoney
+  /** Dane wyceny w walucie wyceny (stawki sprzętu i ról przeliczone) — do pokazywania cen. */
+  clientData: QuoteData
+  /** Cennik w walucie wyceny (pełne euro w EUR) — do pokazywania i liczenia cen. */
+  clientPricing: PricingConfigShape
+  /** Dane wyceny w PLN — plan kosztów (Profit). */
+  costData: QuoteData
+  /** Suma netto wyceny w zł (suma × kurs w EUR). */
+  sumaNettoPln: number
+  /** Fazy wyceny w zł (do porównań w planie). */
+  breakdownPln: PhaseBreakdown[]
+  setQuoteCurrency: (next: QuoteCurrency, choice?: ExchangeRateChoice) => void
+  setExchangeRate: (choice: ExchangeRateChoice) => void
   // Margin
   marginMultiplier: number
   setMarginMultiplier: (value: number) => void
-  // Breakdown for summary & PDF
+  // Breakdown for summary & PDF (w walucie wyceny)
   breakdown: PhaseBreakdown[]
-  // Settings: custom pricing (persisted in localStorage)
+  // Settings: custom pricing (persisted in localStorage) — ZAWSZE w PLN
   pricingConfig: PricingConfigShape
   setPricingConfig: (config: PricingConfigShape) => void
   updatePricingValue: (category: keyof PricingConfigShape, key: string, value: number) => void
@@ -61,8 +89,11 @@ interface QuoteContextValue {
   removeCustomFormat: (name: string) => void
   // Osobodni (man-days) for logistics
   calculateTotalCrewDays: () => number
-  /** T&Cs for PDF "Uwagi" section – array of strings from active toggles. Defaults to Polish; pass 'en' for the English-language PDF. */
-  getTermsAndConditions: (lang?: PdfLang) => string[]
+  /**
+   * T&Cs for PDF "Uwagi" section – array of strings from active toggles. Defaults to Polish; pass 'en' for the
+   * English-language PDF. Amounts are in the quote's currency unless `money` says otherwise (pre-S3 EUR draft).
+   */
+  getTermsAndConditions: (lang?: PdfLang, money?: TermsMoney) => string[]
   resetToZero: () => void
   /** Save current pricingConfig as user-defined defaults (hard reset target) */
   saveAsDefaults: () => void
@@ -384,43 +415,12 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   }, [data])
 
   const getTermsAndConditions = useMemo(() => {
-    return function terms(lang: PdfLang = 'pl'): string[] {
-      const isEn = lang === 'en'
-      // Pick EN twin when active, but fall back gracefully to PL (and finally
-      // an empty string handled below) if a saved config is missing the EN field.
-      const pickEn = (en: string | undefined, pl: string | undefined): string =>
-        (typeof en === 'string' && en.trim() ? en : (typeof pl === 'string' ? pl : ''))
-      const tplLicencja = isEn ? pickEn(pdfTexts.termLicencja_en, pdfTexts.termLicencja) : (pdfTexts.termLicencja ?? '')
-      const tplPrzekazanie = isEn ? pickEn(pdfTexts.termPrzekazanie_en, pdfTexts.termPrzekazanie) : (pdfTexts.termPrzekazanie ?? '')
-      const tplOvertime = isEn ? pickEn(pdfTexts.termOvertime_en, pdfTexts.termOvertime) : (pdfTexts.termOvertime ?? '')
-      const tplRevisions = isEn ? pickEn(pdfTexts.termRevisions_en, pdfTexts.termRevisions) : (pdfTexts.termRevisions ?? '')
-      const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
-
-      const out: string[] = []
-      if (data.copyrightType === 'licencja' && tplLicencja) {
-        out.push(tplLicencja)
-      }
-      if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
-        out.push(tplPrzekazanie)
-      }
-      if (data.includeOvertimeInfo && tplOvertime) {
-        out.push(renderTermOvertime(tplOvertime, data.standardDayHours, data.overtimeHourlyRate))
-      }
-      if (data.includeRevisionsInfo && tplRevisions) {
-        out.push(renderTermRevisions(tplRevisions, data.includedRevisions, data.extraRevisionPrice))
-      }
-      if (tplNetto) out.push(tplNetto)
-      return out
+    return function terms(lang: PdfLang = 'pl', money?: TermsMoney): string[] {
+      return buildTermsAndConditions(data, pdfTexts, lang, money ?? { currency: quoteMoney(data).currency })
     }
   }, [
     pdfTexts,
-    data.copyrightType,
-    data.includeOvertimeInfo,
-    data.standardDayHours,
-    data.overtimeHourlyRate,
-    data.includeRevisionsInfo,
-    data.includedRevisions,
-    data.extraRevisionPrice,
+    data,
   ])
 
   const resetToZero = useCallback(() => {
@@ -631,47 +631,27 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }, 500)
   }, [templates])
 
-  const autoCrewDays = calculateTotalCrewDays()
-  const { cateringCost, lodgingCost, ...totals } = computeQuoteTotals(data, marginMultiplier, pricingConfig)
+  const setQuoteCurrency = useCallback((next: QuoteCurrency, choice?: ExchangeRateChoice) => {
+    setData((prev) => switchQuoteCurrency(prev, next, choice))
+  }, [])
 
-  const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricingConfig)
-  const breakdown =
-    cateringCost > 0 || lodgingCost > 0
-      ? (() => {
-          const phases = baseBreakdown.map((p) => ({ ...p, items: [...(p.items ?? [])] }))
-          const dodIndex = phases.findIndex((p) => p.category === 'Dodatkowe')
-          if (dodIndex === -1) return baseBreakdown
-          const dod = phases[dodIndex]
-          const extraItems: LineItemRow[] = []
-          if (cateringCost > 0) {
-            const qty = data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays
-            extraItems.push({
-              label: 'Catering',
-              value: `${qty} osobodni`,
-              quantity: qty,
-              unitPriceNet: data.cateringRate,
-              lineNetto: cateringCost,
-            })
-          }
-          if (lodgingCost > 0) {
-            const qty = data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays
-            extraItems.push({
-              label: 'Noclegi',
-              value: `${qty} osobodni`,
-              quantity: qty,
-              unitPriceNet: data.lodgingRate,
-              lineNetto: lodgingCost,
-            })
-          }
-          const newItems = [...dod.items, ...extraItems]
-          phases[dodIndex] = {
-            ...dod,
-            items: newItems,
-            phaseNetto: newItems.reduce((s, i) => s + i.lineNetto, 0),
-          }
-          return phases
-        })()
-      : baseBreakdown
+  const setExchangeRate = useCallback((choice: ExchangeRateChoice) => {
+    setData((prev) => withRate(prev, choice))
+  }, [])
+
+  // Wycena w PLN: oba widoki to te same obiekty co `data` i `pricingConfig`.
+  const views = useMemo(() => quoteViews(data, pricingConfig), [data, pricingConfig])
+  const { money } = views
+  const clientData = views.client.data
+  const clientPricing = views.client.pricing
+  const { sumaNetto, vat, sumaBrutto } = computeQuoteTotals(clientData, marginMultiplier, clientPricing)
+  const totals: Totals = { sumaNetto, vat, sumaBrutto }
+  const breakdown = buildQuoteBreakdown(clientData, marginMultiplier, clientPricing)
+  const breakdownPln =
+    money.currency === 'PLN'
+      ? breakdown
+      : breakdown.map((phase) => ({ ...phase, phaseNetto: toPln(phase.phaseNetto, money) }))
+  const formatQuoteCurrency = useCallback((amount: number) => formatMoney(amount, money.currency), [money.currency])
 
   const value: QuoteContextValue = {
     data,
@@ -681,8 +661,17 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     deleteTemplate,
     loadTemplate,
     totals,
-    formatCurrency,
+    formatCurrency: formatQuoteCurrency,
+    formatPln: formatCurrency,
     isCalculating,
+    money,
+    clientData,
+    clientPricing,
+    costData: views.cost,
+    sumaNettoPln: toPln(totals.sumaNetto, money),
+    breakdownPln,
+    setQuoteCurrency,
+    setExchangeRate,
     marginMultiplier,
     setMarginMultiplier,
     breakdown,
@@ -728,7 +717,7 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <QuoteContext.Provider value={value}>
-      {children}
+      <PriceDisplayProvider money={money}>{children}</PriceDisplayProvider>
     </QuoteContext.Provider>
   )
 }

@@ -317,6 +317,25 @@ export interface QuoteData {
   gearValueInPdf: boolean
   /** T9b: czy opisy ekipy i obsady w PDF podają imiona (domyślnie tylko role). */
   crewPeopleInPdf: boolean
+
+  // Waluta wyceny (S3, decyzja E) — zasady w `quote-currency.ts`
+  /** Waluta cen w kalkulatorze i w PDF. Brak = PLN (każda starsza wycena). */
+  currency?: 'PLN' | 'EUR'
+  /** Kurs zamrożony w wycenie: ile zł za 1 €. Wymagany, gdy `currency` = EUR. */
+  exchangeRate?: number
+  /** Dzień tabeli NBP, z której pochodzi kurs (YYYY-MM-DD); brak = wpisany ręcznie. */
+  exchangeRateDate?: string
+  exchangeRateSource?: 'nbp' | 'manual'
+  /**
+   * Kwoty wpisane w wycenie sprzed ostatniej zmiany waluty: powrót bez ich
+   * edycji przywraca je co do grosza (PLN → EUR → PLN nie zmienia 150 zł w 149 zł).
+   */
+  currencySwitchMemo?: {
+    /** Waluta, z której przełączono. */
+    from: 'PLN' | 'EUR'
+    /** Pole → [kwota przed zmianą, kwota po zmianie]. */
+    amounts: Record<string, [number, number]>
+  }
 }
 
 export const defaultQuoteData: QuoteData = {
@@ -565,10 +584,17 @@ export interface LocalPdfState {
 
   /** Language of the printed PDF (and its in-page preview). 'pl' = Polish, 'en' = English. */
   pdfLanguage: 'pl' | 'en'
-  /** Currency on the printed PDF. Internal math always stays in PLN. */
+  /**
+   * Currency of the row amounts. Since S3 it follows the quote's currency
+   * (`QuoteData.currency`) and the rows are built in that currency directly.
+   * A draft without `followsQuote` comes from before S3: there the quote was
+   * always PLN and EUR was a PDF-only conversion at `exchangeRate`.
+   */
   currency: 'PLN' | 'EUR'
-  /** EUR/PLN exchange rate used when currency = 'EUR'. Editable; can be filled via NBP fetch. */
+  /** EUR/PLN rate: the quote's frozen rate, or the old PDF-only rate in a pre-S3 draft. */
   exchangeRate: number
+  /** True for drafts built since S3, whose currency follows the quote. */
+  followsQuote?: boolean
 
   rows: Record<PdfRowKey, PdfRowState>
 

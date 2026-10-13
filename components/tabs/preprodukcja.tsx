@@ -30,13 +30,14 @@ const item = {
 const DP = DEFAULT_PRICING
 
 export function PreprodukcjaTab() {
-  const { data, updateField, pricingConfig, updatePricingValue, formatCurrency } = useQuote()
+  const { data, updateField, pricingConfig, clientPricing, updatePricingValue, formatCurrency } = useQuote()
   const pc = pricingConfig.preprodukcja
   const isDetailed = data.isDetailedPrepro
 
   const dniValue = Math.max(0, Math.min(10, Number(data.dniDokumentacji) || 0))
   const setDni = (v: number) => updateField('dniDokumentacji', Math.max(0, Math.min(10, Number(v) ?? 0)))
-  const dniTotal = dniValue * pc.dzienDokumentacji
+  // Razem w walucie wyceny (S3): cena z cennika w EUR to pełne euro.
+  const dniTotal = dniValue * clientPricing.preprodukcja.dzienDokumentacji
 
   return (
     <motion.div
