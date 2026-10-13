@@ -90,6 +90,11 @@ export interface PendingResult {
   handled: number
   /** Ten sam `ref` w kilku plikach — liczy się pierwszy (pliki po nazwie). */
   duplicates: number
+  /**
+   * Wszystkie propozycje z plików (pierwsza z danym `ref`), także rozpatrzone —
+   * żeby grupy i ich kolejność nie zmieniały się w trakcie przyjmowania.
+   */
+  all: PendingProposal[]
 }
 
 /**
@@ -104,7 +109,9 @@ export function pendingProposals(
 ): PendingResult {
   const known = knownRefs(allEvents, decisions)
   const seen = new Set<string>()
+  const seenAll = new Set<string>()
   const pending: PendingProposal[] = []
+  const all: PendingProposal[] = []
   let handled = 0
   let duplicates = 0
   ;[...files]
@@ -112,15 +119,20 @@ export function pendingProposals(
     .forEach((file) => {
       if (file.status !== 'ok') return
       file.proposals.forEach((proposal) => {
+        const item = { key: proposal.ref, file: file.name, proposal }
+        if (!seenAll.has(proposal.ref)) {
+          seenAll.add(proposal.ref)
+          all.push(item)
+        }
         if (known.has(proposal.ref)) handled += 1
         else if (seen.has(proposal.ref)) duplicates += 1
         else {
           seen.add(proposal.ref)
-          pending.push({ key: proposal.ref, file: file.name, proposal })
+          pending.push(item)
         }
       })
     })
-  return { pending, handled, duplicates }
+  return { pending, handled, duplicates, all }
 }
 
 // ── Opis propozycji ──────────────────────────────────────────────────────────
@@ -248,25 +260,39 @@ function newProjectOwner(item: PendingProposal, pending: PendingProposal[]): Pen
  * Grupy po wątku (a bez wątku — po kliencie / mailu). Propozycja wskazująca
  * nowy projekt (`newProject` / `newProjectRef`) ląduje w grupie tej
  * propozycji projektu — także z innego pliku.
+ *
+ * `all` = wszystkie propozycje z plików, także już rozpatrzone. Przydział do
+ * grupy, tytuł i kolejność grup liczą się z nich, a pokazywane są tylko
+ * czekające — inaczej grupa skacze po liście w trakcie przyjmowania (nowsze
+ * pozycje znikają, a reszta wątku po przyjęciu nowego projektu wracała do
+ * grupy „po kliencie").
  */
-export function groupProposals(pending: PendingProposal[]): ProposalGroup[] {
-  const keyOf = new Map<PendingProposal, string>()
-  pending.forEach((item) => keyOf.set(item, rawGroupKey(item.proposal)))
-  pending.forEach((item) => {
-    const owner = newProjectOwner(item, pending)
-    if (owner) keyOf.set(item, keyOf.get(owner)!)
+export function groupProposals(pending: PendingProposal[], all: PendingProposal[] = pending): ProposalGroup[] {
+  const pendingKeys = new Set(pending.map((item) => item.key))
+  // Czekające spoza `all` (nie powinno się zdarzyć) też muszą trafić do grup.
+  const allKeys = new Set(all.map((item) => item.key))
+  const universe = [...all, ...pending.filter((item) => !allKeys.has(item.key))]
+
+  const keyOf = new Map<string, string>()
+  universe.forEach((item) => keyOf.set(item.key, rawGroupKey(item.proposal)))
+  universe.forEach((item) => {
+    const owner = newProjectOwner(item, universe)
+    if (owner) keyOf.set(item.key, keyOf.get(owner.key)!)
   })
 
   const groups = new Map<string, PendingProposal[]>()
-  pending.forEach((item) => {
-    const key = keyOf.get(item)!
+  universe.forEach((item) => {
+    const key = keyOf.get(item.key)!
     groups.set(key, [...(groups.get(key) ?? []), item])
   })
+  const waiting = new Map(pending.map((item) => [item.key, item]))
 
   return [...groups.entries()]
+    .filter(([, list]) => list.some((item) => pendingKeys.has(item.key)))
     .map(([key, list]) => {
-      const items = [...list].sort(itemOrder)
-      const proposals = items.map((i) => i.proposal)
+      const items = list.flatMap((item) => (waiting.has(item.key) ? [waiting.get(item.key)!] : [])).sort(itemOrder)
+      // Opis i kolejność z całej grupy (z rozpatrzonymi) — stałe w trakcie pracy.
+      const proposals = [...list].sort(itemOrder).map((i) => i.proposal)
       const subject = proposals.map((p) => p.evidence?.subject?.trim()).find(Boolean)
       const client =
         proposals.map((p) => p.client?.trim()).find(Boolean) ??

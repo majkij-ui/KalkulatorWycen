@@ -105,11 +105,12 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
     }
   }, [reload])
 
-  const { pending, handled } = useMemo(
+  const { pending, handled, all } = useMemo(
     () => pendingProposals(files, allEvents, decisions),
     [files, allEvents, decisions]
   )
-  const groups = useMemo(() => groupProposals(pending), [pending])
+  // Grupy i ich kolejność z wszystkich propozycji — nie skaczą w trakcie przyjmowania.
+  const groups = useMemo(() => groupProposals(pending, all), [pending, all])
 
   const record = useCallback(async (records: InboxDecision[]) => {
     if (records.length) setDecisions(await saveInboxDecisions(records))

@@ -658,3 +658,32 @@ test('walidacja: nagłówek sync (okno przeglądu poczty)', () => {
   const parsed = file('s.json', [], { sync })
   assert.equal(parsed.status === 'ok' && parsed.sync?.to, sync.to)
 })
+
+test('grupa nie skacze w trakcie przyjmowania: kolejność i przydział liczone z całego pliku', () => {
+  const files = [
+    file('a.json', [
+      { type: 'project_new', id: 'n', ref: 'gmail:t1#project', threadId: 't1', project: { name: 'Tchibo' } },
+      { type: 'event', id: 'new', ref: 'gmail:t1', threadId: 't1', event: { kind: 'lead_in', start: '2026-10-08T09:00' } },
+      // Uzupełnienie kontaktu bez wątku, wskazujące nowy projekt, bez daty.
+      { type: 'project_update', id: 'c', ref: 'gmail:t1#contact', client: 'Tchibo', newProject: 'n', set: { contact: { email: 'a@tchibo.pl' } } },
+      { type: 'event', id: 'b', ref: 'gmail:t2', threadId: 't2', event: { kind: 'lead_in', start: '2026-10-05T09:00' } },
+    ]),
+  ]
+  const before = pendingProposals(files, [], [])
+  assert.deepEqual(groupProposals(before.pending, before.all).map((g) => g.key), ['thread:t1', 'thread:t2'])
+
+  // Przyjęte: nowy projekt i najnowszy lead. Zostaje sam kontakt — w tej samej grupie, na tym samym miejscu.
+  const done = [decision('gmail:t1#project', 'accepted', { projectId: 'p-made' }), decision('gmail:t1', 'accepted')]
+  const after = pendingProposals(files, [], done)
+  const groups = groupProposals(after.pending, after.all)
+  assert.deepEqual(groups.map((g) => g.key), ['thread:t1', 'thread:t2'])
+  assert.deepEqual(groups[0].items.map((i) => i.proposal.id), ['c'], 'pokazane tylko czekające')
+  assert.equal(groups[0].title, 'Tchibo')
+
+  // Bez pełnej listy (stare zachowanie) kontakt odpadłby do osobnej grupy na końcu.
+  assert.deepEqual(groupProposals(after.pending).map((g) => g.key), ['thread:t2', 'client:tchibo'])
+
+  // Grupa, w której wszystko rozpatrzono, znika.
+  const allDone = pendingProposals(files, [], [...done, decision('gmail:t1#contact', 'accepted'), decision('gmail:t2', 'rejected')])
+  assert.deepEqual(groupProposals(allDone.pending, allDone.all), [])
+})
