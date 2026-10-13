@@ -12,6 +12,7 @@ import { PostprodukcjaTab } from '@/components/tabs/postprodukcja'
 import { DodatkoweTab } from '@/components/tabs/dodatkowe'
 import { PodgladPdfTab } from '@/components/tabs/podglad-pdf'
 import { useQuote } from '@/lib/quote-context'
+import { currencyUnit } from '@/lib/quote-currency'
 
 const tabs = [
   { value: 'preprodukcja', label: 'Preprodukcja', icon: ClipboardList },
@@ -37,7 +38,7 @@ const CATEGORY_TO_TAB: Record<string, string> = {
  */
 export function QuoteCalculatorView() {
   const [activeTab, setActiveTab] = useState('preprodukcja')
-  const { isCalculating, breakdown } = useQuote()
+  const { isCalculating, breakdown, money } = useQuote()
 
   const phaseNetMap: Record<string, number> = {}
   for (const phase of breakdown) {
@@ -67,7 +68,7 @@ export function QuoteCalculatorView() {
                       <span>{tab.label}</span>
                       {phaseNetto > 0 && (
                         <span className="text-[10px] tabular-nums font-normal text-amber-400/70">
-                          {Math.round(phaseNetto).toLocaleString('pl-PL')} zł
+                          {Math.round(phaseNetto).toLocaleString('pl-PL')} {currencyUnit(money.currency)}
                         </span>
                       )}
                     </span>

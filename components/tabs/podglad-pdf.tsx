@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { FileDown, Receipt, Loader2, RefreshCcw } from 'lucide-react'
+import { FileDown, Receipt, RefreshCcw } from 'lucide-react'
 import { useReactToPrint } from 'react-to-print'
 import { addDays } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -17,17 +17,21 @@ import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeNum } from '@/lib/safe-numbers'
 import type { LocalPdfState, PdfRowKey } from '@/lib/quote-types'
 import {
-  DEFAULT_EXCHANGE_RATE,
   PDF_ROW_KEYS,
   buildInitialPdfState,
   coerceLocalPdfDraft,
   flipPdfCurrency,
+  isLegacyEurDraft,
+  reconcilePdfCurrency,
   roundToUnit,
 } from '@/lib/pdf-draft'
 import { isTauriRuntime } from '@/lib/storage'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
-import { formatPdfAmount, type PdfCurrency } from '@/lib/pdf-currency'
-import { fetchEurPlnRate } from '@/lib/nbp-fx'
+import { formatPdfAmount, pdfCurrencyUnit, type PdfCurrency } from '@/lib/pdf-currency'
+import { buildQuoteBreakdown, computeQuoteTotals, quoteViews } from '@/lib/quote-financials'
+import { formatMoney, formatRate, switchQuoteCurrency } from '@/lib/quote-currency'
+import type { TermsMoney } from '@/lib/pdf-texts-config'
+import { QuoteCurrencyControl } from '@/components/quote-currency-control'
 
 const container = {
   hidden: { opacity: 0 },
@@ -146,10 +150,13 @@ export function PodgladPdfTab() {
   const {
     breakdown,
     totals,
-    formatCurrency,
     isCalculating,
     getTermsAndConditions,
     data,
+    clientData,
+    clientPricing,
+    money,
+    setQuoteCurrency,
     updateField,
     pricingConfig,
     marginMultiplier,
@@ -187,13 +194,14 @@ export function PodgladPdfTab() {
     terms: string[]
   }
 
+  // Wiersze z kalkulatora w walucie wyceny (S3); szkic sprzed S3 (PLN → EUR) przelicza po swoim kursie.
   const buildInitialState = ({ lang, currency, exchangeRate, terms: termsArg }: BuildOpts): LocalPdfState =>
     buildInitialPdfState({
-      data,
+      data: clientData,
       breakdown,
       sumaNetto: totals?.sumaNetto,
       marginMultiplier,
-      pricing: pricingConfig,
+      pricing: clientPricing,
       lang,
       currency,
       exchangeRate,
@@ -202,15 +210,27 @@ export function PodgladPdfTab() {
       validUntilDate,
     })
 
+  /**
+   * Waluta PDF: waluta wyceny. Wyjątek — szkic sprzed S3 (wycena w PLN, PDF w
+   * EUR): drukuje się jak dawniej, w euro po kursie szkicu.
+   */
+  const pdfMoneyFor = (state: Pick<LocalPdfState, 'currency' | 'exchangeRate' | 'followsQuote'>) =>
+    isLegacyEurDraft(state, money.currency)
+      ? { currency: 'EUR' as PdfCurrency, exchangeRate: state.exchangeRate, legacy: true }
+      : { currency: money.currency as PdfCurrency, exchangeRate: money.rate, legacy: false }
+
   const [localPdfState, setLocalPdfState] = useState<LocalPdfState>(() =>
-    buildInitialState({ lang: 'pl', currency: 'PLN', exchangeRate: DEFAULT_EXCHANGE_RATE, terms: [] })
+    buildInitialState({ lang: 'pl', currency: money.currency, exchangeRate: money.rate, terms: [] })
   )
+  const pdfMoney = pdfMoneyFor(localPdfState)
 
   // terms must be derived AFTER localPdfState exists so they can track the active PDF language
-  const terms = useMemo(
-    () => getTermsAndConditions(localPdfState.pdfLanguage),
-    [getTermsAndConditions, localPdfState.pdfLanguage]
-  )
+  const terms = useMemo(() => {
+    const termsMoney: TermsMoney | undefined = pdfMoney.legacy
+      ? { currency: 'EUR', convert: (pln) => Math.round(pln / pdfMoney.exchangeRate) }
+      : undefined
+    return getTermsAndConditions(localPdfState.pdfLanguage, termsMoney)
+  }, [getTermsAndConditions, localPdfState.pdfLanguage, pdfMoney.legacy, pdfMoney.exchangeRate])
 
   // When the user toggles the PDF language, drop "touched" flags so the auto-generated
   // opis text + the editable opcjeDodatkowe regenerate in the new language. (Otherwise
@@ -305,15 +325,59 @@ export function PodgladPdfTab() {
     }
   }, [registerPdfDraftBridge, syncPdfDraftSnapshot, updateField])
 
+  // Waluta wyceny się zmieniła (S3), także gdy zakładka PDF była zamknięta: ceny
+  // z kalkulatora w nowej walucie, ceny i opisy poprawione ręcznie przeliczone /
+  // zostawione. Szkic sprzed S3 (PLN → EUR) zostaje, jak był.
+  const [currencyNotice, setCurrencyNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (draftHydrationStatus !== 'ready') return
+    const prev = localPdfState
+    if (isLegacyEurDraft(prev, money.currency)) return
+    if (prev.currency === money.currency) {
+      if (!prev.followsQuote || prev.exchangeRate !== money.rate) {
+        setLocalPdfState((s) => ({ ...s, followsQuote: true, exchangeRate: money.rate }))
+      }
+      return
+    }
+    const oldCurrency = prev.currency
+    const oldRate = oldCurrency === 'EUR' ? prev.exchangeRate : money.rate
+    // Kalkulator w starej walucie: ta sama wycena przełączona z powrotem.
+    const oldData = switchQuoteCurrency(data, oldCurrency, { rate: oldRate, source: 'manual' })
+    const old = quoteViews(oldData, pricingConfig).client
+    const lang = prev.pdfLanguage
+    const before = buildInitialPdfState({
+      data: old.data,
+      breakdown: buildQuoteBreakdown(old.data, marginMultiplier, old.pricing),
+      sumaNetto: computeQuoteTotals(old.data, marginMultiplier, old.pricing).sumaNetto,
+      marginMultiplier,
+      pricing: old.pricing,
+      lang,
+      currency: oldCurrency,
+      exchangeRate: oldRate,
+      terms,
+      issueDate,
+      validUntilDate,
+    })
+    const after = buildInitialState({ lang, currency: money.currency, exchangeRate: money.rate, terms })
+    setLocalPdfState((s) => reconcilePdfCurrency(s, before, after, oldRate))
+    setPreviewResetKey((k) => k + 1)
+    setCurrencyNotice(
+      `Waluta wyceny: ${money.currency}. Ceny w PDF są teraz z kalkulatora w ${money.currency === 'EUR' ? 'euro' : 'złotych'}; ` +
+        'ceny poprawione ręcznie przeliczono po kursie, opisy zmienione ręcznie zostały bez zmian.'
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftHydrationStatus, money.currency, money.rate, localPdfState.currency, localPdfState.followsQuote])
+
   useEffect(() => {
     if (draftHydrationStatus !== 'ready') return
     if (isUsingDraft) return
 
     setLocalPdfState((prev) => {
+      const target = pdfMoneyFor(prev)
       const init = buildInitialState({
         lang: prev.pdfLanguage,
-        currency: prev.currency,
-        exchangeRate: prev.exchangeRate,
+        currency: target.currency,
+        exchangeRate: target.exchangeRate,
         terms,
       })
       const nextRows = { ...init.rows }
@@ -326,8 +390,9 @@ export function PodgladPdfTab() {
         // Keep user-edited fields:
         showVat: prev.showVat,
         pdfLanguage: prev.pdfLanguage,
-        currency: prev.currency,
-        exchangeRate: prev.exchangeRate,
+        currency: target.currency,
+        exchangeRate: target.exchangeRate,
+        followsQuote: init.followsQuote,
         materialyKoncowe: prev.materialyKoncowe,
         portfolioRows: prev.portfolioRows,
         terminZdjec: prev.terminZdjec,
@@ -336,7 +401,7 @@ export function PodgladPdfTab() {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [breakdown, totals?.sumaNetto, data, pricingConfig, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
+  }, [breakdown, totals?.sumaNetto, clientData, clientPricing, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
 
   const totalNetto = useMemo(() => {
     return ROWS.reduce((sum, r) => sum + safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0), 0)
@@ -349,12 +414,12 @@ export function PodgladPdfTab() {
     () =>
       buildInitialState({
         lang: localPdfState.pdfLanguage,
-        currency: localPdfState.currency,
-        exchangeRate: localPdfState.exchangeRate,
+        currency: pdfMoney.currency,
+        exchangeRate: pdfMoney.exchangeRate,
         terms,
       }).rows,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [breakdown, totals?.sumaNetto, data, pricingConfig, marginMultiplier, terms, localPdfState.pdfLanguage, localPdfState.currency, localPdfState.exchangeRate]
+    [breakdown, totals?.sumaNetto, clientData, clientPricing, marginMultiplier, terms, localPdfState.pdfLanguage, pdfMoney.currency, pdfMoney.exchangeRate]
   )
   const calculatorTotal = ROWS.reduce((sum, r) => sum + safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0), 0)
   const priceSignature = ROWS.map((r) => Math.round(safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0))).join('|')
@@ -404,8 +469,8 @@ export function PodgladPdfTab() {
     // We stay in draft mode so future calculator changes don't silently overwrite the kept text.
     const fresh = buildInitialState({
       lang: localPdfState.pdfLanguage,
-      currency: localPdfState.currency,
-      exchangeRate: localPdfState.exchangeRate,
+      currency: pdfMoney.currency,
+      exchangeRate: pdfMoney.exchangeRate,
       terms,
     })
 
@@ -425,8 +490,8 @@ export function PodgladPdfTab() {
   const handleClearEditor = () => {
     const init = buildInitialState({
       lang: localPdfState.pdfLanguage,
-      currency: localPdfState.currency,
-      exchangeRate: localPdfState.exchangeRate,
+      currency: pdfMoney.currency,
+      exchangeRate: pdfMoney.exchangeRate,
       terms,
     })
     resetEditorSyncFlags()
@@ -447,20 +512,6 @@ export function PodgladPdfTab() {
   const originalDocumentTitleRef = useRef<string | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
-  const [nbpFetchState, setNbpFetchState] = useState<'idle' | 'loading' | 'error'>('idle')
-  const [nbpEffectiveDate, setNbpEffectiveDate] = useState<string>('')
-
-  const handleFetchNbpRate = async () => {
-    setNbpFetchState('loading')
-    try {
-      const { rate, effectiveDate } = await fetchEurPlnRate()
-      setLocalPdfState((prev) => ({ ...prev, exchangeRate: rate }))
-      setNbpEffectiveDate(effectiveDate)
-      setNbpFetchState('idle')
-    } catch {
-      setNbpFetchState('error')
-    }
-  }
 
   const getDynamicDocumentTitle = (): string => {
     const client = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : 'Klienta'
@@ -654,6 +705,59 @@ export function PodgladPdfTab() {
         </div>
       </motion.div>
 
+      {pdfMoney.legacy && (
+        <Alert
+          variant="default"
+          className="border-sky-500/20 bg-sky-500/5 text-zinc-200 px-4 py-3 backdrop-blur-xl"
+        >
+          <AlertTitle className="text-sky-100">Euro tylko na PDF (stara wycena)</AlertTitle>
+          <AlertDescription className="text-zinc-300">
+            Ta wycena liczy w złotych, a PDF przelicza kwoty na euro po kursie {formatRate(localPdfState.exchangeRate)} —
+            tak działało przed walutą na wycenie. Drukuje się bez zmian. Możesz przełączyć całą wycenę na EUR po tym
+            kursie (ceny w kalkulatorze w euro, finanse w złotych) albo wrócić z PDF do złotych.
+          </AlertDescription>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              onClick={() => {
+                setQuoteCurrency('EUR', { rate: localPdfState.exchangeRate, source: 'manual' })
+                setLocalPdfState((prev) => ({ ...prev, followsQuote: true }))
+              }}
+              className="w-full sm:w-auto"
+            >
+              Przełącz wycenę na EUR po kursie {formatRate(localPdfState.exchangeRate)}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLocalPdfState((prev) => ({ ...flipPdfCurrency(prev, 'PLN'), followsQuote: true }))
+                setPreviewResetKey((k) => k + 1)
+              }}
+              className="w-full sm:w-auto"
+            >
+              Wróć do PLN na PDF
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      {currencyNotice && (
+        <Alert
+          variant="default"
+          className="border-white/10 bg-white/5 text-zinc-200 px-4 py-3 backdrop-blur-xl"
+        >
+          <AlertDescription className="flex items-start justify-between gap-3 text-zinc-300">
+            <span>{currencyNotice}</span>
+            <button
+              type="button"
+              onClick={() => setCurrencyNotice(null)}
+              className="shrink-0 text-xs text-zinc-500 hover:text-white"
+            >
+              Zamknij
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {showStalePrices && (
         <Alert
           variant="default"
@@ -661,7 +765,8 @@ export function PodgladPdfTab() {
         >
           <AlertTitle className="text-amber-100">Ceny w PDF różnią się od kalkulatora</AlertTitle>
           <AlertDescription className="text-zinc-300">
-            PDF: {formatCurrency(totalNetto)} netto, kalkulator: {formatCurrency(calculatorTotal)} netto. Aktualizacja
+            PDF: {formatMoney(totalNetto, localPdfState.currency)} netto, kalkulator:{' '}
+            {formatMoney(calculatorTotal, pdfMoney.currency)} netto. Aktualizacja
             zmienia tylko ceny — opisy i teksty zostają.
           </AlertDescription>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -714,69 +819,11 @@ export function PodgladPdfTab() {
               />
             </div>
 
-            {/* Currency toggle: switching converts all stored row amounts ONCE
-                using the current exchange rate. After that, edits happen directly
-                in the active currency (no live PLN↔EUR conversion). */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-zinc-300">Waluta PDF:</span>
-              <SegmentedToggle
-                value={localPdfState.currency}
-                options={[
-                  { value: 'PLN', label: 'PLN' },
-                  { value: 'EUR', label: 'EUR' },
-                ]}
-                onChange={(v) => {
-                  const nextCurrency = v as PdfCurrency
-                  setLocalPdfState((prev) => flipPdfCurrency(prev, nextCurrency))
-                }}
-              />
-            </div>
-
-            {/* Exchange rate input + NBP button (only when EUR).
-                Used as the one-shot conversion rate when switching currency
-                (PLN→EUR or EUR→PLN). Editing the rate after switching does
-                NOT re-convert existing values — just toggle PLN→EUR again to
-                apply a new rate. */}
-            {localPdfState.currency === 'EUR' && (
+            {/* Waluta należy do wyceny (S3): ten sam przełącznik co w nagłówku kalkulatora. */}
+            {!pdfMoney.legacy && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-zinc-300">Kurs EUR/PLN:</span>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  step={0.01}
-                  min={0.01}
-                  value={localPdfState.exchangeRate}
-                  onChange={(e) => {
-                    const next = Number.parseFloat(e.target.value)
-                    setLocalPdfState((prev) => ({
-                      ...prev,
-                      exchangeRate: Number.isFinite(next) && next > 0 ? next : prev.exchangeRate,
-                    }))
-                  }}
-                  className="h-8 w-20 border-white/10 bg-white/5 text-foreground text-right tabular-nums"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleFetchNbpRate}
-                  disabled={nbpFetchState === 'loading'}
-                  className="h-8 gap-1.5 border-white/10 bg-zinc-900/40 text-white hover:bg-white/10"
-                  title={nbpEffectiveDate ? `Ostatnio pobrano: ${nbpEffectiveDate}` : 'Pobierz aktualny kurs średni z NBP'}
-                >
-                  {nbpFetchState === 'loading' ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCcw className="size-3.5" />
-                  )}
-                  Pobierz z NBP
-                </Button>
-                {nbpFetchState === 'error' && (
-                  <span className="text-xs text-red-400">Nie udało się pobrać — wpisz ręcznie.</span>
-                )}
-                {nbpEffectiveDate && nbpFetchState === 'idle' && (
-                  <span className="text-[11px] text-zinc-500">NBP {nbpEffectiveDate}</span>
-                )}
+                <span className="text-sm text-zinc-300">Waluta wyceny:</span>
+                <QuoteCurrencyControl align="start" />
               </div>
             )}
           </div>
@@ -807,7 +854,7 @@ export function PodgladPdfTab() {
                             {localPdfState.pdfLanguage === 'en' ? 'Total (net)' : 'Całkowity koszt netto'}
                           </div>
                           <div className="text-[18px] font-black text-primary tabular-nums">
-                            {formatPdfAmount(totalNetto, localPdfState.currency)}
+                            {formatPdfAmount(totalNetto, localPdfState.currency, localPdfState.pdfLanguage)}
                           </div>
                         </div>
                       </div>
@@ -834,7 +881,7 @@ export function PodgladPdfTab() {
                         <div className="col-span-4 text-[12px] font-semibold text-zinc-800 pt-2">{rowTitleForLang(r.key, localPdfState.pdfLanguage)}</div>
 
                         <div className="col-span-2">
-                          <div className="flex justify-end">
+                          <div className="flex items-center justify-end gap-1">
                             <input
                               type="number"
                               inputMode="decimal"
@@ -858,8 +905,11 @@ export function PodgladPdfTab() {
                                   },
                                 }))
                               }}
-                              className="w-28 rounded-md border border-zinc-200 bg-white/80 px-2 py-2 text-right text-[12px] font-bold tabular-nums text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
+                              className="w-24 rounded-md border border-zinc-200 bg-white/80 px-2 py-2 text-right text-[12px] font-bold tabular-nums text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
                             />
+                            <span className="text-[11px] font-semibold text-zinc-500">
+                              {pdfCurrencyUnit(localPdfState.currency, localPdfState.pdfLanguage)}
+                            </span>
                           </div>
 
                           {/* Przy VAT ON pokazujemy w listingu wyłącznie netto (reszta logiki VAT pozostaje w Total bar). */}
@@ -892,7 +942,7 @@ export function PodgladPdfTab() {
 
                 {(() => {
                   const L = PDF_LABELS[localPdfState.pdfLanguage]
-                  const fmt = (n: number) => formatPdfAmount(n, localPdfState.currency)
+                  const fmt = (n: number) => formatPdfAmount(n, localPdfState.currency, localPdfState.pdfLanguage)
                   return (
                     <>
                       <div className="mt-4 rounded-lg bg-zinc-950 p-4 text-white">
@@ -902,13 +952,14 @@ export function PodgladPdfTab() {
                               <span>{L.sumNetto}</span>
                               <span className="text-primary tabular-nums">{fmt(totalNetto)}</span>
                             </div>
-                            <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
-                              <span className="text-zinc-300">{L.vatRow}</span>
-                              <span className="tabular-nums text-white">{fmt(totalNetto * VAT_RATE)}</span>
+                            {/* Netto prowadzi; VAT i brutto to cicha informacja pod spodem. */}
+                            <div className="flex items-baseline justify-between text-[7.5pt] font-normal uppercase tracking-wide text-zinc-400">
+                              <span>{L.vatRow}</span>
+                              <span className="tabular-nums">{fmt(totalNetto * VAT_RATE)}</span>
                             </div>
-                            <div className="flex items-baseline justify-between text-[8pt] font-bold uppercase tracking-tight">
-                              <span className="text-zinc-300">{L.sumBrutto}</span>
-                              <span className="tabular-nums text-white">{fmt(totalNetto * (1 + VAT_RATE))}</span>
+                            <div className="flex items-baseline justify-between text-[7.5pt] font-normal uppercase tracking-wide text-zinc-400">
+                              <span>{L.sumBrutto}</span>
+                              <span className="tabular-nums">{fmt(totalNetto * (1 + VAT_RATE))}</span>
                             </div>
                           </div>
                         ) : (

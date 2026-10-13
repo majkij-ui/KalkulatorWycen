@@ -60,7 +60,7 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
   const lang: PdfLang = pdfLanguage ?? 'pl'
   const L = PDF_LABELS[lang]
 
-  const fmt = (amount: number) => formatPdfAmount(amount, currency ?? 'PLN')
+  const fmt = (amount: number) => formatPdfAmount(amount, currency ?? 'PLN', lang)
 
   const totalNetto = ROW_ORDER.reduce((sum, key) => sum + (localPdfState.rows[key]?.cenaNetto ?? 0), 0)
   const totalVat = totalNetto * VAT_RATE
@@ -206,13 +206,14 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
                 <span>{L.sumNetto}</span>
                 <span style={{ ...mono, color: BRAND.ember }}>{fmt(totalNetto)}</span>
               </div>
-              <div className="mt-0.5 flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
-                <span className="text-zinc-300">{L.vatRow}</span>
-                <span className="text-zinc-100" style={mono}>{fmt(totalVat)}</span>
+              {/* Netto prowadzi (Ember, czarna waga); VAT i brutto to cicha linia pod spodem. */}
+              <div className="mt-0.5 flex items-baseline justify-between text-[7pt] font-normal uppercase tracking-[0.1em] text-zinc-400">
+                <span>{L.vatRow}</span>
+                <span style={mono}>{fmt(totalVat)}</span>
               </div>
-              <div className="flex items-baseline justify-between text-[8pt] font-semibold uppercase tracking-[0.1em]">
-                <span className="text-zinc-300">{L.sumBrutto}</span>
-                <span className="text-zinc-100" style={mono}>{fmt(totalBrutto)}</span>
+              <div className="flex items-baseline justify-between text-[7pt] font-normal uppercase tracking-[0.1em] text-zinc-400">
+                <span>{L.sumBrutto}</span>
+                <span style={mono}>{fmt(totalBrutto)}</span>
               </div>
             </div>
           ) : (

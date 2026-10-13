@@ -2,13 +2,17 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { usePriceDisplay } from '@/lib/price-display'
 
 interface InlinePriceProps {
   value: number
   onChange: (value: number) => void
   /** Show amber tint + dot when price differs from default */
   isModified?: boolean
-  /** 'zł' (default) | 'zł/km' | '%' */
+  /**
+   * 'zł' (default) | 'zł/km' | '%'. Z domyślnym 'zł' `value` to cena z cennika
+   * w PLN, pokazywana w walucie wyceny (S3: w EUR pełne euro, wpis × kurs).
+   */
   suffix?: string
   step?: number
   min?: number
@@ -29,19 +33,25 @@ export function InlinePrice({
 }: InlinePriceProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const display = usePriceDisplay()
+  // Tylko cena w zł idzie za walutą wyceny; procent i zł/km zostają, jak są.
+  const converts = suffix === 'zł' && display.money.currency !== 'PLN'
+  const shown = converts ? display.toDisplay(value) : value
+  const unit = converts ? display.unit : suffix
 
   const displayText =
     suffix === '%'
       ? `${value}%`
       : suffix === 'zł/km'
       ? `${value.toFixed(decimals).replace('.', ',')} zł/km`
-      : `${value.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} zł`
+      : `${shown.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${unit}`
 
   const commit = (raw: string) => {
     const parsed = Number(raw.replace(',', '.'))
     if (!Number.isNaN(parsed) && parsed >= min) {
       const factor = 10 ** decimals
-      onChange(decimals === 0 ? Math.round(parsed) : Math.round(parsed * factor) / factor)
+      const rounded = decimals === 0 ? Math.round(parsed) : Math.round(parsed * factor) / factor
+      onChange(converts ? display.fromDisplay(rounded) : rounded)
     }
     setEditing(false)
   }
@@ -51,7 +61,7 @@ export function InlinePrice({
       <input
         type="number"
         value={draft}
-        step={step}
+        step={converts ? 10 : step}
         min={min}
         autoFocus
         onChange={(e) => setDraft(e.target.value)}
@@ -71,8 +81,8 @@ export function InlinePrice({
   return (
     <button
       type="button"
-      onClick={() => { setDraft(String(value)); setEditing(true) }}
-      title="Kliknij aby zmienić stawkę"
+      onClick={() => { setDraft(String(shown)); setEditing(true) }}
+      title={converts ? `Kliknij aby zmienić stawkę (cennik w zł: ${Math.round(value)} zł)` : 'Kliknij aby zmienić stawkę'}
       className={cn(
         'group relative inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-sm tabular-nums transition-colors hover:bg-white/5 cursor-text select-none',
         isModified ? 'text-amber-400' : 'text-zinc-300',

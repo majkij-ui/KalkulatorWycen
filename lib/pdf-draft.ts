@@ -15,7 +15,8 @@ import { pdfCrewSentences } from './quote-crew'
 import type { LocalPdfState, PdfRowKey, PortfolioRow, QuoteData } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { PDF_LABELS, type PdfLang } from './pdf-i18n'
-import { formatPdfAmount, type PdfCurrency } from './pdf-currency'
+import { formatPdfAmount, pdfCurrencyUnit, type PdfCurrency } from './pdf-currency'
+import { quoteMoney } from './quote-currency'
 import { safeArray, safeNum } from './safe-numbers'
 
 export const DEFAULT_EXCHANGE_RATE = 4.3
@@ -124,6 +125,8 @@ export function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState, today
     opcjeDodatkowe: coerceStr(r.opcjeDodatkowe, fallback.opcjeDodatkowe),
     portfolioRows: coercePortfolioRows(r.portfolioRows, r.portfolioLinksText, fallback.portfolioRows),
     termsAndConditions: safeArray<string>(r.termsAndConditions).slice(0, 200),
+    // Bez znacznika = szkic sprzed S3 (wycena w PLN, euro tylko na PDF).
+    followsQuote: r.followsQuote === true,
   }
 }
 
@@ -131,13 +134,16 @@ export function getOpisInitial({
   key,
   data,
   lang = 'pl',
-  money = (pln: number) => formatPdfAmount(pln, 'PLN'),
+  money = (pln: number) => formatPdfAmount(pln, 'PLN', lang),
+  amount = (value: number) => `${value.toLocaleString('pl-PL')} ${lang === 'en' ? 'PLN' : 'zł'}`,
 }: {
   key: PdfRowKey
   data: QuoteData
   lang?: PdfLang
-  /** Kwota PLN → tekst w walucie PDF (opis sprzętu pokazuje wartość i rabat). */
-  money?: (pln: number) => string
+  /** Kwota z wyceny → tekst w walucie PDF (opis sprzętu pokazuje wartość i rabat). */
+  money?: (value: number) => string
+  /** Kwota wpisana w wycenie (honorarium aktora) → tekst w walucie PDF, bez grupowania tysięcy jak dotąd. */
+  amount?: (value: number) => string
 }): string {
   const L = PDF_LABELS[lang]
   const yn = (v: boolean) => (v ? L.yes : L.no)
@@ -183,7 +189,7 @@ export function getOpisInitial({
     const hasActorRights =
       data.copyrightType === 'przekazanie' && liczbaAktorow > 0 && perActor > 0
     const actorRightsLine = hasActorRights
-      ? `${L.opisActorRightsTransfer}: ${liczbaAktorow} ${L.opisActorUnit}(s) × ${perActor.toLocaleString('pl-PL')} ${lang === 'en' ? 'PLN' : 'zł'}.`
+      ? `${L.opisActorRightsTransfer}: ${liczbaAktorow} ${L.opisActorUnit}(s) × ${amount(perActor)}.`
       : null
 
     if (!data.isDetailedProdukcja) {
@@ -295,13 +301,16 @@ export function buildInitialPdfState({
   const computedSum = preNetto + ekipaNetto + castNetto + sprzetNetto + logistykaNetto + postNetto + inneNetto
   const delta = safeNum(sumaNetto, 0, 0) - computedSum
 
-  // Calculator math is in PLN; convert to active currency once at build time so
-  // editing in EUR is true EUR-native (not a live recalculation against PLN).
+  // Od S3 kwoty kalkulatora są już w walucie wyceny (EUR w wycenie w euro).
+  // Przelicza tylko szkic sprzed S3: wycena w PLN, a PDF w EUR po kursie szkicu.
+  const convertsFromPln = currency === 'EUR' && quoteMoney(data).currency === 'PLN'
   const safeRate = Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : DEFAULT_EXCHANGE_RATE
-  const toCurrency = (pln: number): number => {
-    const v = currency === 'EUR' ? pln / safeRate : pln
+  const toCurrency = (value: number): number => {
+    const v = convertsFromPln ? value / safeRate : value
     return roundToUnit(v)
   }
+  const typedAmount = (value: number): string =>
+    `${(convertsFromPln ? roundToUnit(value / safeRate) : value).toLocaleString('pl-PL')} ${pdfCurrencyUnit(currency, lang)}`
 
   const L = PDF_LABELS[lang]
 
@@ -332,7 +341,7 @@ export function buildInitialPdfState({
         key: 'obsada',
         title: L.rowObsada,
         cenaNetto: toCurrency(castNetto),
-        opis: getOpisInitial({ key: 'obsada', data, lang }),
+        opis: getOpisInitial({ key: 'obsada', data, lang, amount: typedAmount }),
       },
       sprzet: {
         key: 'sprzet',
@@ -342,7 +351,7 @@ export function buildInitialPdfState({
           key: 'sprzet',
           data,
           lang,
-          money: (pln) => formatPdfAmount(toCurrency(pln), currency),
+          money: (value) => formatPdfAmount(toCurrency(value), currency, lang),
         }),
       },
       logistyka: {
@@ -369,6 +378,7 @@ export function buildInitialPdfState({
     opcjeDodatkowe: data.opcjeDodatkowe ?? '',
     portfolioRows: defaultPortfolioRows(),
     termsAndConditions: terms,
+    followsQuote: !convertsFromPln,
   }
 }
 
@@ -392,4 +402,41 @@ export function flipPdfCurrency(prev: LocalPdfState, nextCurrency: PdfCurrency):
 /** Suma netto wierszy szkicu (to, co drukuje PDF). */
 export function pdfRowsTotal(rows: LocalPdfState['rows']): number {
   return PDF_ROW_KEYS.reduce((sum, key) => sum + safeNum(rows[key]?.cenaNetto, 0, 0), 0)
+}
+
+/**
+ * Szkic po zmianie waluty wyceny (S3). `before` to szkic, jaki kalkulator dałby
+ * w starej walucie, `after` — w nowej. Cena wiersza równa tej z kalkulatora
+ * bierze nową cenę z kalkulatora; cena poprawiona ręcznie przelicza się po
+ * kursie (zaokrąglona). Opis taki jak wygenerowany bierze nowy opis (kwoty w
+ * nowej walucie), opis zmieniony ręcznie zostaje. Reszta szkicu bez zmian.
+ */
+export function reconcilePdfCurrency(
+  draft: LocalPdfState,
+  before: LocalPdfState,
+  after: LocalPdfState,
+  /** Kurs EUR (zł za 1 €) do przeliczenia cen poprawionych ręcznie. */
+  rate: number
+): LocalPdfState {
+  if (draft.currency === after.currency) return { ...draft, followsQuote: true, exchangeRate: after.exchangeRate }
+  const safeRate = Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_EXCHANGE_RATE
+  const convert = (value: number) => roundToUnit(after.currency === 'EUR' ? value / safeRate : value * safeRate)
+  const rows = { ...draft.rows }
+  PDF_ROW_KEYS.forEach((key) => {
+    const row = draft.rows[key]
+    const calcBefore = before.rows[key]
+    const calcAfter = after.rows[key]
+    const sameAsCalculator = Math.abs(safeNum(row.cenaNetto, 0) - safeNum(calcBefore.cenaNetto, 0)) < 0.5
+    rows[key] = {
+      ...row,
+      cenaNetto: sameAsCalculator ? calcAfter.cenaNetto : convert(safeNum(row.cenaNetto, 0)),
+      opis: row.opis === calcBefore.opis ? calcAfter.opis : row.opis,
+    }
+  })
+  return { ...draft, rows, currency: after.currency, exchangeRate: after.exchangeRate, followsQuote: true }
+}
+
+/** Szkic sprzed S3: wycena w PLN, a PDF w EUR po własnym kursie. */
+export function isLegacyEurDraft(draft: Pick<LocalPdfState, 'currency' | 'followsQuote'>, quoteCurrency: PdfCurrency): boolean {
+  return !draft.followsQuote && draft.currency === 'EUR' && quoteCurrency === 'PLN'
 }

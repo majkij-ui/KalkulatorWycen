@@ -63,7 +63,8 @@ interface AnimatedCurrencyProps {
 export function AnimatedCurrency({ value, format, className }: AnimatedCurrencyProps) {
   // Round to nearest integer — currency amounts are always whole zloty/euro in this app.
   const rounded = Math.round(value)
-  const formatted = format(rounded)
+  // Zwykła spacja w osobnym inline-blocku znika („3241,00€") — twarda zostaje.
+  const formatted = format(rounded).replace(/ /g, '\u00a0')
 
   // usePrevious pattern: read ref during render (gets last render's value), update after paint.
   const prevFormattedRef = useRef(formatted)

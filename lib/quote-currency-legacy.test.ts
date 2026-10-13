@@ -8,6 +8,10 @@
  * wycena „euro tylko na PDF" (kształt jak prawdziwa oferta z 10.2026, nazwy
  * zmyślone). Każda zmiana tych liczb to zmiana ceny albo wydruku starej oferty.
  *
+ * Jedna świadoma zmiana: angielski PDF w PLN podaje „PLN" także w zdaniu o
+ * wartości sprzętu (było „zł" obok „PLN" w tym samym dokumencie) — konwencja
+ * etykiet M.J. z 2026-10-13. Liczby bez zmian.
+ *
  * `PRINT_GOLDEN=1 npm test` drukuje bieżące wartości.
  */
 
@@ -462,7 +466,7 @@ const GOLDEN: Record<string, ReturnType<typeof metrics>> = {
       "preprodukcja|0|Documentation: 0 days.\nScript: None.",
       "ekipa|9420|Detailed film crew pricing for 2 shooting days.\nOperator: 2 person-days (Łukasz, Piotr).\nDźwiękowiec: 1 person-days.",
       "obsada|6000|Detailed cast pricing for 2 shooting days.\nAktor: 2 person-days.",
-      "sprzet|1800|Detailed equipment pricing (cameras, lenses, stabilisation, monitoring, lighting, drone) for 2 shooting days.\nEquipment: 2× FX3, Aputure 600d.\nRented: Cooke.\nMarket value of equipment: 1 450 zł, discount: −550 zł.",
+      "sprzet|1800|Detailed equipment pricing (cameras, lenses, stabilisation, monitoring, lighting, drone) for 2 shooting days.\nEquipment: 2× FX3, Aputure 600d.\nRented: Cooke.\nMarket value of equipment: 1 450 PLN, discount: −550 PLN.",
       "logistyka|1953|Travel: 60 km.\nCatering: No.\nLodging: Yes.",
       "postprodukcja|7440|Detailed post-production pricing: 1 items (formats and deliverables).",
       "inne|0|Copyright: non-exclusive licence."

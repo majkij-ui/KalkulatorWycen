@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react'
 import { Minus, Plus, RefreshCw, X } from 'lucide-react'
 import { useQuote } from '@/lib/quote-context'
+import { currencyUnit, priceFromPln, type QuoteMoney } from '@/lib/quote-currency'
 import { useCrew } from '@/lib/crew-context'
 import {
   CREW_ROLE_GROUPS,
@@ -94,7 +95,8 @@ export function DayCrewSection({
   day: ShootingDay
   onUpdate: <K extends keyof ShootingDay>(field: K, value: ShootingDay[K]) => void
 }) {
-  const { marginMultiplier, formatCurrency } = useQuote()
+  // Stawki ról w zł; w wycenie w EUR cena dla klienta w pełnych euro, mój koszt w zł (S3).
+  const { marginMultiplier, formatCurrency, formatPln, money } = useQuote()
   const { quoteRoles: roles, quoteActiveRoles: activeRoles, people, addRole } = useCrew()
   const lines = day.crew ?? []
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles])
@@ -115,7 +117,9 @@ export function DayCrewSection({
     return [...groups.entries()]
   }, [activeRoles])
 
-  const figures = dayCrewFigures(day)
+  const figures = dayCrewFigures({
+    crew: lines.map((line) => ({ ...line, clientRate: priceFromPln(line.clientRate, money) })),
+  })
   const dayClient = (figures.ekipa + figures.obsada) * marginMultiplier
 
   return (
@@ -128,8 +132,10 @@ export function DayCrewSection({
               line={line}
               role={roleById.get(line.roleId) ?? null}
               people={people}
-              price={line.clientRate * line.qty * marginMultiplier}
+              price={priceFromPln(line.clientRate, money) * line.qty * marginMultiplier}
+              money={money}
               formatCurrency={formatCurrency}
+              formatPln={formatPln}
               onChange={(next) => update(line.id, next)}
               onRemove={() => remove(line.id)}
             />
@@ -164,7 +170,7 @@ export function DayCrewSection({
               <optgroup key={group} label={crewRoleGroupLabel(group)}>
                 {list.map((role) => (
                   <option key={role.id} value={role.id}>
-                    {role.name} · {Math.round(role.clientRate)} zł
+                    {role.name} · {Math.round(priceFromPln(role.clientRate, money))} {currencyUnit(money.currency)}
                   </option>
                 ))}
               </optgroup>
@@ -187,7 +193,9 @@ function CrewLineRow({
   role,
   people,
   price,
+  money,
   formatCurrency,
+  formatPln,
   onChange,
   onRemove,
 }: {
@@ -195,7 +203,9 @@ function CrewLineRow({
   role: CrewRole | null
   people: CrewMember[]
   price: number
+  money: QuoteMoney
   formatCurrency: (n: number) => string
+  formatPln: (n: number) => string
   onChange: (next: QuoteCrewLine) => void
   onRemove: () => void
 }) {
@@ -226,7 +236,7 @@ function CrewLineRow({
           {bucket === 'obsada' && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-zinc-500">obsada</span>}
         </div>
         <div className="text-[11px] text-zinc-500">
-          {formatCurrency(line.clientRate)}/dzień · mój koszt {formatCurrency(line.costRate)}
+          {formatCurrency(priceFromPln(line.clientRate, money))}/dzień · mój koszt {formatPln(line.costRate)}
         </div>
       </div>
       <select

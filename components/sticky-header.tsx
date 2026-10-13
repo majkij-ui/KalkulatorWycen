@@ -9,6 +9,8 @@ import { AnimatedCurrency } from '@/components/animated-currency'
 import { BipolarSlider } from '@/components/ui/bipolar-slider'
 import { SettingsSheet } from '@/components/settings-sheet'
 import { QuoteLibrarySheet } from '@/components/quote-library-sheet'
+import { QuoteCurrencyControl } from '@/components/quote-currency-control'
+import { formatMoney } from '@/lib/quote-currency'
 
 export function StickyHeader() {
   const {
@@ -21,12 +23,15 @@ export function StickyHeader() {
     activeQuoteId,
     activeQuoteName,
     saveQuoteToLibrary,
+    money,
+    sumaNettoPln,
   } = useQuote()
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [delta, setDelta] = useState<number | null>(null)
   const prevTotalRef = useRef<number | null>(null)
+  const prevCurrencyRef = useRef(money.currency)
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Hard-reset: two-click confirmation within 3 s
@@ -42,6 +47,12 @@ export function StickyHeader() {
     const current = totals.sumaNetto
     const prev = prevTotalRef.current
     if (prev === null) { prevTotalRef.current = current; return }
+    // Zmiana waluty wyceny to nie zmiana ceny — bez błysku różnicy.
+    if (prevCurrencyRef.current !== money.currency) {
+      prevCurrencyRef.current = money.currency
+      prevTotalRef.current = current
+      return
+    }
     if (current !== prev) {
       const diff = current - prev
       prevTotalRef.current = current
@@ -49,7 +60,7 @@ export function StickyHeader() {
       setDelta(diff)
       deltaTimerRef.current = setTimeout(() => setDelta(null), 2000)
     }
-  }, [totals.sumaNetto])
+  }, [totals.sumaNetto, money.currency])
 
   const displayPercent = Math.round((marginMultiplier - 1) * 100)
   const sign = displayPercent > 0 ? '+' : ''
@@ -172,6 +183,11 @@ export function StickyHeader() {
                     )}
                   </AnimatePresence>
                 </div>
+                {money.currency !== 'PLN' && (
+                  <p className="text-[11px] tabular-nums text-zinc-500" title="Finanse liczą się w złotych po kursie wyceny">
+                    ≈ {formatMoney(Math.round(sumaNettoPln), 'PLN', { decimals: 0 })}
+                  </p>
+                )}
               </div>
 
               {/* Action buttons */}
@@ -242,6 +258,10 @@ export function StickyHeader() {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            {/* Waluta wyceny (S3) */}
+            <QuoteCurrencyControl />
+
             {/* Margin slider */}
             <div className="flex items-center gap-3 w-64 opacity-80 hover:opacity-100 transition-opacity">
               <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 shrink-0">
@@ -258,6 +278,7 @@ export function StickyHeader() {
               <span className="text-xs font-mono text-white w-10 text-right tabular-nums">
                 {sign}{displayPercent}%
               </span>
+            </div>
             </div>
           </div>
         </div>

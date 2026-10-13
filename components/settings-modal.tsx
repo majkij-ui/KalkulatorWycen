@@ -19,6 +19,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { useQuote } from '@/lib/quote-context'
+import { formatRate } from '@/lib/quote-currency'
 import type { PricingConfigShape } from '@/lib/pricing-config'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 
@@ -119,7 +120,7 @@ function deepCloneConfig(config: PricingConfigShape): PricingConfigShape {
 }
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
-  const { pricingConfig, setPricingConfig, resetPricingToDefault } = useQuote()
+  const { pricingConfig, setPricingConfig, resetPricingToDefault, money } = useQuote()
   const [localConfig, setLocalConfig] = useState<PricingConfigShape>(() => deepCloneConfig(pricingConfig))
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -194,8 +195,14 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
         <DialogHeader>
           <DialogTitle className="text-white">Ustawienia stawek</DialogTitle>
           <p className="text-sm text-zinc-400">
-            Domyślne stawki cennika (netto, PLN). Kalkulator wraca do tych wartości po twardym resecie.
+            Domyślne stawki cennika (netto, zł). Kalkulator wraca do tych wartości po twardym resecie.
           </p>
+          {money.currency !== 'PLN' && (
+            <p className="text-xs text-amber-200/80">
+              Otwarta wycena jest w EUR: w zakładkach te stawki pokazują się ÷ kurs {formatRate(money.rate)}, w pełnych
+              euro. Cennik zostaje w złotych.
+            </p>
+          )}
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
@@ -216,7 +223,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                           Pozycja
                         </div>
                         <span className={`${INPUT_COL_WIDTH} text-right text-[10px] font-medium uppercase text-zinc-500`}>
-                          Cena (PLN)
+                          Cena (zł)
                         </span>
                       </div>
                       {visibleRows.map((row) => {
