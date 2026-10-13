@@ -5,6 +5,11 @@
  *
  *   wynik firmy = zysk projektów (won/done) − koszty stałe okresu
  *
+ * Dwie zakładki (S1): „Projekty" (kafle, płatności, wykres, plan a
+ * rzeczywistość) i „Koszty stałe i subskrypcje". Koszty stałe to WSZĘDZIE
+ * ręczne pozycje plus raty subskrypcji liczone przy odczycie
+ * (`fixedCostsInYear`, `subscriptions.ts`) — kafle, wykres i wynik też.
+ *
  * Od T6 liczby projektów to NAJLEPSZA WIEDZA: faktury zamiast planu, gdy są,
  * koszty z Realizacji zamiast planowanych, gdy je wpisano; faktura liczy się
  * w miesiącu wystawienia (`money-loop.ts`). Plan to nadal ZAMROŻONA migawka z
@@ -14,7 +19,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { ArrowRight, Loader2, Sparkles } from 'lucide-react'
 import {
   Bar,
   CartesianGrid,
@@ -50,10 +55,13 @@ import { pln, signedPln } from '@/lib/money-loop-labels'
 import { toDateKey, toYear } from '@/lib/project-types'
 import { useEvents } from '@/lib/events-context'
 import { plural } from '@/lib/pl-plural'
+import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
 import { PaymentsPanel, PlanVsActual } from './money-loop-panels'
+import { SubscriptionsPanel, type FinanceNotice } from './subscriptions-panel'
 import { useFixedCosts } from './use-fixed-costs'
+import { useSubscriptions } from './use-subscriptions'
 
 /** Pierwszy rok kokpitu — wcześniejsze lata pokazujemy tylko, gdy są w nich dane. */
 const FIRST_YEAR = 2026
@@ -64,6 +72,13 @@ const COLOR_FIXED = '#ea580c'
 const COLOR_RESULT = '#f4f4f5'
 
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru']
+
+/** Zakładki Finansów; „Raport" (S5) dopisze się tu jako trzecia. */
+const FINANCE_TABS = [
+  { value: 'projects', label: 'Projekty' },
+  { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
+] as const
+type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
 const KIND_LABELS: Record<Exclude<PeriodKind, 'month'>, string> = {
   year: 'Rok',
@@ -226,7 +241,18 @@ function vsPlan(actual: number, plan: number): string {
   return delta ? `plan ${pln(plan)} · ${delta}` : 'zgodnie z planem'
 }
 
-function KpiTiles({ money, pipeline }: { money: MoneySummary; pipeline: { count: number; value: number } }) {
+function KpiTiles({
+  money,
+  pipeline,
+  plannedFixed,
+  onOpenFixed,
+}: {
+  money: MoneySummary
+  pipeline: { count: number; value: number }
+  /** Raty subskrypcji z miesięcy po bieżącym, wliczone w okres. */
+  plannedFixed: number
+  onOpenFixed: () => void
+}) {
   const negative = money.netResult < 0
   const tone =
     money.netResult === 0
@@ -283,14 +309,28 @@ function KpiTiles({ money, pipeline }: { money: MoneySummary; pipeline: { count:
           </div>
         )}
       </div>
-      <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Koszty stałe</div>
+      <button
+        type="button"
+        onClick={onOpenFixed}
+        className="group rounded-xl border border-white/5 bg-zinc-900/40 p-4 text-left transition-colors hover:border-white/15"
+        aria-label="Koszty stałe — szczegóły"
+      >
+        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-zinc-500">
+          Koszty stałe
+          <ArrowRight className="size-3.5 text-zinc-700 transition-colors group-hover:text-zinc-300" />
+        </div>
         <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(money.fixedCosts.total)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          ZUS {pln(money.fixedCosts.zus)} · mark. {pln(money.fixedCosts.marketing)} · inne{' '}
+          ZUS {pln(money.fixedCosts.zus)} · mark. {pln(money.fixedCosts.marketing)} · pozostałe{' '}
           {pln(money.fixedCosts.other)}
         </div>
-      </div>
+        {money.fixedCosts.subscriptions > 0 && (
+          <div className="mt-0.5 text-xs text-zinc-500">
+            w tym subskrypcje {pln(money.fixedCosts.subscriptions)}
+            {plannedFixed > 0.5 && ` · plan na kolejne miesiące ${pln(plannedFixed)}`}
+          </div>
+        )}
+      </button>
       <div className={`rounded-xl border p-4 ${tone.box}`}>
         <div className="text-[11px] uppercase tracking-wide text-zinc-400">Wynik firmy</div>
         <div className={`mt-1 tabular-nums text-xl font-bold ${tone.text}`}>
@@ -372,7 +412,7 @@ function TrendChart({ trend, period }: { trend: MoneySummary[]; period: Period }
 
       {empty ? (
         <div className="flex h-48 items-center justify-center text-sm text-zinc-600">
-          Brak danych w {period.year} — zapisz projekt jako „W realizacji" albo dodaj koszty stałe.
+          Brak danych w {period.year} — zapisz projekt jako „W realizacji" albo dodaj koszty stałe lub subskrypcje.
         </div>
       ) : (
         <div className="h-64 w-full">
@@ -422,15 +462,76 @@ function TrendChart({ trend, period }: { trend: MoneySummary[]; period: Period }
 
 // ── Sekcja ───────────────────────────────────────────────────────────────────
 
+function FinanceTabs({ tab, onChange }: { tab: FinanceTab; onChange: (next: FinanceTab) => void }) {
+  return (
+    <div className="mb-6 flex gap-1 border-b border-white/5" role="tablist" aria-label="Zakładki finansów">
+      {FINANCE_TABS.map(({ value, label }) => {
+        const active = value === tab
+        return (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(value)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              active ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** „Usunięto … Cofnij" — wspólny dla subskrypcji i kosztów. */
+function NoticeBar({ notice, onDone }: { notice: FinanceNotice; onDone: () => void }) {
+  return (
+    <div
+      className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300"
+      role="status"
+    >
+      <span className="min-w-0 flex-1">{notice.message}</span>
+      {notice.undo && (
+        <button
+          type="button"
+          onClick={async () => {
+            const undo = notice.undo
+            onDone()
+            await undo?.()
+          }}
+          className="font-semibold text-primary outline-none hover:underline focus-visible:underline"
+        >
+          Cofnij
+        </button>
+      )}
+      <button type="button" onClick={onDone} className="text-zinc-500 hover:text-zinc-200" aria-label="Zamknij komunikat">
+        ×
+      </button>
+    </div>
+  )
+}
+
 export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const { projects, isLoading } = useProjectHub()
   const fixed = useFixedCosts()
+  const subs = useSubscriptions()
   const { events } = useEvents()
+  const [tab, setTab] = useState<FinanceTab>('projects')
+  const [notice, setNotice] = useState<FinanceNotice | null>(null)
   const [period, setPeriod] = useState<Period>(() => periodContaining(new Date(), 'year'))
   const today = toDateKey(new Date())
+  const currentMonth = today.slice(0, 7)
 
   // Pieniądze projektów liczone raz; okresy i wykres tylko je dzielą.
   const ledger = useMemo(() => moneyLedger(projects, events, today), [projects, events, today])
+  // Koszty stałe roku: ręczne + raty subskrypcji (bez podwójnego liczenia).
+  const yearCosts: EffectiveFixedCost[] = useMemo(
+    () => fixedCostsInYear(fixed.costs, subs.subscriptions, period.year),
+    [fixed.costs, subs.subscriptions, period.year]
+  )
 
   const years = useMemo(() => {
     const set = new Set<number>([FIRST_YEAR, new Date().getFullYear(), period.year, ...moneyYears(ledger)])
@@ -442,13 +543,24 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
       const y = toYear(c.month)
       if (y !== null) set.add(y)
     })
+    subs.subscriptions.forEach((s) => {
+      const y = toYear(s.startDate)
+      if (y !== null) set.add(y)
+    })
     const min = Math.min(...set)
     const max = Math.max(...set)
     return Array.from({ length: max - min + 1 }, (_, i) => max - i)
-  }, [projects, fixed.costs, period.year, ledger])
+  }, [projects, fixed.costs, subs.subscriptions, period.year, ledger])
 
-  const money = useMemo(() => summarizeMoney(ledger, fixed.costs, period), [ledger, fixed.costs, period])
-  const trend = useMemo(() => moneyTrend(ledger, fixed.costs, period.year), [ledger, fixed.costs, period.year])
+  const money = useMemo(() => summarizeMoney(ledger, yearCosts, period), [ledger, yearCosts, period])
+  const trend = useMemo(() => moneyTrend(ledger, yearCosts, period.year), [ledger, yearCosts, period.year])
+  const plannedFixed = useMemo(
+    () =>
+      yearCosts
+        .filter((c) => c.derived && c.month > currentMonth && isInPeriod(c.month, period))
+        .reduce((sum, c) => sum + c.amount, 0),
+    [yearCosts, currentMonth, period]
+  )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
   const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period), [projects, period])
   const pipeline = useMemo(
@@ -464,31 +576,48 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
   const days = useMemo(() => paymentDays(ledger, period), [ledger, period])
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
+  const switchTab = (next: FinanceTab) => {
+    setTab(next)
+    setNotice(null)
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Finanse</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Zysk projektów „W realizacji" i „Zrealizowanych" minus koszty stałe. Przychód z faktur
-            (w miesiącu wystawienia), a gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich
-            brak — z planu. Wyceny nie wchodzą do wyniku.
+            {tab === 'projects' ? (
+              <>
+                Zysk projektów „W realizacji" i „Zrealizowanych" minus koszty stałe. Przychód z faktur (w miesiącu
+                wystawienia), a gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich brak — z planu. Wyceny nie
+                wchodzą do wyniku.
+              </>
+            ) : (
+              <>
+                Subskrypcje liczą się same w każdym miesiącu cyklu; miesiąc, który był inny, poprawiasz na liście
+                miesięcy. Wszystko tutaj wchodzi do wyniku firmy w zakładce Projekty.
+              </>
+            )}
           </p>
         </div>
         <PeriodPicker period={period} years={years} onChange={setPeriod} />
       </header>
 
-      <BackfillBanner />
+      <FinanceTabs tab={tab} onChange={switchTab} />
 
-      {isLoading || fixed.isLoading ? (
+      {isLoading || fixed.isLoading || subs.isLoading ? (
         <div className="flex justify-center py-16 text-zinc-600">
           <Loader2 className="size-5 animate-spin" />
         </div>
-      ) : (
+      ) : tab === 'projects' ? (
         <>
+          <BackfillBanner />
           <KpiTiles
             money={money}
             pipeline={{ count: pipelineSummary.quoteCount, value: pipelineSummary.pipelineValue }}
+            plannedFixed={plannedFixed}
+            onOpenFixed={() => switchTab('fixed')}
           />
           <PaymentsPanel
             open={open}
@@ -505,7 +634,27 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             pipeline={pipeline}
             onOpenProject={onOpenProject}
           />
-          <FixedCostsPanel period={period} {...fixed} />
+        </>
+      ) : (
+        <>
+          {notice && <NoticeBar notice={notice} onDone={() => setNotice(null)} />}
+          <SubscriptionsPanel
+            subs={subs}
+            fixed={fixed}
+            yearCosts={yearCosts}
+            year={period.year}
+            ledger={ledger}
+            today={today}
+            onNotice={setNotice}
+          />
+          <FixedCostsPanel
+            period={period}
+            today={today}
+            yearCosts={yearCosts}
+            subscriptions={subs.subscriptions}
+            fixed={fixed}
+            onNotice={setNotice}
+          />
         </>
       )}
     </div>

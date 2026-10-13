@@ -9,8 +9,9 @@
  *   firma    → zysk projektów MINUS koszty stałe okresu (ZUS, marketing, inne)
  */
 
+import { fixedCostCategory, type CostCategory } from './fixed-cost-categories'
 import type { FixedCost, FixedCostType, Project } from './project-types'
-import { countsTowardRevenue, toMonthKey, toQuarter, toYear } from './project-types'
+import { countsTowardRevenue, isLiveFixedCost, toMonthKey, toQuarter, toYear } from './project-types'
 
 // ── Okresy ───────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,12 @@ export interface FixedCostBreakdown {
   marketing: number
   other: number
   total: number
+  /** Po kategoriach (`fixed-cost-categories.ts`): oprogramowanie, bank, biuro… */
+  byCategory: Partial<Record<CostCategory, number>>
+  /** Z subskrypcji: raty wyliczone i ręczne poprawki rat. */
+  subscriptions: number
+  /** W tym raty wyliczone automatycznie (nie ma ich w pliku). */
+  derived: number
 }
 
 export interface PeriodSummary {
@@ -114,16 +121,29 @@ export interface PeriodSummary {
 }
 
 function emptyFixedCosts(): FixedCostBreakdown {
-  return { zus: 0, marketing: 0, other: 0, total: 0 }
+  return { zus: 0, marketing: 0, other: 0, total: 0, byCategory: {}, subscriptions: 0, derived: 0 }
 }
 
+/** Dolicza pozycję do worków. Usunięte (`deletedAt`) pomija. */
+function addFixedCost(out: FixedCostBreakdown, cost: FixedCost): void {
+  if (!isLiveFixedCost(cost)) return
+  const amount = Number.isFinite(cost.amount) ? cost.amount : 0
+  out[cost.type as FixedCostType] += amount
+  out.total += amount
+  const category = fixedCostCategory(cost)
+  out.byCategory[category] = (out.byCategory[category] ?? 0) + amount
+  if (cost.subscriptionId) out.subscriptions += amount
+  if (cost.derived) out.derived += amount
+}
+
+/**
+ * Koszty stałe okresu. Raty subskrypcji wchodzą tylko wtedy, gdy są w `costs`
+ * — Finanse podają tu `fixedCostsInYear` (`subscriptions.ts`), nie surowy plik.
+ */
 export function summarizeFixedCosts(costs: FixedCost[], period: Period): FixedCostBreakdown {
   const out = emptyFixedCosts()
   costs.forEach((cost) => {
-    if (!isInPeriod(cost.month, period)) return
-    const amount = Number.isFinite(cost.amount) ? cost.amount : 0
-    out[cost.type as FixedCostType] += amount
-    out.total += amount
+    if (isInPeriod(cost.month, period)) addFixedCost(out, cost)
   })
   return out
 }
@@ -201,11 +221,9 @@ export function fixedCostsByMonth(costs: FixedCost[]): Map<string, FixedCostBrea
   const map = new Map<string, FixedCostBreakdown>()
   costs.forEach((cost) => {
     const key = toMonthKey(cost.month)
-    if (!key) return
+    if (!key || !isLiveFixedCost(cost)) return
     const bucket = map.get(key) ?? emptyFixedCosts()
-    const amount = Number.isFinite(cost.amount) ? cost.amount : 0
-    bucket[cost.type as FixedCostType] += amount
-    bucket.total += amount
+    addFixedCost(bucket, cost)
     map.set(key, bucket)
   })
   return map

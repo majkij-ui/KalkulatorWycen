@@ -1,0 +1,54 @@
+{
+  "note": "S1: subskrypcje z cyklicznych wpisów (ZUS, FPD, opłaty bankowe, Artlist). Raty od października 2026; minione miesiące zostają jak są (ręczne wpisy w finances.json nietknięte).",
+  "upsert": {
+    "subscriptions.json": [
+      {
+        "id": "sub-zus",
+        "name": "ZUS",
+        "category": "zus",
+        "amount": 1417.14,
+        "currency": "PLN",
+        "cadence": "monthly",
+        "startDate": "2026-10-20",
+        "notes": "kwota z 02, 04, 06 i 08.2026; miesiąc z inną kwotą popraw na liście miesięcy",
+        "createdAt": "2026-10-13T12:00:00.000Z",
+        "updatedAt": "2026-10-13T12:00:00.000Z"
+      },
+      {
+        "id": "sub-fpd",
+        "name": "FPD",
+        "category": "office",
+        "amount": 455.1,
+        "currency": "PLN",
+        "cadence": "monthly",
+        "startDate": "2026-10-01",
+        "createdAt": "2026-10-13T12:00:00.000Z",
+        "updatedAt": "2026-10-13T12:00:00.000Z"
+      },
+      {
+        "id": "sub-bank",
+        "name": "Opłaty bankowe",
+        "category": "bank",
+        "amount": 10.3,
+        "currency": "PLN",
+        "cadence": "monthly",
+        "startDate": "2026-10-01",
+        "notes": "zwykle 10,27–10,31 zł; większe miesiące (np. 08.2026) wpisuj ręcznie",
+        "createdAt": "2026-10-13T12:00:00.000Z",
+        "updatedAt": "2026-10-13T12:00:00.000Z"
+      },
+      {
+        "id": "sub-artlist",
+        "name": "Artlist",
+        "category": "software",
+        "amount": 2611.51,
+        "currency": "PLN",
+        "cadence": "yearly",
+        "startDate": "2027-06-01",
+        "notes": "roczna; rata 06.2026 jest już ręcznym wpisem „Oprogramowanie (Artlist roczny)”",
+        "createdAt": "2026-10-13T12:00:00.000Z",
+        "updatedAt": "2026-10-13T12:00:00.000Z"
+      }
+    ]
+  }
+}

@@ -100,7 +100,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
     if (!campaign) return Promise.resolve()
     const run = async () => {
       const existing = (await listFixedCosts()).find(
-        (c) => c.campaignId === campaign.id && c.month === month.month
+        (c) => c.campaignId === campaign.id && c.month === month.month && !c.deletedAt
       )
       if (reading.spend === undefined) {
         if (existing) await fixed.removeCost(existing.id)

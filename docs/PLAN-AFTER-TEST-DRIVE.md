@@ -164,7 +164,136 @@ invoices (S-AI, JHJ, Morris & Lloyd, CIONET wywiady), rental rates, and the Zapl
 
 ## 5. S1 as built
 
-*(not built yet — S1 writes here)*
+*(2026-10-13, branch `claude/fixed-costs-subscriptions-1a3bd1`, not merged.)*
+
+**Built:**
+- **Finance sub-tabs.** „Projekty” is the old screen without the month list. „Koszty stałe i subskrypcje” is
+  new. Tabs come from the `FINANCE_TABS` list in `finance-section.tsx`, so S5 adds „Raport” as one more entry.
+  The period picker is shared by both tabs. The „Koszty stałe” tile adds „w tym subskrypcje X · plan na kolejne
+  miesiące Y”, and clicking it opens the new tab.
+- **`subscriptions.json`** (`lib/subscription-types.ts`, `lib/subscriptions-store.ts`). Fields: `name`,
+  `category`, `amount` (one charge), `currency` (PLN / EUR / USD), `rate` (zł per unit, editable, „NBP”
+  button), `cadence` (`monthly` / `yearly` / `custom` + `everyMonths`), `startDate` (first charge), `endDate?`,
+  `notes?`. The schema is passthrough with soft delete. Currency, cadence and category are strings with known
+  keys, so a value from a newer build stays in the file. Such a subscription is flagged and not counted,
+  rather than counted wrong. Added to `SCHEMAS` in `scripts/data.mts`.
+- **Months derived on read** (`lib/subscriptions.ts`, pure). `effectiveFixedCosts` / `fixedCostsInYear` return
+  the manual costs plus the derived charges, and Finance passes them to `summarizeMoney` / `moneyTrend`.
+  Tiles, trend, result, „co jeśli” and the month list all use it. Nothing derived is ever stored.
+- **Decision C.** A correction is a normal fixed cost with `subscriptionId` + `month`, and it replaces the
+  derived charge of that month. Removing it („auto”, soft delete) brings the derived charge back. There is
+  no flag for „skipped”: a skipped month is a 0 zł correction.
+- **Categories** (`lib/fixed-cost-categories.ts`): ZUS, Marketing, Oprogramowanie, Bank, Księgowość / biuro,
+  Telefon i internet, Ubezpieczenia, Inne. They are stored as an optional `category` next to the unchanged
+  `type` enum (`.catch('other')`). New categories write `type: 'other'`, so an old build counts them under
+  „Inne”. No version bump. „Sprzęt” is left to S4, because gear comes from the catalogue.
+- **Fixed costs** gain optional `category`, `subscriptionId` and `deletedAt`. Deleting is soft everywhere,
+  with Cofnij. The hard `deleteFixedCost` is gone. Breakdowns skip deleted entries and add `byCategory`,
+  `subscriptions` and `derived`. Marketing ignores deleted readings: re-entering a cleared month creates a new
+  record instead of reviving the deleted one.
+- **The tab.**
+  - Subscriptions at the top. Columns: per month (a yearly charge / 12), per year, the actual amount in the
+    selected year, and a „co jeśli” switch. Totals exclude ended subscriptions.
+  - „Co jeśli” removes the subscription's charges and corrections from the selected year. It shows the
+    fixed costs and Wynik firmy before and after, and saves nothing.
+  - The form warns about manual entries that may be the same payment (same category, or the name in the
+    description) and offers „Zacznij raty od <month after them>”.
+  - A new amount or cadence on a subscription with past months asks „od <bieżący miesiąc>” (the default:
+    past uncorrected months are saved as corrections at the old price) or „we wszystkich miesiącach” (the
+    old price was a typo).
+  - Below it, every month of the period, with three kinds of rows:
+    - „auto” / „plan”: clicking the amount saves a correction; „Pomiń” saves 0 zł.
+    - corrections: „poprawiona” / „pominięta” / „dopłata”, the amount editable, „auto” to restore.
+    - manual costs: category, description and amount editable in place, × with Cofnij.
+  - Each month has a quick-entry row („+”, Enter saves and stays open). „Powtarzaj co miesiąc do” is gone:
+    a monthly repeat is now a subscription. `repeatMonthly` / `monthRange` stay in lib.
+
+**Real-life cases, as built** (each has a test in `subscriptions.test.ts`):
+
+| Case | What Finance counts |
+|---|---|
+| Monthly fee from day X | one charge a month from the start, on the same day (31st → last day of the month) |
+| Yearly licence | the full amount in its payment month (cash view); the table also shows /12 per month |
+| Every N months (insurance) | every N months from the start |
+| EUR / USD | amount × the subscription's rate; no rate → not counted, „brak kursu — nie liczy się” |
+| A month paid differently (amount, FX) | the correction, instead of the derived charge |
+| Skipped / paused month | a 0 zł correction („pominięta”) |
+| Correction removed („auto”) | the derived charge again; Cofnij restores the correction |
+| Two corrections in one month | both (they are facts), no derived charge |
+| Extra payment outside a charge month | counts as itself; the regular charge stays |
+| Ended (`endDate`) | no charges whose day is after the end; corrections stay |
+| Deleted | no derived charges; corrections stay as plain costs („usunięta subskrypcja”); Cofnij |
+| New price from now on | past uncorrected months saved at the old price; the new price from the current month |
+| Typo in the price | „we wszystkich miesiącach”: every derived month changes |
+| Category changed | corrections follow the subscription's category on read |
+| Manual entry overlaps a new subscription | form warning plus „Zacznij raty od …” |
+| Future months of the selected year | counted (a forecast); the tile says „plan na kolejne miesiące” |
+
+**Tests:**
+- New: `subscriptions.test.ts` (26), `fixed-cost-categories.test.ts` (6), `subscriptions-store.test.ts` (4),
+  plus 1 each in `finance-calc` and `marketing-calc`. 492 in total (454 before).
+- 32 deliberate mutations across `subscriptions`, `fixed-cost-categories`, `finance-calc`, `marketing-calc`
+  and both stores. 28 were caught at first. The four survivors (two redundant guards, short-name matching, a
+  raw start date that skips the schema) now have tests: 32 / 32 caught.
+
+**Verified in the browser preview.** The seed was the real `finances.json` with both patches below applied,
+plus 3 synthetic projects and the 2 real campaigns. Storage was restored byte for byte afterwards.
+- Year and Q4 numbers checked by hand: Q4 2,960.04 + 1,803.14 + 2,258.24 = 7,021.42 zł; result 6,735 − 7,021.
+- The correction replaces the auto row; „Pomiń”; „auto” plus Cofnij.
+- Quick entry: two rows with Enter; in-place edits; delete plus Cofnij.
+- Subscription form: double-count warning and „Zacznij od listopada”; „nowa cena od października” saved
+  July–September at the old price; deleting and restoring a subscription.
+- The NBP rate (EUR 4.3806, 13.10) and EUR counting.
+- „Co jeśli” on ZUS: −4,251 zł.
+- Marketing: clearing a reading, then entering a new one.
+- Phone width (375 px) without horizontal scroll; no console errors.
+
+**Switch-over (prepared, not applied — M.J. decides).** Both patches are in `imports/` and dry-run cleanly
+against the real hub folder (`npm run data -- apply <file> --dry-run`).
+- `imports/2026-10-13-s1-subscriptions.json` (adds `subscriptions.json` only; `finances.json` untouched):
+  - ZUS 1,417.14 zł a month from 20.10.2026 (the Feb, Apr, Jun and Aug amount; odd months were 1,312–1,358);
+  - FPD 455.10 zł a month from 01.10;
+  - Opłaty bankowe 10.30 zł a month from 01.10;
+  - Artlist 2,611.51 zł a year from 01.06.2027, because June 2026 is already a manual entry.
+- `imports/2026-10-13-s1-categories.json`: `category` on 25 old entries (Oprogramowanie → software, Opłaty
+  bankowe → bank, FPD → office), `ifMissing`. Amounts, months and `type` are unchanged; only the split by
+  category changes.
+- Effect on the real data, applied to a scratch copy and recomputed with the app's functions:
+  - January–September are unchanged to the grosz.
+  - October–December gain 1,882.54 zł a month.
+  - 2026 fixed costs go from 43,817.25 to 49,464.87 zł (+5,647.62).
+  - The 2026 result goes from 38,756.86 to 33,109.24 zł.
+  - Revenue (167,813.23) and project profit are unchanged.
+- An alternative to discuss, not prepared: also link the past months as corrections, so each subscription
+  shows its history and „co jeśli” covers the whole year. That touches about 40 records and needs 0 zł
+  corrections for the gaps (Feb FPD, „FPD (dwa miesiące)” in March, September).
+
+**Open for M.J.:**
+1. Apply the two patches as they are? (Recommended: yes. Past months stay as they are.)
+2. September has no ZUS and no FPD entry, because the data stops at 20.09. Were they paid? If yes, start those
+   two in September (+1,872.24 zł) or type them by hand.
+3. What is FPD? It is set as „Księgowość / biuro”.
+4. Was the June 2,611.51 zł Artlist alone? If yes, linking that entry (one `update`) is cleaner than starting
+   in 2027.
+5. Which tools make up the rest of „Oprogramowanie” (98–1,129 zł a month)? Add them in the new tab from
+   October (the form warns about overlaps), or send the list for a patch.
+6. Future months of the current year now count in the year's fixed costs and result (forecast, shown as
+   „plan na kolejne miesiące”). Keep it that way, or count only up to the current month?
+
+**Desktop-app checks (cannot be proven in the browser):**
+- The first save creates `subscriptions.json` in AppData.
+- The „NBP” button inside the app (CSP is null; the PDF uses the same API).
+- Clearing and re-entering a Marketing reading.
+- After installing, don't open an older build: it would count soft-deleted costs and ignore derived months.
+
+**Known limits / next:**
+- Yearly charges are cash-view only. S4's „Rozłóż duże zakupy” toggle could spread them later.
+- No price history field: „od teraz” stores the past months as corrections, so they show „poprawiona”.
+- A pause over several months means skipping each month.
+- „Co jeśli” is per year and resets when you leave the tab.
+- The mobile top nav icons have no `aria-label` (existed before S1).
+- `nbp-fx.ts` gained `fetchNbpMidRate` at the end of the file. S3 may touch the same file, which is a
+  trivial merge.
 
 ## 6. S2 as built
 

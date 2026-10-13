@@ -1,35 +1,34 @@
 'use client'
 
 /**
- * Stan kosztów stałych dla sekcji Finanse.
+ * Stan kosztów stałych dla sekcji Finanse (i odczytów z panelu w Marketingu).
  *
  * Zwykły hook zamiast kolejnego kontekstu: koszty stałe czyta i edytuje tylko
- * dashboard finansowy — nikt inny w apce ich nie potrzebuje.
+ * dashboard finansowy i zakładka Marketing. `costs` to pozycje nieusunięte;
+ * usuwanie jest miękkie (`deletedAt`), a „Cofnij" przywraca po znaczniku.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  addFixedCosts,
   createFixedCost,
-  deleteFixedCost,
   listFixedCosts,
-  monthRange,
-  repeatMonthly,
-  replaceAllFixedCosts,
+  restoreFixedCosts,
+  softDeleteFixedCosts,
   upsertFixedCost,
 } from '@/lib/finances-store'
-import type { FixedCost, FixedCostType } from '@/lib/project-types'
+import { categoryFields, type CostCategory } from '@/lib/fixed-cost-categories'
+import { isLiveFixedCost, type FixedCost } from '@/lib/project-types'
 
 export interface AddFixedCostParams {
   month: string
-  type: FixedCostType
+  category: CostCategory
   amount: number
   label?: string
-  /** `YYYY-MM` — gdy podane, pozycja powiela się na każdy miesiąc do tego włącznie. */
-  repeatUntil?: string
 }
 
 export function useFixedCosts() {
-  const [costs, setCosts] = useState<FixedCost[]>([])
+  const [all, setAll] = useState<FixedCost[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -37,7 +36,7 @@ export function useFixedCosts() {
     ;(async () => {
       const loaded = await listFixedCosts()
       if (cancelled) return
-      setCosts(loaded)
+      setAll(loaded)
       setIsLoading(false)
     })()
     return () => {
@@ -45,24 +44,36 @@ export function useFixedCosts() {
     }
   }, [])
 
+  const costs = useMemo(() => all.filter(isLiveFixedCost), [all])
+
   const addCost = useCallback(async (params: AddFixedCostParams) => {
-    const template = createFixedCost(params)
-    const months = params.repeatUntil ? monthRange(template.month, params.repeatUntil) : []
-    if (months.length > 1) {
-      const current = await listFixedCosts()
-      setCosts(await replaceAllFixedCosts([...current, ...repeatMonthly(template, months)]))
-    } else {
-      setCosts(await upsertFixedCost(template))
-    }
+    const { type, category } = categoryFields(params.category)
+    setAll(await upsertFixedCost(createFixedCost({ ...params, type, category })))
+  }, [])
+
+  /** Kilka gotowych pozycji jednym zapisem (poprawki rat). */
+  const addCosts = useCallback(async (items: FixedCost[]) => {
+    if (items.length) setAll(await addFixedCosts(items))
   }, [])
 
   const updateCost = useCallback(async (cost: FixedCost) => {
-    setCosts(await upsertFixedCost(cost))
+    setAll(await upsertFixedCost(cost))
   }, [])
 
-  const removeCost = useCallback(async (id: string) => {
-    setCosts(await deleteFixedCost(id))
+  /** Miękko usuwa pozycje; zwraca znacznik do „Cofnij". */
+  const removeCosts = useCallback(async (ids: string[]) => {
+    const stamp = new Date().toISOString()
+    setAll(await softDeleteFixedCosts(ids, stamp))
+    return stamp
   }, [])
 
-  return { costs, isLoading, addCost, updateCost, removeCost }
+  const removeCost = useCallback((id: string) => removeCosts([id]), [removeCosts])
+
+  const restoreCosts = useCallback(async (stamp: string) => {
+    setAll(await restoreFixedCosts(stamp))
+  }, [])
+
+  return { costs, isLoading, addCost, addCosts, updateCost, removeCost, removeCosts, restoreCosts }
 }
+
+export type FixedCostsState = ReturnType<typeof useFixedCosts>

@@ -145,6 +145,13 @@ test('koszty innych kampanii i bez kampanii nie wchodzą do tej', () => {
   assert.equal(months.find((m) => m.month === '2026-05')?.spend, 1000)
 })
 
+test('usunięty odczyt z panelu (miękko) nie liczy się: miesiąc wraca do szacunku z budżetu', () => {
+  const months = campaignMonths(campaign(), [cost('2026-05', 2300, { deletedAt: '2026-10-13T10:00:00.000Z' })], [], TODAY)
+  const may = months.find((m) => m.month === '2026-05')!
+  assert.equal(may.spend, null)
+  assert.equal(may.estimated, true)
+})
+
 test('liczenie leadów: realne = dobre + bardzo dobre, nieocenione osobno', () => {
   const counts = countLeads([lead('2026-05-01', 'fake'), lead('2026-05-02', 'good'), lead('2026-05-03', 'very_good'), lead('2026-05-04', undefined), lead('2026-05-05', 'coś nowego')])
   assert.deepEqual(counts, { total: 5, fake: 1, good: 1, veryGood: 1, unrated: 2, real: 2 })

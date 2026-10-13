@@ -394,9 +394,28 @@ export const fixedCostSchema = z
     campaignId: z.string().min(1).optional().catch(undefined),
     clicks: optionalCount,
     impressions: optionalCount,
+    /**
+     * Kategoria (S1, `fixed-cost-categories.ts`): oprogramowanie, bank, biuro…
+     * Tekst ze znanymi kluczami; `type` zostaje zgrubnym workiem dla starszych
+     * buildów. Brak = kategoria z `type`.
+     */
+    category: z.string().min(1).optional().catch(undefined),
+    /**
+     * Rata subskrypcji za `month`, wpisana ręcznie: zastępuje ratę wyliczoną
+     * z `subscriptions.json` (kwota, kurs, pominięty miesiąc = 0 zł). Miesiąc
+     * nigdy nie liczy się dwa razy (`subscriptions.ts`).
+     */
+    subscriptionId: z.string().min(1).optional().catch(undefined),
+    /** Miękkie usunięcie (ISO); „Cofnij" zdejmuje znacznik. */
+    deletedAt: z.string().optional().catch(undefined),
   })
   .passthrough()
 export type FixedCost = z.infer<typeof fixedCostSchema>
+
+/** Pozycja nieusunięta — tylko takie wchodzą do liczb. */
+export function isLiveFixedCost(cost: { deletedAt?: unknown }): boolean {
+  return !cost.deletedAt
+}
 
 // ── Wynik finansowy projektu ─────────────────────────────────────────────────
 

@@ -1,0 +1,182 @@
+{
+  "note": "S1: kategorie dla dotychczasowych wpisów (Oprogramowanie → oprogramowanie, Opłaty bankowe → bank, FPD → księgowość / biuro). Kwoty, miesiące i type bez zmian.",
+  "update": {
+    "finances.json": [
+      {
+        "id": "fc-retro2026-2026-01-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-01-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-01-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-02-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-02-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-03-fpd-dwa-miesiace",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-03-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-03-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-04-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-04-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-04-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-05-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-05-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-05-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-06-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-06-oprogramowanie-artlist-roczny",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-06-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-07-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-07-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-07-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-08-fpd",
+        "set": {
+          "category": "office"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-08-oprogramowanie",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-08-oplaty-bankowe",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-09-oprogramowanie-do-20-09",
+        "set": {
+          "category": "software"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-09-oplaty-bankowe-do-20-09",
+        "set": {
+          "category": "bank"
+        },
+        "ifMissing": true
+      }
+    ]
+  }
+}
