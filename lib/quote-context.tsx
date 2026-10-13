@@ -5,13 +5,12 @@ import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay
 import type { PricingConfigShape } from './pricing-config'
 import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
-import { getPdfTextsConfig, savePdfTextsConfig, renderTermOvertime, renderTermRevisions } from './pdf-texts-config'
+import { getPdfTextsConfig, savePdfTextsConfig, buildTermsAndConditions } from './pdf-texts-config'
 import type { PortfolioCatalogueEntry } from './portfolio-catalogue'
 import { getPortfolioCatalogue, savePortfolioCatalogue } from './portfolio-catalogue'
 import type { PdfLang } from './pdf-i18n'
-import { getBreakdownWithPricing, formatCurrency, type Totals, type PhaseBreakdown, type LineItemRow } from './quote-calc'
-import { safeNum } from './safe-numbers'
-import { computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial } from './quote-financials'
+import { formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
+import { buildQuoteBreakdown, computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial } from './quote-financials'
 import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
 import { buildPersistedSnapshot } from './storage'
 import {
@@ -385,42 +384,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   const getTermsAndConditions = useMemo(() => {
     return function terms(lang: PdfLang = 'pl'): string[] {
-      const isEn = lang === 'en'
-      // Pick EN twin when active, but fall back gracefully to PL (and finally
-      // an empty string handled below) if a saved config is missing the EN field.
-      const pickEn = (en: string | undefined, pl: string | undefined): string =>
-        (typeof en === 'string' && en.trim() ? en : (typeof pl === 'string' ? pl : ''))
-      const tplLicencja = isEn ? pickEn(pdfTexts.termLicencja_en, pdfTexts.termLicencja) : (pdfTexts.termLicencja ?? '')
-      const tplPrzekazanie = isEn ? pickEn(pdfTexts.termPrzekazanie_en, pdfTexts.termPrzekazanie) : (pdfTexts.termPrzekazanie ?? '')
-      const tplOvertime = isEn ? pickEn(pdfTexts.termOvertime_en, pdfTexts.termOvertime) : (pdfTexts.termOvertime ?? '')
-      const tplRevisions = isEn ? pickEn(pdfTexts.termRevisions_en, pdfTexts.termRevisions) : (pdfTexts.termRevisions ?? '')
-      const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
-
-      const out: string[] = []
-      if (data.copyrightType === 'licencja' && tplLicencja) {
-        out.push(tplLicencja)
-      }
-      if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
-        out.push(tplPrzekazanie)
-      }
-      if (data.includeOvertimeInfo && tplOvertime) {
-        out.push(renderTermOvertime(tplOvertime, data.standardDayHours, data.overtimeHourlyRate))
-      }
-      if (data.includeRevisionsInfo && tplRevisions) {
-        out.push(renderTermRevisions(tplRevisions, data.includedRevisions, data.extraRevisionPrice))
-      }
-      if (tplNetto) out.push(tplNetto)
-      return out
+      return buildTermsAndConditions(data, pdfTexts, lang)
     }
   }, [
     pdfTexts,
-    data.copyrightType,
-    data.includeOvertimeInfo,
-    data.standardDayHours,
-    data.overtimeHourlyRate,
-    data.includeRevisionsInfo,
-    data.includedRevisions,
-    data.extraRevisionPrice,
+    data,
   ])
 
   const resetToZero = useCallback(() => {
@@ -631,47 +599,10 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     }, 500)
   }, [templates])
 
-  const autoCrewDays = calculateTotalCrewDays()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { cateringCost, lodgingCost, ...totals } = computeQuoteTotals(data, marginMultiplier, pricingConfig)
 
-  const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricingConfig)
-  const breakdown =
-    cateringCost > 0 || lodgingCost > 0
-      ? (() => {
-          const phases = baseBreakdown.map((p) => ({ ...p, items: [...(p.items ?? [])] }))
-          const dodIndex = phases.findIndex((p) => p.category === 'Dodatkowe')
-          if (dodIndex === -1) return baseBreakdown
-          const dod = phases[dodIndex]
-          const extraItems: LineItemRow[] = []
-          if (cateringCost > 0) {
-            const qty = data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays
-            extraItems.push({
-              label: 'Catering',
-              value: `${qty} osobodni`,
-              quantity: qty,
-              unitPriceNet: data.cateringRate,
-              lineNetto: cateringCost,
-            })
-          }
-          if (lodgingCost > 0) {
-            const qty = data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays
-            extraItems.push({
-              label: 'Noclegi',
-              value: `${qty} osobodni`,
-              quantity: qty,
-              unitPriceNet: data.lodgingRate,
-              lineNetto: lodgingCost,
-            })
-          }
-          const newItems = [...dod.items, ...extraItems]
-          phases[dodIndex] = {
-            ...dod,
-            items: newItems,
-            phaseNetto: newItems.reduce((s, i) => s + i.lineNetto, 0),
-          }
-          return phases
-        })()
-      : baseBreakdown
+  const breakdown = buildQuoteBreakdown(data, marginMultiplier, pricingConfig)
 
   const value: QuoteContextValue = {
     data,

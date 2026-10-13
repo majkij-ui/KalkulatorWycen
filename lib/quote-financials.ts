@@ -11,7 +11,7 @@
 
 import { defaultQuoteData, type QuoteData, type ShootingDay } from './quote-types'
 import { migratePricingConfig, DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
-import { getTotals } from './quote-calc'
+import { getBreakdownWithPricing, getTotals, type LineItemRow, type PhaseBreakdown } from './quote-calc'
 import { dayCrewFigures } from './quote-crew'
 import { computeProfitSummary, resolveProfitSections } from './profit-calc'
 import { safeArray, safeNum } from './safe-numbers'
@@ -101,6 +101,53 @@ export function computeQuoteTotals(
     cateringCost,
     lodgingCost,
   }
+}
+
+/**
+ * Fazy wyceny z cateringiem i noclegami dopisanymi do „Dodatkowe" — to, co
+ * pokazują zakładki kalkulatora i z czego powstają wiersze PDF.
+ */
+export function buildQuoteBreakdown(
+  data: QuoteData,
+  marginMultiplier: number,
+  pricing: PricingConfigShape
+): PhaseBreakdown[] {
+  const { cateringCost, lodgingCost } = computeQuoteTotals(data, marginMultiplier, pricing)
+  const baseBreakdown = getBreakdownWithPricing(data, marginMultiplier, pricing)
+  if (!(cateringCost > 0 || lodgingCost > 0)) return baseBreakdown
+  const autoCrewDays = computeTotalCrewDays(data)
+  const phases = baseBreakdown.map((p) => ({ ...p, items: [...(p.items ?? [])] }))
+  const dodIndex = phases.findIndex((p) => p.category === 'Dodatkowe')
+  if (dodIndex === -1) return baseBreakdown
+  const dod = phases[dodIndex]
+  const extraItems: LineItemRow[] = []
+  if (cateringCost > 0) {
+    const qty = data.cateringOverride ? safeNum(data.cateringCustomDays, 1, 1) : autoCrewDays
+    extraItems.push({
+      label: 'Catering',
+      value: `${qty} osobodni`,
+      quantity: qty,
+      unitPriceNet: data.cateringRate,
+      lineNetto: cateringCost,
+    })
+  }
+  if (lodgingCost > 0) {
+    const qty = data.lodgingOverride ? safeNum(data.lodgingCustomDays, 1, 1) : autoCrewDays
+    extraItems.push({
+      label: 'Noclegi',
+      value: `${qty} osobodni`,
+      quantity: qty,
+      unitPriceNet: data.lodgingRate,
+      lineNetto: lodgingCost,
+    })
+  }
+  const newItems = [...dod.items, ...extraItems]
+  phases[dodIndex] = {
+    ...dod,
+    items: newItems,
+    phaseNetto: newItems.reduce((s, i) => s + i.lineNetto, 0),
+  }
+  return phases
 }
 
 /** Minimalny kształt migawki potrzebny do policzenia finansów (jak `loadQuoteSnapshot`). */

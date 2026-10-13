@@ -1,7 +1,7 @@
 /**
  * User-editable text strings that appear in the PDF output.
  * Company info is shown in the printable quote header.
- * Terms templates are used by getTermsAndConditions() in quote-context.
+ * Terms templates are used by buildTermsAndConditions() (via getTermsAndConditions() in quote-context).
  *
  * Each field has a `_en` twin for the English-language PDF mode. Both are edited
  * side-by-side in the PDF Texts modal; the language toggle on the PDF preview
@@ -130,4 +130,49 @@ export function renderTermOvertime(template: string, hours: number, rate: number
 export function renderTermRevisions(template: string, count: number, price: number): string {
   const tpl = typeof template === 'string' ? template : DEFAULT_PDF_TEXTS.termRevisions
   return tpl.replace('{count}', String(count)).replace('{price}', String(price))
+}
+
+/** Pola wyceny, od których zależą punkty „Uwagi" w PDF. */
+export interface TermsQuoteFields {
+  copyrightType: 'licencja' | 'przekazanie'
+  includeOvertimeInfo: boolean
+  standardDayHours: number
+  overtimeHourlyRate: number
+  includeRevisionsInfo: boolean
+  includedRevisions: number
+  extraRevisionPrice: number
+}
+
+/** Punkty „Uwagi" w PDF z aktywnych przełączników wyceny, w języku PDF. */
+export function buildTermsAndConditions(
+  data: TermsQuoteFields,
+  pdfTexts: PdfTextsConfig,
+  lang: 'pl' | 'en' = 'pl'
+): string[] {
+  const isEn = lang === 'en'
+  // Pick EN twin when active, but fall back gracefully to PL (and finally
+  // an empty string handled below) if a saved config is missing the EN field.
+  const pickEn = (en: string | undefined, pl: string | undefined): string =>
+    (typeof en === 'string' && en.trim() ? en : (typeof pl === 'string' ? pl : ''))
+  const tplLicencja = isEn ? pickEn(pdfTexts.termLicencja_en, pdfTexts.termLicencja) : (pdfTexts.termLicencja ?? '')
+  const tplPrzekazanie = isEn ? pickEn(pdfTexts.termPrzekazanie_en, pdfTexts.termPrzekazanie) : (pdfTexts.termPrzekazanie ?? '')
+  const tplOvertime = isEn ? pickEn(pdfTexts.termOvertime_en, pdfTexts.termOvertime) : (pdfTexts.termOvertime ?? '')
+  const tplRevisions = isEn ? pickEn(pdfTexts.termRevisions_en, pdfTexts.termRevisions) : (pdfTexts.termRevisions ?? '')
+  const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
+
+  const out: string[] = []
+  if (data.copyrightType === 'licencja' && tplLicencja) {
+    out.push(tplLicencja)
+  }
+  if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
+    out.push(tplPrzekazanie)
+  }
+  if (data.includeOvertimeInfo && tplOvertime) {
+    out.push(renderTermOvertime(tplOvertime, data.standardDayHours, data.overtimeHourlyRate))
+  }
+  if (data.includeRevisionsInfo && tplRevisions) {
+    out.push(renderTermRevisions(tplRevisions, data.includedRevisions, data.extraRevisionPrice))
+  }
+  if (tplNetto) out.push(tplNetto)
+  return out
 }
