@@ -61,6 +61,7 @@ test('cena wpisana w EUR wraca z cennika dokładnie taka, jak ją wpisano', () =
     }
   }
   assert.equal(priceToPln(300, PLN_MONEY), 300)
+  assert.equal(priceToPln(300, EUR), 300 * 4.2735, 'w cenniku € × kurs, bez zaokrąglania złotych')
   assert.equal(toPln(1852.5, PLN_MONEY), 1852.5)
   assert.equal(toPln(100, EUR), 427.35)
 })

@@ -138,6 +138,7 @@ test('uwagi z własnym szablonem: zła jednostka poprawiona, bez jednostki — w
   assert.equal(renderTermOvertime('{hours} h, potem {rate}/h.', 10, 35, { currency: 'EUR' }), '10 h, potem 35 €/h.')
   assert.equal(renderTermOvertime('{rate} złotych', 10, 150), '150 złotych', '„złotych" to nie jednostka do podmiany')
   assert.equal(renderTermOvertime('{rate} zł', 10, 35, { currency: 'EUR' }, 'en'), '35 €')
+  assert.equal(renderTermOvertime('{rate} złotych', 10, 35, { currency: 'EUR' }), '35 € złotych', 'słowo, nie jednostka')
 })
 
 test('kwoty w PDF: „zł" po polsku, „PLN" po angielsku, „€" w obu', () => {
