@@ -113,6 +113,27 @@ Reference: `HANDOFF.md` + `handleTauriExport` (`contentHeight` logic).
 
 ---
 
+## Currency on the PDF (S3, October 2026)
+
+The currency belongs to the **quote** (`QuoteData.currency`, frozen `exchangeRate`), not to the PDF. Rules live in
+`lib/quote-currency.ts`; the draft logic is pure in `lib/pdf-draft.ts` (tested, incl. golden tests for old quotes).
+
+- The PDF rows are built from the calculator **in the quote's currency** (`buildInitialPdfState` gets the client view of
+  the quote). There is no second conversion, so flipping currency no longer rounds twice.
+- `LocalPdfState.currency` follows the quote; drafts built since S3 carry `followsQuote: true`.
+- **Pre-S3 drafts** (`followsQuote` missing, `currency: 'EUR'`, quote in PLN) are the old "EUR only on the PDF" mode: they
+  still convert PLN → EUR at the draft's own rate and print exactly as before. The PDF tab shows a banner to switch the
+  whole quote to EUR at that rate or to go back to PLN on the PDF (the old one-shot flip, `flipPdfCurrency`).
+- When the quote's currency changes (also while the PDF tab is closed), `reconcilePdfCurrency` takes row prices from the
+  calculator in the new currency, converts hand-edited prices at the rate, and keeps hand-edited descriptions.
+- Amounts inside texts follow the PDF currency: the actor-fee line, the gear value sentence, and the overtime / revision
+  prices in the terms (`buildTermsAndConditions(..., money)`; a template's own `zł` / `PLN` after `{rate}` / `{price}` is
+  replaced by the right label).
+- Label convention: `zł` in Polish, `PLN` in English, `€` in both (`formatPdfAmount(amount, currency, lang)`).
+- Totals: net leads (Ember, black weight); VAT and gross are a quiet secondary line, in the PDF and the in-app preview.
+
+---
+
 ## Call sheet PDF (T5b)
 
 The call sheet (`components/planner/printable-call-sheet.tsx`) uses **path B in both runtimes**:
@@ -148,5 +169,7 @@ The Tauri canvas path was added later to work around WKWebView limitations (down
 - **Page breaks**: verify `data-pdf-break="after"` markers exist on intended boundaries in `PrintableQuote`.
 - **Blank last page (Tauri only)**: verify `contentHeight` uses the last break point, not full canvas height.
 - **Stale dates**: check `coerceLocalPdfDraft()` recomputes `issueDateIso` / `validUntilIso`.
+- **Wrong currency / „zł" in an EUR PDF**: check `QuoteData.currency` + `exchangeRate` of the quote and the draft's
+  `followsQuote` (missing = pre-S3 EUR-on-PDF mode, see "Currency on the PDF").
 - **Saved quote JSON doesn’t restore PDF draft**: ensure the PDF draft snapshot is preserved even when the PDF tab is unmounted (context holds last snapshot; pending snapshot applies on mount).
 
