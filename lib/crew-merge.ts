@@ -377,23 +377,55 @@ export function crewAfterUnmerge(members: CrewMember[], plan: CrewMergePlan, now
 
 // ── Wycena otwarta w kalkulatorze ────────────────────────────────────────────
 
+/** Pozycja kalkulatora przepięta przy scaleniu (do „Cofnij"). */
+export interface CalculatorCrewRef {
+  dayId: string
+  lineId: string
+  from: string
+}
+
 /**
  * Dni wyceny otwartej w kalkulatorze z przepiętymi osobami — żeby późniejsze
- * „Zapisz" nie przywróciło duplikatu. Zwraca tylko zmienione dni.
+ * „Zapisz" nie przywróciło duplikatu. Zwraca tylko zmienione dni i to, co
+ * zmieniono.
  */
 export function retargetQuoteDays(
   days: Pick<ShootingDay, 'id' | 'crew'>[],
-  map: Map<string, string>
+  sourceIds: string[],
+  targetId: string
+): { days: { dayId: string; crew: QuoteCrewLine[] }[]; refs: CalculatorCrewRef[] } {
+  const sources = new Set(sourceIds)
+  const refs: CalculatorCrewRef[] = []
+  const changed = days.flatMap((day) => {
+    if (!Array.isArray(day.crew)) return []
+    let dayChanged = false
+    const crew = day.crew.map((line) => {
+      if (!line.personId || !sources.has(line.personId)) return line
+      refs.push({ dayId: day.id, lineId: line.id, from: line.personId })
+      dayChanged = true
+      return { ...line, personId: targetId }
+    })
+    return dayChanged ? [{ dayId: day.id, crew }] : []
+  })
+  return { days: changed, refs }
+}
+
+/** „Cofnij" w kalkulatorze: poprzednia osoba tam, gdzie pozycja wciąż wskazuje osobę docelową. */
+export function restoreQuoteDays(
+  days: Pick<ShootingDay, 'id' | 'crew'>[],
+  refs: CalculatorCrewRef[],
+  targetId: string
 ): { dayId: string; crew: QuoteCrewLine[] }[] {
+  const byLine = new Map(refs.map((r) => [`${r.dayId}|${r.lineId}`, r.from]))
   return days.flatMap((day) => {
     if (!Array.isArray(day.crew)) return []
-    let changed = false
+    let dayChanged = false
     const crew = day.crew.map((line) => {
-      const next = line.personId ? map.get(line.personId) : undefined
-      if (!next || next === line.personId) return line
-      changed = true
-      return { ...line, personId: next }
+      const from = byLine.get(`${day.id}|${line.id}`)
+      if (!from || line.personId !== targetId) return line
+      dayChanged = true
+      return { ...line, personId: from }
     })
-    return changed ? [{ dayId: day.id, crew }] : []
+    return dayChanged ? [{ dayId: day.id, crew }] : []
   })
 }

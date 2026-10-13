@@ -11,6 +11,7 @@ import {
   crewUnmergePatches,
   mergedCrewMember,
   planCrewMerge,
+  restoreQuoteDays,
   retargetQuoteDays,
   type CrewMergePlan,
 } from './crew-merge'
@@ -312,12 +313,17 @@ test('po scaleniu statystyki liczą pracę duplikatów u osoby, która została 
   assert.deepEqual(unknownCrewNames([stale, fresh], people), [], 'nic nie wypada „spoza bazy"')
 })
 
-test('retargetQuoteDays: dni kalkulatora z przepiętymi osobami, tylko zmienione dni', () => {
+test('kalkulator: przepięte pozycje otwartej wyceny i „Cofnij" tylko tam, gdzie nikt ich nie zmienił', () => {
   const days = [
     { id: 'd1', crew: [line('a', 'cm-ze'), line('b', 'cm-ola')] },
     { id: 'd2', crew: [line('c', 'cm-ola')] },
     { id: 'd3' },
   ]
-  const changed = retargetQuoteDays(days, new Map([['cm-ze', 'cm-bez']]))
+  const { days: changed, refs } = retargetQuoteDays(days, ['cm-ze'], 'cm-bez')
   assert.deepEqual(changed.map((d) => [d.dayId, d.crew.map((l) => l.personId)]), [['d1', ['cm-bez', 'cm-ola']]])
+  assert.deepEqual(refs, [{ dayId: 'd1', lineId: 'a', from: 'cm-ze' }])
+  const after = [{ id: 'd1', crew: changed[0].crew }, days[1]]
+  assert.deepEqual(restoreQuoteDays(after, refs, 'cm-bez').map((d) => d.crew.map((l) => l.personId)), [['cm-ze', 'cm-ola']])
+  const edited = [{ id: 'd1', crew: [{ ...changed[0].crew[0], personId: 'cm-ola' }] }]
+  assert.deepEqual(restoreQuoteDays(edited, refs, 'cm-bez'), [])
 })

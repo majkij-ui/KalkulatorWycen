@@ -1,16 +1,18 @@
 'use client'
 
 /**
- * Panel jednej osoby z Ekipy: edycja (imię, role, moja stawka, kontakt,
- * miasto, notatki), kopiowanie kontaktu, statystyki z rzeczywistych kosztów,
- * historia projektów, wycofanie / przywrócenie i miękkie usunięcie.
+ * Panel jednej osoby z Ekipy: edycja (imię, role z własnymi stawkami, moja
+ * stawka, kontakt, miasto, notatki), kopiowanie kontaktu, statystyki z
+ * rzeczywistych kosztów (także w podziale na role), historia projektów,
+ * „Scal z…", wycofanie / przywrócenie i miękkie usunięcie.
  * `member === null` = dodawanie nowej osoby.
  */
 
 import { useState } from 'react'
-import { ArrowUpRight, Check, Copy, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowUpRight, Check, Copy, GitMerge, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCrew } from '@/lib/crew-context'
-import { crewContactText, crewRoleGroupLabel, type CrewMember, type CrewRole } from '@/lib/crew-types'
+import { crewContactText, crewRoleGroupLabel, normalizeRoleRates, type CrewMember, type CrewRole } from '@/lib/crew-types'
+import { crewCostRate } from '@/lib/quote-crew'
 import type { CrewMemberStats } from '@/lib/crew-stats'
 import { parseAmount } from '@/lib/event-draft'
 import { dayLabel } from '@/lib/pl-plural'
@@ -20,9 +22,16 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, pln } from './crew-format'
 
+interface RoleRateDraft {
+  rate: string
+  note: string
+}
+
 interface Draft {
   name: string
   roleIds: string[]
+  /** Własne stawki w rolach (S2), po id roli; pusta stawka = jak stawka ogólna. */
+  roleRates: Record<string, RoleRateDraft>
   rate: string
   phone: string
   email: string
@@ -30,11 +39,19 @@ interface Draft {
   notes: string
 }
 
+const amountText = (value: number | undefined) => (value ? String(value).replace('.', ',') : '')
+
 function toDraft(member: CrewMember | null): Draft {
+  const roleRates: Record<string, RoleRateDraft> = {}
+  ;(member?.roleRates ?? []).forEach((entry) => {
+    roleRates[entry.roleId] = { rate: amountText(entry.rate), note: entry.note ?? '' }
+  })
   return {
     name: member?.name ?? '',
-    roleIds: member?.roleIds ?? [],
-    rate: member?.rate ? String(member.rate).replace('.', ',') : '',
+    // Stawka w roli, której nie ma na liście ról (np. z `npm run data`), dokłada tę rolę.
+    roleIds: [...new Set([...(member?.roleIds ?? []), ...Object.keys(roleRates)])],
+    roleRates,
+    rate: amountText(member?.rate),
     phone: member?.contact?.phone ?? '',
     email: member?.contact?.email ?? '',
     city: member?.city ?? '',
@@ -150,12 +167,71 @@ function RolePicker({
   )
 }
 
+/**
+ * Stawki w rolach (S2): przy każdej roli osoby własna stawka i notatka
+ * („z własnym sprzętem"). Puste pole = stawka ogólna osoby, a bez niej koszt
+ * roli — podpowiedź w polu pokazuje, co policzy się zamiast.
+ */
+function RoleRatesEditor({
+  roles,
+  draft,
+  onChange,
+}: {
+  roles: CrewRole[]
+  draft: Draft
+  onChange: (roleRates: Record<string, RoleRateDraft>) => void
+}) {
+  const general = parseAmount(draft.rate)
+  const list = draft.roleIds.flatMap((id) => {
+    const role = roles.find((r) => r.id === id)
+    return role ? [role] : []
+  })
+  if (list.length === 0) return null
+  const set = (roleId: string, patch: Partial<RoleRateDraft>) =>
+    onChange({ ...draft.roleRates, [roleId]: { ...(draft.roleRates[roleId] ?? { rate: '', note: '' }), ...patch } })
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-zinc-500">Moja stawka w rolach (puste = stawka ogólna poniżej)</div>
+      <ul className="flex flex-col gap-1.5">
+        {list.map((role) => {
+          const entry = draft.roleRates[role.id] ?? { rate: '', note: '' }
+          const fallback = general && general > 0 ? general : crewCostRate(role, null)
+          return (
+            <li key={role.id} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-32 shrink-0 truncate text-xs text-zinc-300" title={role.name}>
+                {role.name}
+              </span>
+              <Input
+                inputMode="decimal"
+                value={entry.rate}
+                placeholder={`${Math.round(fallback)}`}
+                aria-label={`Moja stawka: ${role.name}`}
+                onChange={(e) => set(role.id, { rate: e.target.value })}
+                className="h-8 w-24 border-white/10 bg-black/40 text-right text-sm tabular-nums"
+              />
+              <span className="text-[11px] text-zinc-500">zł</span>
+              <Input
+                value={entry.note}
+                placeholder="notatka, np. z własnym sprzętem"
+                aria-label={`Notatka do stawki: ${role.name}`}
+                onChange={(e) => set(role.id, { note: e.target.value })}
+                className="h-8 min-w-[140px] flex-1 border-white/10 bg-black/40 text-xs"
+              />
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 export function CrewPersonSheet({
   member,
   stats,
   onClose,
   onDeleted,
   onOpenProject,
+  onMerge,
 }: {
   member: CrewMember | null
   stats: CrewMemberStats<Project> | undefined
@@ -163,6 +239,8 @@ export function CrewPersonSheet({
   /** Po miękkim usunięciu — sekcja pokazuje „Cofnij". */
   onDeleted: (member: CrewMember) => void
   onOpenProject?: (id: string) => void
+  /** „Scal z…": otwiera scalanie z tą osobą jako tą, która zostaje. */
+  onMerge?: (member: CrewMember) => void
 }) {
   const { activeRoles, roles, addPerson, savePerson, removePerson, addRole } = useCrew()
   const [draft, setDraft] = useState<Draft>(() => toDraft(member))
@@ -184,11 +262,20 @@ export function CrewPersonSheet({
   const save = async () => {
     if (!canSave) return
     const rate = parseAmount(draft.rate)
+    // Stawki tylko przy zaznaczonych rolach; pusta albo 0 = bez własnej stawki.
+    const roleRates = normalizeRoleRates(
+      draft.roleIds.map((roleId) => {
+        const previous = member?.roleRates?.find((r) => r.roleId === roleId)
+        const entry = draft.roleRates[roleId]
+        return { ...previous, roleId, rate: parseAmount(entry?.rate ?? '') ?? 0, note: entry?.note ?? '' }
+      })
+    )
     if (!member) {
       await addPerson({
         name: draft.name,
         roleIds: draft.roleIds,
         rate,
+        roleRates,
         contact: {
           ...(draft.phone.trim() ? { phone: draft.phone.trim() } : {}),
           ...(draft.email.trim() ? { email: draft.email.trim() } : {}),
@@ -201,6 +288,9 @@ export function CrewPersonSheet({
     }
     const next: CrewMember = { ...member, name: draft.name.trim(), roleIds: draft.roleIds, contact: { ...member.contact } }
     setOptional(next, 'rate', rate && rate > 0 ? rate : undefined)
+    // Pole znika, gdy nie ma żadnej stawki — ale tylko jeśli było, żeby zapis bez zmian nic nie dopisywał.
+    if (roleRates.length > 0) next.roleRates = roleRates
+    else delete next.roleRates
     setOptional(next.contact, 'phone', draft.phone.trim())
     setOptional(next.contact, 'email', draft.email.trim())
     setOptional(next, 'city', draft.city.trim())
@@ -262,8 +352,20 @@ export function CrewPersonSheet({
           <Stat label={`Wypłacone w ${new Date().getFullYear()}`} value={pln(stats.paidThisYear)} />
           <Stat label="Wypłacone razem" value={pln(stats.paidTotal)} />
           {stats.roles.length > 0 && (
-            <div className="col-span-2 text-[11px] text-zinc-500">
-              Role na planie: {stats.roles.map((r) => `${r.name}${r.count > 1 ? ` ×${r.count}` : ''}`).join(', ')}
+            <div className="col-span-2 rounded-lg border border-white/5 bg-zinc-900/40 px-3 py-2">
+              <div className="mb-1 text-[11px] text-zinc-500">W rolach</div>
+              <ul className="flex flex-col gap-0.5">
+                {stats.roles.map((r) => (
+                  <li key={r.name} className="flex items-baseline gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate text-zinc-300">{r.name}</span>
+                    <span className="shrink-0 tabular-nums text-zinc-500">
+                      {r.days > 0 ? `${r.days} ${dayLabel(r.days)}` : `${r.count}×`}
+                      {r.avgDayRate !== null ? ` · śr. ${pln(r.avgDayRate)}` : ''}
+                    </span>
+                    <span className="w-20 shrink-0 text-right tabular-nums text-zinc-200">{pln(r.paid)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <div className="col-span-2 text-[11px] text-zinc-600">
@@ -292,8 +394,9 @@ export function CrewPersonSheet({
           />
           {activeRoles.length === 0 && <p className="text-[11px] text-zinc-600">Brak ról — dodaj pierwszą.</p>}
         </div>
+        <RoleRatesEditor roles={roles} draft={draft} onChange={(roleRates) => set({ roleRates })} />
         <label className={label}>
-          Moja stawka za dzień (ile ta osoba bierze ode mnie)
+          Moja stawka za dzień (ile ta osoba bierze ode mnie; dla ról bez własnej stawki)
           <Input
             inputMode="decimal"
             value={draft.rate}
@@ -381,6 +484,17 @@ export function CrewPersonSheet({
 
       {member && (
         <section className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-4">
+          {onMerge && (
+            <Button
+              variant="outline"
+              onClick={() => onMerge(member)}
+              className="h-8 gap-1.5 border-white/10 text-xs"
+              title="Ta sama osoba wpisana kilka razy — połącz karty"
+            >
+              <GitMerge className="size-3.5" />
+              Scal z…
+            </Button>
+          )}
           {member.retiredAt ? (
             <Button variant="outline" onClick={restore} className="h-8 gap-1.5 border-white/10 text-xs">
               <RotateCcw className="size-3.5" />
