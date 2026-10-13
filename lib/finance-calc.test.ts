@@ -189,6 +189,30 @@ test('fixedCostsByMonth grupuje po kluczu YYYY-MM', () => {
   assert.equal(map.size, 2)
 })
 
+test('koszty stałe: usunięte nie liczą się; podział po kategoriach i część z subskrypcji', () => {
+  const costs: FixedCost[] = [
+    cost('a', '2026-01', 'zus', 1417.14),
+    { ...cost('b', '2026-01', 'other', 98.56), category: 'software' },
+    { ...cost('c', '2026-01', 'other', 40.9), category: 'bank', subscriptionId: 's-bank' },
+    cost('d', '2026-01', 'other', 350),
+    { ...cost('e', '2026-01', 'zus', 999), deletedAt: '2026-10-13T10:00:00.000Z' },
+    { ...cost('f', '2026-01', 'other', 455.1), category: 'office', subscriptionId: 's-fpd', derived: { day: '2026-01-01' } },
+  ]
+  const s = summarizeFixedCosts(costs, { kind: 'month', year: 2026, index: 1 })
+  assert.equal(s.zus, 1417.14)
+  assert.equal(s.other, 98.56 + 40.9 + 350 + 455.1)
+  assert.equal(s.total, 1417.14 + 98.56 + 40.9 + 350 + 455.1)
+  assert.deepEqual(s.byCategory, { zus: 1417.14, software: 98.56, bank: 40.9, other: 350, office: 455.1 })
+  assert.equal(s.subscriptions, 40.9 + 455.1)
+  assert.equal(s.derived, 455.1)
+  assert.equal(fixedCostsByMonth(costs).get('2026-01')?.total, s.total, 'miesiące tak samo')
+  assert.equal(
+    fixedCostsByMonth([{ ...cost('x', '2026-03', 'zus', 5), deletedAt: 'x' }]).size,
+    0,
+    'miesiąc z samymi usuniętymi nie pojawia się'
+  )
+})
+
 test('periodLabel formatuje etykiety okresów', () => {
   assert.equal(periodLabel({ kind: 'year', year: 2026 }), '2026')
   assert.equal(periodLabel({ kind: 'half', year: 2026, index: 2 }), 'H2 2026')

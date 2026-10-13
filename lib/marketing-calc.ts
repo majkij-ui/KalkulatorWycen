@@ -22,6 +22,7 @@ import { originForPlatform, type Campaign } from './marketing-types'
 import {
   LEAD_SOURCES,
   countsTowardRevenue,
+  isLiveFixedCost,
   leadSourceLabel,
   toYear,
   type FixedCost,
@@ -162,7 +163,7 @@ export function campaignMonths(
   today: string
 ): CampaignMonth[] {
   const window = campaignWindow(campaign, today)
-  const ownCosts = costs.filter((c) => c.campaignId === campaign.id)
+  const ownCosts = costs.filter((c) => c.campaignId === campaign.id && isLiveFixedCost(c))
   const ownLeads = campaignLeads(leads, campaign.id)
 
   const keys = new Set<string>()

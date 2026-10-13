@@ -5,7 +5,9 @@
  *
  * Celowo płaska lista rekordów zamiast mapy miesiąc→kwota: w jednym miesiącu
  * bywa kilka pozycji marketingowych, a „inne" z notatek ma być workiem na
- * koszty, których dziś nie przewidujemy.
+ * koszty, których dziś nie przewidujemy. Od S1 pozycja może mieć kategorię
+ * (`category`) i być poprawką raty subskrypcji (`subscriptionId`); raty same
+ * nie są tu zapisywane (`subscriptions.ts`). Usuwanie jest miękkie.
  */
 
 import { createCollectionStore } from './v3-store'
@@ -34,16 +36,44 @@ const store = createCollectionStore<FixedCost>({
   sort: byMonthDesc,
 })
 
+/** Wszystkie pozycje, z usuniętymi (`deletedAt`) — liczby filtrują je same. */
 export const listFixedCosts = store.list
 export const upsertFixedCost = store.upsert
-export const deleteFixedCost = store.remove
 export const replaceAllFixedCosts = store.replaceAll
+/** @deprecated twarde usunięcie — znika razem ze starym panelem (S1). */
+export const deleteFixedCost = store.remove
+
+/** Dopisuje kilka pozycji jednym zapisem (np. minione raty przy zmianie ceny). */
+export function addFixedCosts(costs: FixedCost[]): Promise<FixedCost[]> {
+  return store.mutate((all) => [...all, ...costs])
+}
+
+/**
+ * Miękkie usunięcie: pozycje dostają ten sam `deletedAt`, więc „Cofnij"
+ * przywraca dokładnie je (`restoreFixedCosts`). Nic nie znika z pliku.
+ */
+export function softDeleteFixedCosts(ids: string[], deletedAt: string): Promise<FixedCost[]> {
+  const set = new Set(ids)
+  return store.mutate((all) => all.map((c) => (set.has(c.id) ? { ...c, deletedAt } : c)))
+}
+
+export function restoreFixedCosts(deletedAt: string): Promise<FixedCost[]> {
+  return store.mutate((all) =>
+    all.map((c) => {
+      if (c.deletedAt !== deletedAt) return c
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { deletedAt: removed, ...rest } = c
+      return rest
+    })
+  )
+}
 
 export function createFixedCost(params: {
   month: string
   type: FixedCostType
   amount: number
   label?: string
+  category?: string
 }): FixedCost {
   return {
     id: createFixedCostId(),
@@ -52,6 +82,7 @@ export function createFixedCost(params: {
     label: params.label ?? '',
     amount: params.amount,
     source: 'manual',
+    ...(params.category ? { category: params.category } : {}),
   }
 }
 
