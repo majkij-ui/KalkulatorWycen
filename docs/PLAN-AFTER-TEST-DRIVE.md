@@ -162,9 +162,15 @@ more). Sessions build with whatever is there: every number is derived on read, s
 prices, dates and amounts by hand later without breaking anything. Still missing before S4: the four
 invoices (S-AI, JHJ, Morris & Lloyd, CIONET wywiady), rental rates, and the Zaplecze items.
 
+**Merged and installed 2026-10-13 (S1 → S2 → S3):** only conflict was the `SCHEMAS` list in `scripts/data.mts`
+(both entries kept). 567 tests. Real data, read-only, before vs after: all 11 saved quotes compute identically;
+Finance 2026 unchanged (167,813 zł revenue, 82,574 zł project profit). Not applied yet, waiting for M.J.: the S1
+subscription and category patches (`imports/2026-10-13-s1-*.json`) and the S2 client groups. Next: Zaplecze
+(main session), then S4.
+
 ## 5. S1 as built
 
-*(2026-10-13, branch `claude/fixed-costs-subscriptions-1a3bd1`, not merged.)*
+*(2026-10-13, branch `claude/fixed-costs-subscriptions-1a3bd1`; merged and installed the same day.)*
 
 **Built:**
 - **Finance sub-tabs.** „Projekty” is the old screen without the month list. „Koszty stałe i subskrypcje” is
@@ -297,7 +303,7 @@ against the real hub folder (`npm run data -- apply <file> --dry-run`).
 
 ## 6. S2 as built
 
-*(2026-10-13, branch `claude/grupy-role-hub-8145ba` on top of `90e913a`; not merged.)*
+*(2026-10-13, branch `claude/grupy-role-hub-8145ba` on top of `90e913a`; merged and installed the same day.)*
 
 ### Data (additive, passthrough, no version bump)
 
