@@ -37,6 +37,10 @@ The user edits the PDF preview in:
     draft (dates, currency reconcile, `followsQuote`) are kept in memory and saved with the next real change, so just
     looking at the PDF writes nothing.
   - „Wyczyść edytor” sets the draft back to none (the PDF follows the calculator again).
+- Quote variants (Q2, October 2026): every variant A/B/C is a full quote with its own draft. With two or more variants
+  the file name ends in „ (wariant B)” (both export paths, `getDynamicDocumentTitle`). After „Pobierz PDF” (Tauri: once
+  the file is written; web: after the print dialog) the tab offers to record „Wycena wysłana” on the project timeline
+  with the PDF total in zł and the variant as `quoteVersion` — never automatically.
 
 ### Draft hydration rules (why we changed them)
 
@@ -178,4 +182,6 @@ The Tauri canvas path was added later to work around WKWebView limitations (down
   `followsQuote` (missing = pre-S3 EUR-on-PDF mode, see "Currency on the PDF").
 - **PDF draft of the wrong project / lost draft**: the draft lives in the project's quote document (`Project.quote.pdfDraft`);
   the PDF tab reads it on mount and remounts when the document is replaced (`docEpoch`: JSON import, change from outside).
+- **PDF of the wrong variant** (Q2): each variant has its own draft (`Project.quoteVariants[i].snapshot.pdfDraft`); the PDF
+  tab is keyed by document id + epoch, so switching variant remounts it.
 
