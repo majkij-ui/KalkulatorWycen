@@ -277,6 +277,13 @@ plus 3 synthetic projects and the 2 real campaigns. Storage was restored byte fo
 - Marketing: clearing a reading, then entering a new one.
 - Phone width (375 px) without horizontal scroll; no console errors.
 
+**Applied 2026-10-16 with M.J.'s answers** (`imports/2026-10-13-s1-subscriptions.json` as edited, plus the
+categories patch): ZUS from 20.09 and FPD (biuro rachunkowe) from 01.09 — both paid in September; Artlist yearly
+from 06.2026 with the June 2,611.51 zł entry linked as its charge; Frame.io Pro $15 from 13.10 (Stripe receipt,
+NBP 3.8827); Google Workspace Business Standard from 07.10 at an ESTIMATED 60 zł (amount only in Google's PDF
+invoice); Frameset from 10.2026 at 0 zł (no receipts in the nonoise.media mailbox — to fill in); future months
+count as forecast. Real data after: 2026 fixed costs 51,692 zł, result 31,131 zł (revenue 179,538 zł).
+
 **Switch-over (prepared, not applied — M.J. decides).** Both patches are in `imports/` and dry-run cleanly
 against the real hub folder (`npm run data -- apply <file> --dry-run`).
 - `imports/2026-10-13-s1-subscriptions.json` (adds `subscriptions.json` only; `finances.json` untouched):

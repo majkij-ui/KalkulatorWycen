@@ -1,5 +1,5 @@
 {
-  "note": "S1: subskrypcje z cyklicznych wpisów (ZUS, FPD, opłaty bankowe, Artlist). Raty od października 2026; minione miesiące zostają jak są (ręczne wpisy w finances.json nietknięte).",
+  "note": "S1 + decyzje M.J. 16.10: ZUS i FPD od września, Artlist roczny od 06.2026 (czerwcowy wpis podpięty), Frame.io z paragonu, Google Workspace (szacunek) i Frameset (do uzupełnienia) od października.",
   "upsert": {
     "subscriptions.json": [
       {
@@ -9,21 +9,22 @@
         "amount": 1417.14,
         "currency": "PLN",
         "cadence": "monthly",
-        "startDate": "2026-10-20",
-        "notes": "kwota z 02, 04, 06 i 08.2026; miesiąc z inną kwotą popraw na liście miesięcy",
+        "startDate": "2026-09-20",
+        "notes": "kwota z 02, 04, 06 i 08.2026; wrzesień opłacony (M.J. 16.10); miesiąc z inną kwotą popraw na liście miesięcy",
         "createdAt": "2026-10-13T12:00:00.000Z",
-        "updatedAt": "2026-10-13T12:00:00.000Z"
+        "updatedAt": "2026-10-16T12:00:00.000Z"
       },
       {
         "id": "sub-fpd",
-        "name": "FPD",
+        "name": "FPD (biuro rachunkowe)",
         "category": "office",
         "amount": 455.1,
         "currency": "PLN",
         "cadence": "monthly",
-        "startDate": "2026-10-01",
+        "startDate": "2026-09-01",
         "createdAt": "2026-10-13T12:00:00.000Z",
-        "updatedAt": "2026-10-13T12:00:00.000Z"
+        "updatedAt": "2026-10-16T12:00:00.000Z",
+        "notes": "biuro rachunkowe; wrzesień opłacony (M.J. 16.10)"
       },
       {
         "id": "sub-bank",
@@ -44,10 +45,59 @@
         "amount": 2611.51,
         "currency": "PLN",
         "cadence": "yearly",
-        "startDate": "2027-06-01",
-        "notes": "roczna; rata 06.2026 jest już ręcznym wpisem „Oprogramowanie (Artlist roczny)”",
+        "startDate": "2026-06-01",
+        "notes": "roczna; czerwiec 2026 = wpis 2611,51 zł podpięty jako rata tej subskrypcji",
         "createdAt": "2026-10-13T12:00:00.000Z",
-        "updatedAt": "2026-10-13T12:00:00.000Z"
+        "updatedAt": "2026-10-16T12:00:00.000Z"
+      },
+      {
+        "id": "sub-frameio",
+        "name": "Frame.io Pro",
+        "category": "software",
+        "amount": 15,
+        "currency": "USD",
+        "rate": 3.8827,
+        "cadence": "monthly",
+        "startDate": "2026-10-13",
+        "notes": "z paragonu Stripe 13.10.2026 ($15, karta …8571); kurs NBP 3,8827 z 16.10.2026 — wcześniejsze miesiące są w ręcznych wpisach „Oprogramowanie\"",
+        "createdAt": "2026-10-16T12:00:00.000Z",
+        "updatedAt": "2026-10-16T12:00:00.000Z"
+      },
+      {
+        "id": "sub-google-workspace",
+        "name": "Google Workspace Business Standard",
+        "category": "software",
+        "amount": 60,
+        "currency": "PLN",
+        "cadence": "monthly",
+        "startDate": "2026-10-07",
+        "notes": "SZACUNEK — kwota z faktury Google z 7.10 (PDF w mailu); cena zmieniła się 9.10.2026. Wcześniejsze miesiące są w ręcznych wpisach „Oprogramowanie\"",
+        "createdAt": "2026-10-16T12:00:00.000Z",
+        "updatedAt": "2026-10-16T12:00:00.000Z"
+      },
+      {
+        "id": "sub-frameset",
+        "name": "Frameset",
+        "category": "software",
+        "amount": 0,
+        "currency": "PLN",
+        "cadence": "monthly",
+        "startDate": "2026-10-01",
+        "notes": "DO UZUPEŁNIENIA — kwota i dzień płatności (brak paragonów w poczcie nonoise.media)",
+        "createdAt": "2026-10-16T12:00:00.000Z",
+        "updatedAt": "2026-10-16T12:00:00.000Z"
+      }
+    ]
+  },
+  "update": {
+    "finances.json": [
+      {
+        "id": "fc-retro2026-2026-06-oprogramowanie-artlist-roczny",
+        "set": {
+          "subscriptionId": "sub-artlist",
+          "category": "software"
+        },
+        "ifMissing": true
       }
     ]
   }
