@@ -8,7 +8,7 @@
  * konfiguracji builda, identyczne zachowanie w przeglądarce i w desktopie.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart3,
@@ -30,7 +30,8 @@ import { EquipmentProvider } from '@/lib/equipment-context'
 import { EventsProvider } from '@/lib/events-context'
 import { InboxProvider, useInbox } from '@/lib/inbox-context'
 import { CrewProvider } from '@/lib/crew-context'
-import { QuoteCalculatorView } from '@/components/quote-calculator'
+import { QuoteProvider } from '@/lib/quote-context'
+import { QuoteCalculatorView, type CalculatorTab } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectHeader } from '@/components/projects/project-header'
 import { ProjectTimeline } from '@/components/projects/project-timeline'
@@ -45,6 +46,7 @@ import { InboxSection } from '@/components/inbox/inbox-section'
 import { ClientsSection } from '@/components/clients/clients-section'
 import { CrewSection } from '@/components/crew/crew-section'
 import { AmbientGlow } from '@/components/ambient-glow'
+import { SettingsSection } from '@/components/settings-section'
 
 type Section =
   | 'kalendarz'
@@ -68,16 +70,6 @@ const NAV: { value: Section; label: string; icon: typeof FolderKanban }[] = [
   { value: 'ekipa', label: 'Ekipa', icon: Users },
   { value: 'ustawienia', label: 'Ustawienia', icon: Settings2 },
 ]
-
-/** Sekcja jeszcze niezbudowana — mówi wprost, co i kiedy, zamiast udawać. */
-function ComingSoon({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mx-auto max-w-4xl px-4 py-16 text-center">
-      <h1 className="text-2xl font-bold tracking-tight text-white">{title}</h1>
-      <p className="mx-auto mt-3 max-w-md text-sm text-zinc-500">{description}</p>
-    </div>
-  )
-}
 
 function Sidebar({
   section,
@@ -142,22 +134,34 @@ const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calcul
   { value: 'notatki', label: 'Notatki', icon: NotebookPen },
 ]
 
+/** Gdzie byłeś w projekcie — zakładka i karta kalkulatora, pamiętane do zamknięcia aplikacji. */
+interface ProjectViewMemory {
+  tab?: ProjectTab
+  calculatorTab?: CalculatorTab
+}
+
 /**
- * Otwarty projekt: nagłówek + zakładki. Kalkulator zostaje nietknięty w
- * zakładce „Wycena"; oś czasu czyta te same wydarzenia co kalendarz.
- * Montowany z `key` = id projektu, więc każdy projekt startuje od swojej
- * domyślnej zakładki (`defaultProjectTab`) i czystego stanu nagłówka.
+ * Otwarty projekt: nagłówek + zakładki. Zakładka „Wycena" to wycena TEGO
+ * projektu (jego własny dokument); oś czasu czyta te same wydarzenia co
+ * kalendarz. Montowany z `key` = id projektu, więc każdy projekt wraca na
+ * swoją zakładkę (albo domyślną, `defaultProjectTab`).
  */
 function ProjectView({
   project,
   initialTab,
+  memory,
   onOpenClient,
 }: {
   project: Project
   initialTab?: ProjectTab
+  memory: ProjectViewMemory
   onOpenClient: (key: string) => void
 }) {
-  const [tab, setTab] = useState<ProjectTab>(() => initialTab ?? defaultProjectTab(project.status))
+  const [tab, setTabState] = useState<ProjectTab>(() => initialTab ?? memory.tab ?? defaultProjectTab(project.status))
+  const setTab = (next: ProjectTab) => {
+    memory.tab = next
+    setTabState(next)
+  }
 
   return (
     <>
@@ -193,7 +197,14 @@ function ProjectView({
       </div>
 
       {tab === 'os' && <ProjectTimeline project={project} />}
-      {tab === 'wycena' && <QuoteCalculatorView />}
+      {tab === 'wycena' && (
+        <QuoteCalculatorView
+          initialTab={memory.calculatorTab}
+          onTabChange={(next) => {
+            memory.calculatorTab = next
+          }}
+        />
+      )}
       {tab === 'sprzet' && <ProjectRealization />}
       {tab === 'notatki' && <ProjectNotes project={project} />}
     </>
@@ -203,20 +214,32 @@ function ProjectView({
 function ShellContent() {
   // Kalendarz jest ekranem startowym — przegląd firmy zaczyna się od czasu.
   const [section, setSection] = useState<Section>('kalendarz')
-  const { activeProject, openProject, closeProject } = useProjectHub()
+  const { activeProject, openProject, closeProject, quoteDocs } = useProjectHub()
   // Zakładka, na której ma się otworzyć projekt wskazany z innego ekranu (np. z
   // listy sprzętu prosto na „Realizację"). Trzymana razem z id, żeby nie przeszła
   // na inny projekt otwarty potem z listy.
   const [openTarget, setOpenTarget] = useState<{ id: string; tab: ProjectTab } | null>(null)
   // Klient, którego stronę otworzyć w „Klientach" (z nagłówka projektu); pasek boczny czyści.
   const [clientTarget, setClientTarget] = useState<string | null>(null)
+  // Zakładki projektów, w których już byłeś (do zamknięcia aplikacji).
+  const viewMemory = useRef(new Map<string, ProjectViewMemory>())
+  const memoryFor = (id: string) => {
+    let memory = viewMemory.current.get(id)
+    if (!memory) {
+      memory = {}
+      viewMemory.current.set(id, memory)
+    }
+    return memory
+  }
 
-  // Klik w „Projekty" w pasku bocznym zawsze wraca do LISTY — także z otwartego
-  // projektu (pasek boczny jest zawsze widoczny, przycisk „Projekty" w pasku
-  // projektu trzeba by najpierw przewinąć). Otwarcie projektu z kalendarza czy
-  // finansów idzie przez `goToProject`, więc tego nie dotyczy.
+  // „Projekty" w pasku bocznym z innego ekranu wraca do otwartego projektu, tam
+  // gdzie byłeś (wycena jest jego dokumentem, nic nie trzeba wczytywać). Drugi
+  // klik, już w projekcie, pokazuje LISTĘ (przycisk „Projekty" w nagłówku
+  // projektu trzeba by najpierw przewinąć).
   const changeSection = (next: Section) => {
-    if (next === 'projekty') closeProject()
+    if (next === 'projekty' && section === 'projekty') closeProject()
+    // Wyjście z projektów: czekające zmiany wycen od razu do pliku.
+    if (next !== 'projekty') void quoteDocs.flushAll()
     setOpenTarget(null)
     setClientTarget(null)
     setSection(next)
@@ -252,6 +275,7 @@ function ShellContent() {
               key={activeProject.id}
               project={activeProject}
               initialTab={openTarget?.id === activeProject.id ? openTarget.tab : undefined}
+              memory={memoryFor(activeProject.id)}
               onOpenClient={goToClient}
             />
           ) : (
@@ -270,29 +294,28 @@ function ShellContent() {
 
         {section === 'ekipa' && <CrewSection onOpenProject={(id) => goToProject(id, 'sprzet')} />}
 
-        {section === 'ustawienia' && (
-          <ComingSoon
-            title="Ustawienia"
-            description="Cennik, teksty PDF i dane firmy są na razie dostępne z poziomu kalkulatora — ikona koła zębatego w nagłówku otwartego projektu."
-          />
-        )}
+        {section === 'ustawienia' && <SettingsSection />}
       </div>
     </div>
   )
 }
 
+// Kolejność: projekty (z dokumentami wycen) → wycena otwartego projektu → reszta
+// (Ekipa czyta role z cennika otwartej wyceny).
 export function AppShell() {
   return (
     <ProjectHubProvider>
-      <EquipmentProvider>
-        <EventsProvider>
-          <CrewProvider>
-            <InboxProvider>
-              <ShellContent />
-            </InboxProvider>
-          </CrewProvider>
-        </EventsProvider>
-      </EquipmentProvider>
+      <QuoteProvider>
+        <EquipmentProvider>
+          <EventsProvider>
+            <CrewProvider>
+              <InboxProvider>
+                <ShellContent />
+              </InboxProvider>
+            </CrewProvider>
+          </EventsProvider>
+        </EquipmentProvider>
+      </QuoteProvider>
     </ProjectHubProvider>
   )
 }

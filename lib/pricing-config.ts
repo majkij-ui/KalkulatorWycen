@@ -162,7 +162,6 @@ function migrateSection(
   return result
 }
 
-const STORAGE_KEY = 'quote-gen-pricing-config'
 const USER_DEFAULT_KEY = 'quote-gen-user-default-pricing'
 
 function deepClone<T>(obj: T): T {
@@ -201,30 +200,10 @@ export function migratePricingConfig(
   return base
 }
 
-export function getPricingConfig(): PricingConfigShape {
-  if (typeof window === 'undefined') return deepClone(DEFAULT_PRICING)
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return deepClone(DEFAULT_PRICING)
-    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
-  } catch {
-    return deepClone(DEFAULT_PRICING)
-  }
-}
-
-export function savePricingConfig(config: PricingConfigShape): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-  } catch {
-    // ignore
-  }
-}
-
 /** Zdarzenie okna po zapisaniu domyślnego cennika — Ekipa przelicza role z cennika. */
 export const USER_DEFAULT_PRICING_EVENT = 'nonoise-user-default-pricing'
 
-/** Save the current config as the user's personal default (used by hard-reset). */
+/** Save the current config as the user's personal default (new quotes and „Wyczyść" start from it). */
 export function saveAsUserDefault(config: PricingConfigShape): void {
   if (typeof window === 'undefined') return
   try {
@@ -239,7 +218,7 @@ export function saveAsUserDefault(config: PricingConfigShape): void {
  * Cennik zapisany przez użytkownika jako domyślny („Zapisz stawki jako
  * domyślne"), albo `null`, gdy żadnego nie zapisał. W przeciwieństwie do
  * `getUserDefault` NIE podstawia cennika fabrycznego — wywołujący sam decyduje,
- * co wtedy (zwykle: zostaje bieżący cennik kalkulatora).
+ * co wtedy (pusta wycena bierze wtedy cennik fabryczny).
  */
 export function getSavedUserDefault(): PricingConfigShape | null {
   if (typeof window === 'undefined') return null
@@ -264,14 +243,3 @@ export function getUserDefault(): PricingConfigShape {
   }
 }
 
-export function resetPricingToDefault(): PricingConfigShape {
-  const def = deepClone(DEFAULT_PRICING)
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // ignore
-    }
-  }
-  return def
-}

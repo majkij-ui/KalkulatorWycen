@@ -13,8 +13,7 @@
  * Zapis jak w siatce G3: lokalna kopia dni i kosztów + zapis z krótkim
  * opóźnieniem. `updateProject` łata najświeższą wersję projektu, ale wartości
  * bierze z tego, co mu podamy — bez lokalnej kopii szybkie klikanie gubiłoby
- * zmiany. Plan (Profit) jest częścią wyceny w kalkulatorze i zapisuje się
- * przyciskiem „Zapisz" w nagłówku.
+ * zmiany. Plan (Profit) jest częścią wyceny projektu i zapisuje się sam (Q1).
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -62,7 +61,6 @@ import {
 import {
   actualFigures,
   crewCostsFromPlan,
-  isPlanUnsaved,
   plannedCrew,
   projectPlan,
 } from '@/lib/realization-plan'
@@ -370,7 +368,7 @@ function RealizationView({ project }: { project: Project }) {
     })
   }
 
-  // Bieżący stan kalkulatora — ten projekt jest w nim wgrany.
+  // Wycena TEGO projektu (jego dokument, z niezapisanymi jeszcze zmianami).
   const live = useMemo(() => ({ data, pricingConfig, marginMultiplier }), [data, pricingConfig, marginMultiplier])
   const planCrew = useMemo(() => plannedCrew(live), [live])
 
@@ -444,7 +442,6 @@ function RealizationView({ project }: { project: Project }) {
   const fromInvoices = money.revenueBasis === 'invoices' && money.revenue !== null
   const actualRevenue = fromInvoices ? money.revenue! : plan.revenue + money.extrasTotal
   const actual = useMemo(() => actualFigures(plan, costs, actualRevenue), [plan, costs, actualRevenue])
-  const unsavedPlan = useMemo(() => isPlanUnsaved(project, live), [project, live])
 
   const gear = useMemo(() => summarizeProjectGear({ ...project, gearDays: days }, items), [project, days, items])
   const rentByDay = useMemo(() => new Map(gear.perDay.map((d) => [d.dayId, d.rentValue])), [gear])
@@ -730,7 +727,7 @@ function RealizationView({ project }: { project: Project }) {
         </button>
       </section>
 
-      <PlanSection plan={plan} unsaved={unsavedPlan} defaultOpen={!countsTowardRevenue(project.status)} />
+      <PlanSection plan={plan} defaultOpen={!countsTowardRevenue(project.status)} />
 
       {eventSheet}
     </div>

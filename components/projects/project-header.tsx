@@ -3,18 +3,19 @@
 /**
  * Nagłówek otwartego projektu (T3, plan §6b) — zastąpił zatłoczony pasek.
  *
- *   wiersz 1: powrót do listy · status · „Zapisz"
+ *   wiersz 1: powrót do listy · stan zapisu wyceny · status
  *   wiersz 2: nazwa na całą szerokość (zawija się, nigdy nie jest ściśnięta)
  *   wiersz 3: klient · data księgowa · pochodzenie klienta · „Zapłacone"
  *
- * Wszystko poza „Zapisz" zapisuje się od razu. „Zapisz" utrwala wycenę z
- * kalkulatora i pyta, zanim zastąpi finanse spoza kalkulatora
- * (`lib/project-save.ts`).
+ * Wszystko zapisuje się samo — wycena też (Q1, `lib/quote-documents.ts`), więc
+ * zamiast „Zapisz" jest stan zapisu i „Cofnij zmiany z tej sesji". Wycena
+ * projektu z finansami z importu pyta raz, zanim je zastąpi (`lib/project-save.ts`).
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Handshake, Loader2, Save, X } from 'lucide-react'
-import { useProjectHub } from '@/lib/project-hub-context'
+import { AlertTriangle, ArrowLeft, Check, Handshake, Loader2, Undo2, X } from 'lucide-react'
+import { useProjectHub, useQuoteDocState } from '@/lib/project-hub-context'
+import type { QuoteDocStatus } from '@/lib/quote-documents'
 import { useEvents } from '@/lib/events-context'
 import { clientDirectory, clientKey } from '@/lib/clients'
 import { leadsFromEvents } from '@/lib/marketing-leads'
@@ -24,9 +25,6 @@ import { ProjectStatusPicker } from './project-status-badge'
 import { PaidToggle } from './paid-toggle'
 import { ClientCombobox } from './client-combobox'
 import { Button } from '@/components/ui/button'
-import type { SaveActiveProjectResult } from '@/lib/project-hub-context'
-
-type ReplacePrompt = Extract<SaveActiveProjectResult, { status: 'needs-confirmation' }>
 
 const archivo = { fontFamily: 'var(--font-archivo)' }
 
@@ -49,14 +47,15 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
 }
 
 export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) => void } = {}) {
-  const { activeProject, projects, closeProject, saveActiveProject, updateActiveProject, changeActiveClient, setStatus } =
+  const { activeProject, projects, closeProject, quoteDocs, updateActiveProject, changeActiveClient, setStatus } =
     useProjectHub()
   const { events } = useEvents()
-  const [saving, setSaving] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
+  const quoteState = useQuoteDocState(activeProject?.id ?? null)
   const [nameDraft, setNameDraft] = useState(activeProject?.name ?? '')
   const [contactNotice, setContactNotice] = useState<string | null>(null)
-  const [replacePrompt, setReplacePrompt] = useState<ReplacePrompt | null>(null)
+  // „Cofnij zmiany z tej sesji" — drugie kliknięcie w ciągu 3 s potwierdza.
+  const [confirmRestore, setConfirmRestore] = useState(false)
+  const [restoredNotice, setRestoredNotice] = useState(false)
   const nameRef = useRef<HTMLTextAreaElement>(null)
 
   const directory = useMemo(() => clientDirectory(projects), [projects])
@@ -80,10 +79,16 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
   }, [nameDraft])
 
   useEffect(() => {
-    if (!justSaved) return
-    const timer = setTimeout(() => setJustSaved(false), 1800)
+    if (!confirmRestore) return
+    const timer = setTimeout(() => setConfirmRestore(false), 3000)
     return () => clearTimeout(timer)
-  }, [justSaved])
+  }, [confirmRestore])
+
+  useEffect(() => {
+    if (!restoredNotice) return
+    const timer = setTimeout(() => setRestoredNotice(false), 4000)
+    return () => clearTimeout(timer)
+  }, [restoredNotice])
 
   useEffect(() => {
     if (!contactNotice) return
@@ -92,17 +97,15 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
   }, [contactNotice])
 
   if (!activeProject) return null
+  const projectId = activeProject.id
 
-  const handleSave = async (replaceFinancials = false) => {
-    setSaving(true)
-    const result = await saveActiveProject({ replaceFinancials })
-    setSaving(false)
-    if (result.status === 'needs-confirmation') {
-      setReplacePrompt(result)
+  const handleRestore = () => {
+    if (!confirmRestore) {
+      setConfirmRestore(true)
       return
     }
-    setReplacePrompt(null)
-    if (result.status === 'saved') setJustSaved(true)
+    setConfirmRestore(false)
+    void quoteDocs.restoreSession(projectId).then(() => setRestoredNotice(true))
   }
 
   const commitName = () => {
@@ -138,27 +141,30 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
             Projekty
           </Button>
 
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+            {quoteState && (
+              <QuoteSaveStatus
+                status={quoteState.status}
+                onRetry={() => void quoteDocs.flush(projectId)}
+              />
+            )}
+            {quoteState?.changedThisSession && quoteState.status !== 'needs-confirmation' && (
+              <button
+                type="button"
+                onClick={handleRestore}
+                title="Wycena i jej finanse wrócą do stanu z chwili, gdy otworzyłeś ten projekt w tej sesji"
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
+                  confirmRestore ? 'bg-red-500/10 text-red-300' : 'text-zinc-500 hover:text-zinc-200'
+                }`}
+              >
+                <Undo2 className="size-3.5" />
+                {confirmRestore ? 'Kliknij ponownie, aby cofnąć' : 'Cofnij zmiany z tej sesji'}
+              </button>
+            )}
             <ProjectStatusPicker
               status={activeProject.status}
               onChange={(status) => setStatus(activeProject.id, status)}
             />
-            <Button
-              onClick={() => handleSave()}
-              disabled={saving || !!replacePrompt}
-              size="sm"
-              className="h-8 shrink-0 gap-1.5"
-              title="Zapisz wycenę z kalkulatora w projekcie"
-            >
-              {saving ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : justSaved ? (
-                <Check className="size-3.5" />
-              ) : (
-                <Save className="size-3.5" />
-              )}
-              {justSaved ? 'Zapisano' : 'Zapisz'}
-            </Button>
           </div>
         </div>
 
@@ -264,32 +270,73 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
           </p>
         )}
 
-        {replacePrompt && (
+        {restoredNotice && (
+          <p className="mt-2 text-xs text-emerald-300/90" role="status">
+            Przywrócono wycenę sprzed zmian z tej sesji.
+          </p>
+        )}
+
+        {quoteState?.status === 'needs-confirmation' && quoteState.prompt && (
           // Projekt ma finanse spoza kalkulatora (np. retro-import) — zapis
-          // wyceny by je zastąpił, więc tylko po jawnej zgodzie.
+          // wyceny by je zastąpił, więc tylko po jawnej zgodzie. Do odpowiedzi
+          // zmiany w wycenie czekają w pamięci (nic nie trafia do pliku).
           <div
             className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90"
             role="alert"
           >
             <span className="min-w-0 flex-1">
-              Ten projekt ma finanse z importu ({formatPln(replacePrompt.current.sumaNetto)}). Zastąpić je wyceną z
-              kalkulatora ({formatPln(replacePrompt.proposed?.sumaNetto ?? 0)})?
+              Ten projekt ma finanse z importu ({formatPln(quoteState.prompt.current.sumaNetto)}). Zastąpić je wyceną z
+              kalkulatora ({formatPln(quoteState.prompt.proposed?.sumaNetto ?? 0)})? Do decyzji zmiany w wycenie nie są
+              zapisane.
             </span>
             <Button
               size="sm"
               variant="destructive"
               className="h-7 px-2 text-xs"
-              disabled={saving}
-              onClick={() => handleSave(true)}
+              onClick={() => void quoteDocs.confirmReplace(projectId)}
             >
               Zastąp
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setReplacePrompt(null)}>
-              Anuluj
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => quoteDocs.discard(projectId)}>
+              Cofnij zmiany
             </Button>
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+/** Stan zapisu wyceny — w miejscu dawnego „Zapisz". */
+function QuoteSaveStatus({ status, onRetry }: { status: QuoteDocStatus; onRetry: () => void }) {
+  if (status === 'error') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-red-300" role="alert">
+        <AlertTriangle className="size-3.5" />
+        Wycena niezapisana
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded px-1 underline underline-offset-2 outline-none hover:text-red-100 focus-visible:ring-1 focus-visible:ring-red-200/60"
+        >
+          Spróbuj ponownie
+        </button>
+      </span>
+    )
+  }
+  if (status === 'needs-confirmation') {
+    return <span className="text-xs text-amber-200/90">Wycena czeka na decyzję</span>
+  }
+  const busy = status === 'pending' || status === 'saving'
+  return (
+    <span
+      className="flex items-center gap-1.5 text-xs text-zinc-500"
+      role="status"
+      aria-live="polite"
+      title="Wycena zapisuje się sama — chwilę po zmianie, przy wyjściu z projektu i przy zamknięciu okna"
+    >
+      {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+      {busy ? 'Zapisywanie…' : 'Zapisano'}
+    </span>
   )
 }

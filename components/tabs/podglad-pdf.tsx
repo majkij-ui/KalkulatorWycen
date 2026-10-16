@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
 import { GlassCard } from '@/components/glass-card'
-import { PDF_DRAFT_STORAGE_KEY, useQuote } from '@/lib/quote-context'
+import { useQuote } from '@/lib/quote-context'
 import { PrintableQuote } from '@/components/pdf/printable-quote'
 import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeNum } from '@/lib/safe-numbers'
@@ -146,11 +146,24 @@ function AutoGrowTextarea({
   )
 }
 
+/** Ręczne „Uwagi" jadą w szkicu PDF obok `LocalPdfState` (pole spoza typu, zachowane przy zapisie). */
+function manualNotesOf(raw: unknown): string {
+  const value = raw && typeof raw === 'object' ? (raw as { uwagiManualText?: unknown }).uwagiManualText : undefined
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+ * Zakładka PDF. Szkic PDF jest częścią wyceny projektu (`pdfDraft` dokumentu,
+ * Q1): każdy projekt ma swój, przeżywa przejście między zakładkami, projektami
+ * i restart. Wycena bez szkicu — PDF buduje się z kalkulatora i idzie za jego
+ * zmianami; pierwsza ręczna zmiana w PDF zapisuje szkic. Poprawki automatyczne
+ * (waluta, znacznik `followsQuote`) zapisują się dopiero z następną zmianą —
+ * samo obejrzenie PDF niczego nie zapisuje.
+ */
 export function PodgladPdfTab() {
   const {
     breakdown,
     totals,
-    isCalculating,
     getTermsAndConditions,
     data,
     clientData,
@@ -160,8 +173,9 @@ export function PodgladPdfTab() {
     updateField,
     pricingConfig,
     marginMultiplier,
-    registerPdfDraftBridge,
-    syncPdfDraftSnapshot,
+    pdfDraft,
+    setPdfDraft,
+    syncFieldsSilently,
   } = useQuote()
 
   const issueDate = useMemo(() => new Date(), [])
@@ -173,7 +187,7 @@ export function PodgladPdfTab() {
   const [dismissedPriceSignature, setDismissedPriceSignature] = useState<string | null>(null)
   const [previewResetKey, setPreviewResetKey] = useState(0)
 
-  const [uwagiManualText, setUwagiManualText] = useState('')
+  const [uwagiManualText, setUwagiManualTextState] = useState('')
   // mergedTerms is computed later (after localPdfState + draft mode are known)
 
   const touchedRowsRef = useRef<Record<PdfRowKey, boolean>>({
@@ -224,6 +238,17 @@ export function PodgladPdfTab() {
   )
   const pdfMoney = pdfMoneyFor(localPdfState)
 
+  // Zmiana zrobiona ręką (a nie efektem): zapisuje szkic w wycenie projektu.
+  const userEditRef = useRef(false)
+  const editDraft: typeof setLocalPdfState = (update) => {
+    userEditRef.current = true
+    setLocalPdfState(update)
+  }
+  const setUwagiManualText = (next: string) => {
+    userEditRef.current = true
+    setUwagiManualTextState(next)
+  }
+
   // terms must be derived AFTER localPdfState exists so they can track the active PDF language
   const terms = useMemo(() => {
     const termsMoney: TermsMoney | undefined = pdfMoney.legacy
@@ -246,84 +271,36 @@ export function PodgladPdfTab() {
     }
   }, [localPdfState.pdfLanguage])
 
+  // Szkic tej wyceny (projektu) — raz, przy otwarciu zakładki. Nowy dokument
+  // (import z pliku, zmiana z zewnątrz) montuje zakładkę od nowa (`docEpoch`).
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      setDraftHydrationStatus('ready')
-      return
-    }
-
-    try {
-      const raw = localStorage.getItem(PDF_DRAFT_STORAGE_KEY)
-      if (!raw) {
-        setDraftHydrationStatus('ready')
-        return
-      }
-
-      const parsed: unknown = JSON.parse(raw)
-      const coerced = coerceLocalPdfDraft(parsed, localPdfState)
+    if (pdfDraft && typeof pdfDraft === 'object') {
+      const coerced = coerceLocalPdfDraft(pdfDraft, localPdfState)
       setLocalPdfState(coerced)
+      setUwagiManualTextState(manualNotesOf(pdfDraft))
       // Szkic wraca po cichu. Pytamy tylko wtedy, gdy jego ceny naprawdę
       // rozjechały się z kalkulatorem (ostrzeżenie niżej).
       setIsUsingDraft(true)
-
-      // Ensure editor inputs (bound to global QuoteState) reflect the draft.
-      updateField('clientName', coerced.clientName)
-      updateField('projectName', coerced.projectName)
-    } catch {
-      // ignore corrupted draft
-    } finally {
-      setDraftHydrationStatus('ready')
+      // Pola klienta i projektu w kalkulatorze pokazują to samo co szkic (bez zapisu).
+      syncFieldsSilently({ clientName: coerced.clientName, projectName: coerced.projectName })
     }
+    setDraftHydrationStatus('ready')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Szkic do wyceny projektu: zmiana ręczna zapisuje się (jak każda zmiana
+  // wyceny), poprawka automatyczna istniejącego szkicu jedzie po cichu, a PDF
+  // bez szkicu, który tylko idzie za kalkulatorem, niczego nie zapisuje.
+  const hasDraftRef = useRef(pdfDraft != null)
+  hasDraftRef.current = pdfDraft != null
   useEffect(() => {
     if (draftHydrationStatus !== 'ready') return
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(PDF_DRAFT_STORAGE_KEY, JSON.stringify(localPdfState))
-    } catch {
-      // ignore write failures
-    }
-  }, [draftHydrationStatus, localPdfState])
-
-  // Bridge for sticky-header save/load JSON: snapshots/restores the PDF draft
-  // so a saved .json wycena round-trips toggles, opisy, terminy, etc.
-  // Uses refs internally so the registered closures always see the latest state.
-  const localPdfStateRef = useRef(localPdfState)
-  // „Wyczyść edytor" dla mostka (nowy projekt, wycena bez własnego szkicu).
-  // Ref, bo funkcja jest zdefiniowana niżej i zależy od bieżącego renderu.
-  const clearEditorRef = useRef<() => void>(() => {})
-  useEffect(() => {
-    localPdfStateRef.current = localPdfState
-    syncPdfDraftSnapshot(localPdfState)
-  }, [localPdfState, syncPdfDraftSnapshot])
-
-  useEffect(() => {
-    registerPdfDraftBridge({
-      snapshot: () => localPdfStateRef.current,
-      reset: () => clearEditorRef.current(),
-      apply: (raw) => {
-        const coerced = coerceLocalPdfDraft(raw, localPdfStateRef.current)
-        setLocalPdfState(coerced)
-        syncPdfDraftSnapshot(coerced)
-        setIsUsingDraft(true)
-        // Mark every row + opcjeDodatkowe as user-touched so the auto-rebuild
-        // effect doesn't immediately overwrite the loaded values.
-        PDF_ROW_KEYS.forEach((key) => {
-          touchedRowsRef.current[key] = true
-        })
-        touchedOpcjeRef.current = true
-        // Mirror client/project into the global QuoteData so editor inputs match.
-        updateField('clientName', coerced.clientName)
-        updateField('projectName', coerced.projectName)
-      },
-    })
-    return () => {
-      syncPdfDraftSnapshot(localPdfStateRef.current)
-      registerPdfDraftBridge(null)
-    }
-  }, [registerPdfDraftBridge, syncPdfDraftSnapshot, updateField])
+    const byUser = userEditRef.current
+    userEditRef.current = false
+    if (!byUser && !hasDraftRef.current) return
+    setPdfDraft({ ...localPdfState, uwagiManualText }, { silent: !byUser })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftHydrationStatus, localPdfState, uwagiManualText])
 
   // Waluta wyceny się zmieniła (S3), także gdy zakładka PDF była zamknięta: ceny
   // z kalkulatora w nowej walucie, ceny i opisy poprawione ręcznie przeliczone /
@@ -474,7 +451,7 @@ export function PodgladPdfTab() {
       terms,
     })
 
-    setLocalPdfState((prev) => {
+    editDraft((prev) => {
       const nextRows = { ...prev.rows }
       PDF_ROW_KEYS.forEach((key) => {
         nextRows[key] = { ...prev.rows[key], cenaNetto: fresh.rows[key].cenaNetto }
@@ -495,18 +472,12 @@ export function PodgladPdfTab() {
       terms,
     })
     resetEditorSyncFlags()
-    setUwagiManualText('')
-
-    try {
-      localStorage.removeItem(PDF_DRAFT_STORAGE_KEY)
-    } catch {
-      // ignore
-    }
-
+    setUwagiManualTextState('')
+    // Wycena znowu bez szkicu: PDF idzie za kalkulatorem, dopóki czegoś nie zmienisz ręcznie.
+    setPdfDraft(null)
     setIsUsingDraft(false)
     setLocalPdfState(init)
   }
-  clearEditorRef.current = handleClearEditor
 
   const printRef = useRef<HTMLDivElement | null>(null)
   const originalDocumentTitleRef = useRef<string | null>(null)
@@ -672,7 +643,7 @@ export function PodgladPdfTab() {
                 // updates immediately. Without this, draft mode keeps a stale
                 // localPdfState because the auto-rebuild effect only runs when
                 // isUsingDraft === false.
-                setLocalPdfState((prev) => ({ ...prev, clientName: v }))
+                editDraft((prev) => ({ ...prev, clientName: v }))
               }}
               placeholder="np. NonoiseMedia Sp. z o.o."
               className="border-white/10 bg-white/5 text-foreground"
@@ -686,7 +657,7 @@ export function PodgladPdfTab() {
               onChange={(e) => {
                 const v = e.target.value
                 updateField('projectName', v)
-                setLocalPdfState((prev) => ({ ...prev, projectName: v }))
+                editDraft((prev) => ({ ...prev, projectName: v }))
               }}
               placeholder="np. Kampania wiosenna 2025"
               className="border-white/10 bg-white/5 text-foreground"
@@ -697,7 +668,7 @@ export function PodgladPdfTab() {
             <Input
               id="termin-zdjec"
               value={localPdfState.terminZdjec}
-              onChange={(e) => setLocalPdfState((prev) => ({ ...prev, terminZdjec: e.target.value }))}
+              onChange={(e) => editDraft((prev) => ({ ...prev, terminZdjec: e.target.value }))}
               placeholder="np. Do ustalenia lub 20.04.2026"
               className="border-white/10 bg-white/5 text-foreground"
             />
@@ -720,7 +691,7 @@ export function PodgladPdfTab() {
             <Button
               onClick={() => {
                 setQuoteCurrency('EUR', { rate: localPdfState.exchangeRate, source: 'manual' })
-                setLocalPdfState((prev) => ({ ...prev, followsQuote: true }))
+                editDraft((prev) => ({ ...prev, followsQuote: true }))
               }}
               className="w-full sm:w-auto"
             >
@@ -729,7 +700,7 @@ export function PodgladPdfTab() {
             <Button
               variant="outline"
               onClick={() => {
-                setLocalPdfState((prev) => ({ ...flipPdfCurrency(prev, 'PLN'), followsQuote: true }))
+                editDraft((prev) => ({ ...flipPdfCurrency(prev, 'PLN'), followsQuote: true }))
                 setPreviewResetKey((k) => k + 1)
               }}
               className="w-full sm:w-auto"
@@ -801,7 +772,7 @@ export function PodgladPdfTab() {
             <div className="flex items-center gap-2">
               <Switch
                 checked={localPdfState.showVat}
-                onCheckedChange={(v) => setLocalPdfState((prev) => ({ ...prev, showVat: Boolean(v) }))}
+                onCheckedChange={(v) => editDraft((prev) => ({ ...prev, showVat: Boolean(v) }))}
               />
               <div className="text-sm text-zinc-300">Pokaż VAT (23%)</div>
             </div>
@@ -815,7 +786,7 @@ export function PodgladPdfTab() {
                   { value: 'pl', label: 'PL' },
                   { value: 'en', label: 'EN' },
                 ]}
-                onChange={(v) => setLocalPdfState((prev) => ({ ...prev, pdfLanguage: v as PdfLang }))}
+                onChange={(v) => editDraft((prev) => ({ ...prev, pdfLanguage: v as PdfLang }))}
               />
             </div>
 
@@ -887,14 +858,13 @@ export function PodgladPdfTab() {
                               inputMode="decimal"
                               min={0}
                               step={0.01}
-                              disabled={isCalculating}
                             value={Number.isFinite(nettoValue) ? roundToUnit(nettoValue) : 0}
                               onChange={(e) => {
                                 const raw = e.target.value
                                 const parsed = safeNum(raw === '' ? 0 : Number.parseFloat(raw), 0, 0)
                               const nextNet = roundToUnit(parsed)
                                 touchedRowsRef.current[r.key] = true
-                                setLocalPdfState((prev) => ({
+                                editDraft((prev) => ({
                                   ...prev,
                                   rows: {
                                     ...prev.rows,
@@ -917,11 +887,10 @@ export function PodgladPdfTab() {
 
                         <div className="col-span-6">
                           <AutoGrowTextarea
-                            disabled={isCalculating}
                             value={row.opis}
                             onChange={(next) => {
                               touchedRowsRef.current[r.key] = true
-                              setLocalPdfState((prev) => ({
+                              editDraft((prev) => ({
                                 ...prev,
                                 rows: {
                                   ...prev.rows,
@@ -976,9 +945,8 @@ export function PodgladPdfTab() {
                             {L.finalMaterials}
                           </div>
                           <AutoGrowTextarea
-                            disabled={isCalculating}
                             value={localPdfState.materialyKoncowe}
-                            onChange={(next) => setLocalPdfState((prev) => ({ ...prev, materialyKoncowe: next }))}
+                            onChange={(next) => editDraft((prev) => ({ ...prev, materialyKoncowe: next }))}
                             placeholder="Np. materiały przekazane klientowi (logo, brandbook, pliki)…"
                             className="text-[10px] leading-relaxed"
                           />
@@ -989,11 +957,10 @@ export function PodgladPdfTab() {
                             {L.additionalOptions}
                           </div>
                           <AutoGrowTextarea
-                            disabled={isCalculating}
                             value={localPdfState.opcjeDodatkowe}
                             onChange={(next) => {
                               touchedOpcjeRef.current = true
-                              setLocalPdfState((prev) => ({ ...prev, opcjeDodatkowe: next }))
+                              editDraft((prev) => ({ ...prev, opcjeDodatkowe: next }))
                             }}
                             placeholder="Wpisz dodatkowe opcje i uwagi marketingowe…"
                             className="text-[10px] leading-relaxed"
@@ -1005,9 +972,8 @@ export function PodgladPdfTab() {
                             {L.portfolio}
                           </div>
                           <PortfolioRowsEditor
-                            disabled={isCalculating}
                             rows={localPdfState.portfolioRows}
-                            onChange={(rows) => setLocalPdfState((prev) => ({ ...prev, portfolioRows: rows }))}
+                            onChange={(rows) => editDraft((prev) => ({ ...prev, portfolioRows: rows }))}
                           />
                         </div>
 
@@ -1026,7 +992,6 @@ export function PodgladPdfTab() {
                     )}
                     <div className="mt-2">
                       <AutoGrowTextarea
-                        disabled={isCalculating}
                         value={uwagiManualText}
                         onChange={(next) => setUwagiManualText(next)}
                         placeholder="Dodaj własne uwagi (1 punkt na linię)…"
@@ -1047,7 +1012,7 @@ export function PodgladPdfTab() {
             <Button
               onClick={isTauriRuntime() ? handleTauriExport : handlePrint}
               size="lg"
-              disabled={isCalculating || isExportingPdf}
+              disabled={isExportingPdf}
               className="w-full sm:w-auto gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <FileDown className="size-5" />

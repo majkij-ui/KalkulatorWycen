@@ -393,23 +393,6 @@ export const defaultQuoteData: QuoteData = {
 }
 
 /** User-saved quote template (persisted in localStorage) */
-export interface SavedTemplate {
-  id: string
-  name: string
-  state: Partial<QuoteData>
-  createdAt: string
-}
-
-/** Snapshot zapisany w `settings.json` (Tauri); opcjonalne pola scalane z domyślnymi */
-export interface PersistedAppSettings {
-  data?: Partial<QuoteData>
-  /** @deprecated Usunięto tiery; ignorowane przy wczytaniu */
-  pricingTier?: string
-  marginMultiplier?: number
-  pricingConfig?: PricingConfigShape
-  templates?: SavedTemplate[]
-}
-
 export const PRICES = {
   scenariusz: {
     brak: 0,

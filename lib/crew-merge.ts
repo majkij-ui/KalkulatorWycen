@@ -385,9 +385,9 @@ export interface CalculatorCrewRef {
 }
 
 /**
- * Dni wyceny otwartej w kalkulatorze z przepiętymi osobami — żeby późniejsze
- * „Zapisz" nie przywróciło duplikatu. Zwraca tylko zmienione dni i to, co
- * zmieniono.
+ * Dni wyceny, która jeszcze nie jest w projekcie (czeka w pamięci na decyzję),
+ * z przepiętymi osobami — żeby jej późniejszy zapis nie przywrócił duplikatu.
+ * Zwraca tylko zmienione dni i to, co zmieniono.
  */
 export function retargetQuoteDays(
   days: Pick<ShootingDay, 'id' | 'crew'>[],

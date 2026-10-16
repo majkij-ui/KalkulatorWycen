@@ -74,16 +74,6 @@ export function clientAfterSave(project: Pick<Project, 'client'>, snapshot: Pick
   return project.client.trim() ? project.client : (snapshot.data.clientName ?? '').trim()
 }
 
-/**
- * Czy po zmianie klienta w nagłówku można wgrać pustą wycenę z nowym klientem
- * (tak jak przy otwarciu projektu). Tylko gdy nic by nie przepadło: projekt
- * nie ma zapisanej wyceny, w kalkulatorze nic nie zbudowano, a zakładki PDF
- * jeszcze nie otwierano (`pdfDraft` puste — jej teksty żyją tylko w szkicu).
- */
-export function canReprefillBlankQuote(project: Pick<Project, 'quote'>, snapshot: QuoteSnapshot): boolean {
-  return !project.quote && snapshot.pdfDraft == null && isBlankQuoteData(snapshot.data)
-}
-
 export type ProjectSavePlan =
   | {
       status: 'ready'

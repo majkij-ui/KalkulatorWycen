@@ -1,14 +1,11 @@
 'use client'
 
 /**
- * Korzeń aplikacji: strażnik hydracji + dostawcy stanu.
- *
- * Kolejność jest istotna — `ProjectHubProvider` (wewnątrz `AppShell`) czyta
- * `useQuote()`, więc musi siedzieć pod `QuoteProvider`.
+ * Korzeń aplikacji: strażnik hydracji. Dostawców stanu ustawia `AppShell`
+ * (projekty → wycena otwartego projektu → reszta).
  */
 
 import { useEffect, useState } from 'react'
-import { QuoteProvider } from '@/lib/quote-context'
 import { AppShell } from '@/components/app-shell'
 import { applyCarryOver } from '@/lib/legacy-app'
 
@@ -28,9 +25,5 @@ export function AppRoot() {
     return <div className="min-h-screen bg-zinc-950" />
   }
 
-  return (
-    <QuoteProvider>
-      <AppShell />
-    </QuoteProvider>
-  )
+  return <AppShell />
 }

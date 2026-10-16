@@ -19,7 +19,8 @@ import { useCrew } from '@/lib/crew-context'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { useQuote } from '@/lib/quote-context'
+import type { QuoteDoc } from '@/lib/quote-documents'
+import type { QuoteCrewLine } from '@/lib/quote-types'
 import {
   crewMergeKitUpdates,
   crewMergePatches,
@@ -60,12 +61,18 @@ type SheetState =
   | { type: 'merge'; targetId: string | null }
   | null
 
+/** Pozycje ekipy przepięte w wycenie czekającej w pamięci — do „Cofnij". */
+interface PendingQuoteRefs {
+  id: string
+  refs: CalculatorCrewRef[]
+}
+
 interface Notice {
   message: string
   /** Usunięta osoba — „Cofnij" ją przywraca. */
   undoId?: string
   /** Scalenie — „Cofnij" przywraca karty i odwołania. */
-  merge?: { plan: CrewMergePlan; calculator: CalculatorCrewRef[] }
+  merge?: { plan: CrewMergePlan; pending: PendingQuoteRefs[] }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -141,9 +148,8 @@ function UnknownNamesBanner({
 export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
   const { people, allPeople, roles, activeRoles, isLoading, addPerson, restorePerson, mergePeople, unmergePeople } =
     useCrew()
-  const { projects, updateProjects } = useProjectHub()
+  const { projects, latestProjects, updateProjects, quoteDocs } = useProjectHub()
   const { kits, updateKits } = useEquipment()
-  const { data: quoteData, updateShootingDay } = useQuote()
   const { allEvents } = useEvents()
 
   const [query, setQuery] = useState('')
@@ -159,30 +165,59 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
   const unknown = useMemo(() => unknownCrewNames(projects, allPeople), [projects, allPeople])
 
   /**
-   * Zapis scalenia: projekty (jeden zapis), zestawy (jeden zapis), wycena
-   * otwarta w kalkulatorze (żeby „Zapisz" nie przywrócił duplikatu), na
-   * końcu karty ludzi — odwołania wskazują już osobę, która zostaje.
+   * Wyceny czekające w pamięci na decyzję (finanse z importu) nie są jeszcze w
+   * projektach — ich pozycje ekipy przepinamy tu, po cichu (zapiszą się z
+   * decyzją). `change` dostaje dni wyceny i zwraca zmienione dni.
+   */
+  const editPendingQuotes = (
+    change: (days: QuoteDoc['data']['detailedShootingDays'], id: string) => { dayId: string; crew: QuoteCrewLine[] }[]
+  ) =>
+    quoteDocs.pendingIds().forEach((id) =>
+      quoteDocs.edit(
+        id,
+        (doc) => {
+          const changed = new Map(change(doc.data.detailedShootingDays ?? [], id).map(({ dayId, crew }) => [dayId, crew]))
+          if (changed.size === 0) return doc
+          const days = (doc.data.detailedShootingDays ?? []).map((day) =>
+            changed.has(day.id) ? { ...day, crew: changed.get(day.id) } : day
+          )
+          return { ...doc, data: { ...doc.data, detailedShootingDays: days } }
+        },
+        { silent: true }
+      )
+    )
+
+  /**
+   * Zapis scalenia: najpierw czekające zmiany wycen do pliku (żeby łaty szły na
+   * aktualne wyceny), potem projekty (jeden zapis), zestawy (jeden zapis),
+   * wyceny czekające na decyzję, na końcu karty ludzi — odwołania wskazują już
+   * osobę, która zostaje.
    */
   const runMerge = async (plan: CrewMergePlan) => {
-    await updateProjects(crewMergePatches(projects, plan))
+    await quoteDocs.flushAll()
+    await updateProjects(crewMergePatches(latestProjects(), plan))
     await updateKits(crewMergeKitUpdates(kits, plan))
-    const calculator = retargetQuoteDays(quoteData.detailedShootingDays ?? [], plan.sourceIds, plan.targetId)
-    calculator.days.forEach(({ dayId, crew }) => updateShootingDay(dayId, 'crew', crew))
+    const pending: PendingQuoteRefs[] = []
+    editPendingQuotes((days, id) => {
+      const result = retargetQuoteDays(days, plan.sourceIds, plan.targetId)
+      if (result.refs.length) pending.push({ id, refs: result.refs })
+      return result.days
+    })
     await mergePeople(plan)
     setSheet({ type: 'person', id: plan.targetId })
     const total = plan.sources.length + 1
     setNotice({
       message: `Scalono ${total} ${plural(total, 'kartę', 'karty', 'kart')} w „${plan.merged.name}" (${plan.refs.length} ${plural(plan.refs.length, 'odwołanie', 'odwołania', 'odwołań')} w projektach, ${plan.kits.length} ${plural(plan.kits.length, 'zestaw', 'zestawy', 'zestawów')}).`,
-      merge: { plan, calculator: calculator.refs },
+      merge: { plan, pending },
     })
   }
 
-  const undoMerge = async ({ plan, calculator }: NonNullable<Notice['merge']>) => {
-    await updateProjects(crewUnmergePatches(projects, plan))
+  const undoMerge = async ({ plan, pending }: NonNullable<Notice['merge']>) => {
+    await quoteDocs.flushAll()
+    await updateProjects(crewUnmergePatches(latestProjects(), plan))
     await updateKits(crewUnmergeKitUpdates(kits, plan))
-    restoreQuoteDays(quoteData.detailedShootingDays ?? [], calculator, plan.targetId).forEach(({ dayId, crew }) =>
-      updateShootingDay(dayId, 'crew', crew)
-    )
+    const refsById = new Map(pending.map(({ id, refs }) => [id, refs]))
+    editPendingQuotes((days, id) => restoreQuoteDays(days, refsById.get(id) ?? [], plan.targetId))
     await unmergePeople(plan)
   }
   const year = new Date().getFullYear()

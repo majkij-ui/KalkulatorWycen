@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { blankQuoteSnapshot, canReprefillBlankQuote, isBlankQuoteData, planProjectSave } from './project-save'
+import { blankQuoteSnapshot, isBlankQuoteData, planProjectSave } from './project-save'
 import { mergeQuoteDataPartial } from './quote-financials'
 import { DEFAULT_PRICING } from './pricing-config'
 import { defaultQuoteData, type QuoteData } from './quote-types'
@@ -204,14 +204,4 @@ test('edytowany szkic PDF to praca: lead dostaje wycenę, retro-projekt pyta', (
   const retro = project()
   const asked = planProjectSave({ project: retro, snapshot: snapshot(blankQuoteSnapshot(retro.client).data, draft), now: NOW })
   assert.equal(asked.status, 'needs-confirmation')
-})
-
-test('canReprefillBlankQuote: tylko gdy nic by nie przepadło', () => {
-  const lead = project({ quote: null })
-  assert.equal(canReprefillBlankQuote(lead, freshlyOpened(lead)), true)
-  assert.equal(canReprefillBlankQuote(lead, snapshot({ clientName: 'Inny' })), true, 'sam klient to nie wycena')
-  assert.equal(canReprefillBlankQuote(lead, snapshot({ dniDokumentacji: 1 })), false, 'zbudowana wycena')
-  assert.equal(canReprefillBlankQuote(lead, snapshot({}, { pdfDraft: { terms: [] } })), false, 'otwarty szkic PDF')
-  const quoted = project({ quote: snapshot({ dniDokumentacji: 1 }) })
-  assert.equal(canReprefillBlankQuote(quoted, freshlyOpened(quoted)), false, 'projekt ma zapisaną wycenę')
 })

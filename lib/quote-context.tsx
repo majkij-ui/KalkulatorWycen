@@ -1,16 +1,31 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable, type SavedTemplate, type PersistedAppSettings } from './quote-types'
+/**
+ * Kalkulator otwartego projektu (Q1): `useQuote()` czyta i zmienia DOKUMENT
+ * wyceny tego projektu (`quote-documents.ts`), a nie jeden wspólny kalkulator.
+ * Zakładki widzą tę samą powierzchnię co dawniej (dane, cennik, marża, sumy,
+ * waluta), więc nie musiały się zmieniać. Zmiany zapisują się same do
+ * projektu; nie ma „Zapisz", biblioteki wycen ani globalnego stanu w
+ * `settings.json` / localStorage.
+ *
+ * Bez otwartego projektu (np. ekran Ekipa) kalkulator pokazuje pustą wycenę z
+ * domyślnym cennikiem i ignoruje zmiany.
+ *
+ * Siedzi WEWNĄTRZ `ProjectHubProvider` (otwarty projekt i magazyn dokumentów)
+ * i NAD resztą dostawców (Ekipa czyta role z cennika otwartej wyceny).
+ */
+
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
-import { getPricingConfig, savePricingConfig, resetPricingToDefault, saveAsUserDefault, getUserDefault, migratePricingConfig, DEFAULT_PRICING, DEFAULT_FORMAT_KEY } from './pricing-config'
+import { saveAsUserDefault, getSavedUserDefault, getUserDefault, DEFAULT_FORMAT_KEY, USER_DEFAULT_PRICING_EVENT } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
 import { getPdfTextsConfig, savePdfTextsConfig, buildTermsAndConditions, type TermsMoney } from './pdf-texts-config'
 import type { PortfolioCatalogueEntry } from './portfolio-catalogue'
 import { getPortfolioCatalogue, savePortfolioCatalogue } from './portfolio-catalogue'
 import type { PdfLang } from './pdf-i18n'
 import { formatCurrency, type Totals, type PhaseBreakdown } from './quote-calc'
-import { buildQuoteBreakdown, computeQuoteTotals, computeTotalCrewDays, mergeQuoteDataPartial, quoteViews } from './quote-financials'
+import { buildQuoteBreakdown, computeQuoteTotals, computeTotalCrewDays, quoteViews } from './quote-financials'
 import {
   formatMoney,
   quoteMoney,
@@ -22,31 +37,21 @@ import {
   type QuoteMoney,
 } from './quote-currency'
 import { PriceDisplayProvider } from './price-display'
-import { loadPersistedSnapshot, savePersistedSnapshot } from './persisted-state'
-import { buildPersistedSnapshot } from './storage'
-import {
-  listSavedQuotes,
-  upsertSavedQuote,
-  deleteSavedQuote,
-  createQuoteId,
-  type QuoteSnapshot,
-  type SavedQuoteRecord,
-} from './quote-library'
+import { blankDoc, docFromSnapshot, docToSnapshot, type QuoteDoc } from './quote-documents'
+import type { QuoteSnapshot } from './quote-library'
+import { useProjectHub } from './project-hub-context'
 
 interface QuoteContextValue {
+  /** Id projektu, którego wycenę widać (`null` = żaden projekt nie jest otwarty). */
+  projectId: string | null
   data: QuoteData
   updateField: <K extends keyof QuoteData>(key: K, value: QuoteData[K]) => void
-  templates: SavedTemplate[]
-  saveTemplate: (name: string) => void
-  deleteTemplate: (id: string) => void
-  loadTemplate: (id: string) => void
   /** Sumy oferty w walucie wyceny (EUR w wycenie w euro). */
   totals: Totals
   /** Kwota w walucie wyceny, np. „1 500,00 zł" / „351,00 €". */
   formatCurrency: (amount: number) => string
   /** Kwota zawsze w zł — koszty, plan, finanse. */
   formatPln: (amount: number) => string
-  isCalculating: boolean
   // Waluta wyceny (S3) — zasady w lib/quote-currency.ts
   money: QuoteMoney
   /** Dane wyceny w walucie wyceny (stawki sprzętu i ról przeliczone) — do pokazywania cen. */
@@ -66,12 +71,10 @@ interface QuoteContextValue {
   setMarginMultiplier: (value: number) => void
   // Breakdown for summary & PDF (w walucie wyceny)
   breakdown: PhaseBreakdown[]
-  // Settings: custom pricing (persisted in localStorage) — ZAWSZE w PLN
+  /** Cennik TEJ wyceny — ZAWSZE w PLN. Zmiana dotyczy tylko otwartego projektu. */
   pricingConfig: PricingConfigShape
   setPricingConfig: (config: PricingConfigShape) => void
   updatePricingValue: (category: keyof PricingConfigShape, key: string, value: number) => void
-  reloadPricingFromStorage: () => void
-  resetPricingToDefault: () => void
   // Produkcja detailed: shooting days
   addShootingDay: () => void
   removeShootingDay: (id: string) => void
@@ -94,152 +97,95 @@ interface QuoteContextValue {
    * English-language PDF. Amounts are in the quote's currency unless `money` says otherwise (pre-S3 EUR draft).
    */
   getTermsAndConditions: (lang?: PdfLang, money?: TermsMoney) => string[]
+  /** ↺ Wycena tego projektu od zera; cennik zostaje. Klient i nazwa projektu też. */
   resetToZero: () => void
-  /** Save current pricingConfig as user-defined defaults (hard reset target) */
+  /** Save current pricingConfig as user-defined defaults (new quotes and „Wyczyść" start from it) */
   saveAsDefaults: () => void
-  /** Reset quote data + margin to zero AND restore pricing to user/factory defaults */
+  /** ⌫ Jak `resetToZero`, a cennik wraca do moich domyślnych stawek. */
   hardReset: () => void
-  /** Apply a saved quote snapshot (data + pricing + margin + PDF draft) loaded from a file */
-  loadQuoteSnapshot: (snapshot: {
-    data?: Partial<QuoteData>
-    pricingConfig?: unknown
-    marginMultiplier?: number
-    pdfDraft?: unknown
-  }) => void
+  /**
+   * Szkic PDF tej wyceny (`LocalPdfState` + `uwagiManualText`); `null` = PDF
+   * jeszcze nie edytowany, idzie za kalkulatorem.
+   */
+  pdfDraft: unknown
+  /** `silent` = poprawka automatyczna (bez zapisu, jedzie z następną zmianą). */
+  setPdfDraft: (draft: unknown, options?: { silent?: boolean }) => void
+  /** Pola danych odświeżane bez zapisu (lustro nazw ze szkicu PDF). */
+  syncFieldsSilently: (patch: Partial<QuoteData>) => void
+  /** Rośnie, gdy dokument podmieniono w całości — zakładka PDF montuje się od nowa. */
+  docEpoch: number
+  /** Migawka do pliku JSON (ten sam kształt co `Project.quote`). */
+  exportSnapshot: () => QuoteSnapshot
+  /** Wycena z pliku JSON zastępuje wycenę tego projektu. `false` = plik nie jest wyceną. */
+  importSnapshot: (raw: unknown) => boolean
   /** Editable PDF placeholder texts (company info + terms templates) */
   pdfTexts: PdfTextsConfig
   setPdfTexts: (config: PdfTextsConfig) => void
   /** App-level catalogue of reusable video references for the PDF "Przykładowe realizacje" section. */
   portfolioCatalogue: PortfolioCatalogueEntry[]
   setPortfolioCatalogue: (entries: PortfolioCatalogueEntry[]) => void
-  /**
-   * Bridge for the PDF preview tab so the sticky-header save/load JSON flow can
-   * snapshot and restore the PDF draft (toggles, opisy, terminZdjec, etc.)
-   * without lifting the entire localPdfState reducer up here.
-   */
-  registerPdfDraftBridge: (bridge: PdfDraftBridge | null) => void
-  /** Keep the latest PDF draft in context so save/load works when the PDF tab is unmounted. */
-  syncPdfDraftSnapshot: (snapshot: unknown) => void
-  getPdfDraftSnapshot: () => unknown
-  // Biblioteka wycen (AppData) — "save game / load game"
-  savedQuotes: SavedQuoteRecord[]
-  /** Aktualnie otwarta wycena z biblioteki (null = niezapisana / robocza). */
-  activeQuoteId: string | null
-  activeQuoteName: string | null
-  /** Builds the full snapshot of the current state (also used by JSON export). */
-  buildQuoteSnapshot: () => QuoteSnapshot
-  /** Save current state under a name; overwrites when `id` given. Returns the record id. */
-  /** `projectId` = projekt otwarty przy zapisie; kopia z projektu nie wraca na baner migracji. */
-  saveQuoteToLibrary: (name: string, id?: string, projectId?: string) => Promise<string>
-  loadQuoteFromLibrary: (id: string) => void
-  deleteQuoteFromLibrary: (id: string) => Promise<void>
-  /** Detach from the active library quote (start a fresh unsaved draft). */
-  startNewQuote: () => void
 }
-
-export interface PdfDraftBridge {
-  /** Returns a JSON-serialisable snapshot of the current PDF draft (or null). */
-  snapshot: () => unknown
-  /** Applies a previously saved PDF draft snapshot, coercing missing fields. */
-  apply: (raw: unknown) => void
-  /** Czysty szkic PDF — to samo co „Wyczyść edytor" w zakładce PDF. */
-  reset: () => void
-}
-
-/** Szkic PDF w localStorage — zakładka PDF odtwarza go przy otwarciu. */
-export const PDF_DRAFT_STORAGE_KEY = 'nonoise-pdf-draft'
-
-/** Znacznik „wyczyść szkic", gdy zakładka PDF nie jest jeszcze zamontowana. */
-const PDF_DRAFT_RESET = { __reset: true } as const
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
 
-const TEMPLATES_STORAGE_KEY = 'nonoise-templates'
-
-function loadTemplatesFromStorage(): SavedTemplate[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as SavedTemplate[]) : []
-  } catch {
-    return []
+/**
+ * Wycena od zera z zachowaniem tego, dla kogo jest (klient i nazwa projektu na
+ * PDF). Szkic PDF zostaje jak dawniej: jego teksty nie są częścią kalkulatora,
+ * a ceny pokaże ostrzeżenie „Ceny w PDF różnią się".
+ */
+function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): QuoteDoc {
+  return {
+    ...doc,
+    data: { ...defaultQuoteData, clientName: doc.data.clientName, projectName: doc.data.projectName },
+    pricingConfig,
+    marginMultiplier: 1,
   }
 }
 
-function saveTemplatesToStorage(templates: SavedTemplate[]): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates))
-  } catch {
-    // ignore
-  }
+/** Domyślny cennik użytkownika, odświeżany po „Zapisz stawki jako domyślne". */
+function useDefaultPricing(): PricingConfigShape | null {
+  const [pricing, setPricing] = useState(() => getSavedUserDefault())
+  useEffect(() => {
+    const refresh = () => setPricing(getSavedUserDefault())
+    window.addEventListener(USER_DEFAULT_PRICING_EVENT, refresh)
+    return () => window.removeEventListener(USER_DEFAULT_PRICING_EVENT, refresh)
+  }, [])
+  return pricing
 }
 
 export function QuoteProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<QuoteData>(defaultQuoteData)
-  const [isCalculating, setIsCalculating] = useState(false)
-  const [marginMultiplier, setMarginMultiplier] = useState(1.0)
-  const [pricingConfig, setPricingConfigState] = useState<PricingConfigShape>(DEFAULT_PRICING)
+  const { activeProject, quoteDocs } = useProjectHub()
+  // Każda zmiana w magazynie (edycja, zapis, nowy dokument) odświeża kalkulator.
+  useSyncExternalStore(quoteDocs.subscribe, quoteDocs.version, quoteDocs.version)
+
   const [pdfTexts, setPdfTextsState] = useState<PdfTextsConfig>(() => getPdfTextsConfig())
   const [portfolioCatalogue, setPortfolioCatalogueState] = useState<PortfolioCatalogueEntry[]>(() =>
     getPortfolioCatalogue()
   )
-  const [templates, setTemplates] = useState<SavedTemplate[]>([])
-  const [restorationComplete, setRestorationComplete] = useState(false)
-  const [savedQuotes, setSavedQuotes] = useState<SavedQuoteRecord[]>([])
-  const [activeQuoteId, setActiveQuoteId] = useState<string | null>(null)
-  const [activeQuoteName, setActiveQuoteName] = useState<string | null>(null)
 
-  const applyPersistedSettings = useCallback((saved: PersistedAppSettings) => {
-    if (saved.data) {
-      setData(mergeQuoteDataPartial(saved.data))
-    }
-    if (typeof saved.marginMultiplier === 'number' && Number.isFinite(saved.marginMultiplier)) {
-      setMarginMultiplier(saved.marginMultiplier)
-    }
-    if (saved.pricingConfig && typeof saved.pricingConfig === 'object') {
-      const migrated = migratePricingConfig(
-        saved.pricingConfig as unknown as Record<string, Record<string, unknown>>
-      )
-      setPricingConfigState(migrated)
-      savePricingConfig(migrated)
-    }
-    if (Array.isArray(saved.templates)) {
-      setTemplates(saved.templates)
-      saveTemplatesToStorage(saved.templates)
-    }
-  }, [])
+  const defaultPricing = useDefaultPricing()
+  const idleDoc = useMemo(() => blankDoc('', defaultPricing), [defaultPricing])
 
-  const reloadPricingFromStorage = useCallback(() => {
-    setPricingConfigState(getPricingConfig())
-  }, [])
+  const projectId = activeProject?.id ?? null
+  const doc = projectId ? quoteDocs.get(projectId) : idleDoc
+  const docEpoch = projectId ? quoteDocs.state(projectId).epoch : 0
+  const { data, pricingConfig, marginMultiplier } = doc
 
-  const setPricingConfig = useCallback((config: PricingConfigShape) => {
-    setPricingConfigState(config)
-    savePricingConfig(config)
-  }, [])
-
-  const resetPricing = useCallback(() => {
-    const def = resetPricingToDefault()
-    setPricingConfigState(def)
-  }, [])
-
-  const updatePricingValue = useCallback((
-    category: keyof PricingConfigShape,
-    key: string,
-    value: number,
-  ) => {
-    setPricingConfigState((prev) => {
-      const next: PricingConfigShape = {
-        ...prev,
-        [category]: { ...(prev[category] as Record<string, number>), [key]: value },
-      }
-      savePricingConfig(next)
-      return next
-    })
-  }, [])
+  /** Zmiana dokumentu otwartego projektu (bez projektu — nic). */
+  const edit = useCallback(
+    (updater: (doc: QuoteDoc) => QuoteDoc, options?: { silent?: boolean; replace?: boolean }) => {
+      if (projectId) quoteDocs.edit(projectId, updater, options)
+    },
+    [projectId, quoteDocs]
+  )
+  const editData = useCallback(
+    (updater: (data: QuoteData) => QuoteData) =>
+      edit((current) => {
+        const next = updater(current.data)
+        return next === current.data ? current : { ...current, data: next }
+      }),
+    [edit]
+  )
 
   const setPdfTexts = useCallback((config: PdfTextsConfig) => {
     setPdfTextsState(config)
@@ -251,47 +197,47 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     savePortfolioCatalogue(entries)
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    void loadPersistedSnapshot()
-      .then((saved) => {
-        if (cancelled || !saved) return
-        applyPersistedSettings(saved)
-      })
-      .finally(() => {
-        if (!cancelled) setRestorationComplete(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [applyPersistedSettings])
-
-  const PERSIST_DEBOUNCE_MS = 500
-
-  useEffect(() => {
-    if (!restorationComplete) return
-    const snapshot = buildPersistedSnapshot({
-      data,
-      marginMultiplier,
-      pricingConfig,
-      templates,
-    })
-    const t = window.setTimeout(() => {
-      void savePersistedSnapshot(snapshot).catch((err) => {
-        // Keep the app usable, but never swallow persistence failures invisibly —
-        // a missing AppData dir made autosave fail silently for months.
-        console.error('Autozapis settings.json nie powiódł się:', err)
-      })
-    }, PERSIST_DEBOUNCE_MS)
-    return () => window.clearTimeout(t)
-  }, [restorationComplete, data, marginMultiplier, pricingConfig, templates])
-
   const updateField = useCallback(<K extends keyof QuoteData>(key: K, value: QuoteData[K]) => {
-    setData(prev => ({ ...prev, [key]: value }))
-  }, [])
+    editData((prev) => (Object.is(prev[key], value) ? prev : { ...prev, [key]: value }))
+  }, [editData])
+
+  const syncFieldsSilently = useCallback(
+    (patch: Partial<QuoteData>) => {
+      edit(
+        (current) => {
+          const changed = (Object.keys(patch) as (keyof QuoteData)[]).some((key) => !Object.is(current.data[key], patch[key]))
+          return changed ? { ...current, data: { ...current.data, ...patch } } : current
+        },
+        { silent: true }
+      )
+    },
+    [edit]
+  )
+
+  const setMarginMultiplier = useCallback(
+    (value: number) => edit((current) => (current.marginMultiplier === value ? current : { ...current, marginMultiplier: value })),
+    [edit]
+  )
+
+  const setPricingConfig = useCallback(
+    (config: PricingConfigShape) => edit((current) => ({ ...current, pricingConfig: config })),
+    [edit]
+  )
+
+  const updatePricingValue = useCallback((
+    category: keyof PricingConfigShape,
+    key: string,
+    value: number,
+  ) => {
+    edit((current) => {
+      const section = current.pricingConfig[category] as Record<string, number>
+      if (section[key] === value) return current
+      return { ...current, pricingConfig: { ...current.pricingConfig, [category]: { ...section, [key]: value } } }
+    })
+  }, [edit])
 
   const addShootingDay = useCallback(() => {
-    setData(prev => {
+    editData(prev => {
       const days = prev.detailedShootingDays ?? []
       const lastDay = days[days.length - 1]
       const nextDay = lastDay ? cloneShootingDay(lastDay) : createDefaultShootingDay()
@@ -300,23 +246,23 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
         detailedShootingDays: [...days, nextDay],
       }
     })
-  }, [])
+  }, [editData])
 
   const removeShootingDay = useCallback((id: string) => {
-    setData(prev => ({
+    editData(prev => ({
       ...prev,
       detailedShootingDays: (prev.detailedShootingDays ?? []).filter(d => d.id !== id),
     }))
-  }, [])
+  }, [editData])
 
   const updateShootingDay = useCallback(<K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => {
-    setData(prev => ({
+    editData(prev => ({
       ...prev,
       detailedShootingDays: (prev.detailedShootingDays ?? []).map(d =>
         d.id === id ? { ...d, [field]: value } : d
       ),
     }))
-  }, [])
+  }, [editData])
 
   /** All format keys for delivery dropdown (config keys starting with "Format: ") */
   const availableFormats = useMemo(() => {
@@ -326,30 +272,30 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const addDeliverable = useCallback(() => {
     // Use the first available format so new cards never show a stale/missing format
     const firstFormat = availableFormats[0] ?? DEFAULT_FORMAT_KEY
-    setData(prev => ({
+    editData(prev => ({
       ...prev,
       detailedDeliverables: [
         ...(prev.detailedDeliverables ?? []),
         { ...createDefaultDeliverable(), format: firstFormat },
       ],
     }))
-  }, [availableFormats])
+  }, [availableFormats, editData])
 
   const removeDeliverable = useCallback((id: string) => {
-    setData(prev => ({
+    editData(prev => ({
       ...prev,
       detailedDeliverables: (prev.detailedDeliverables ?? []).filter(d => d.id !== id),
     }))
-  }, [])
+  }, [editData])
 
   const updateDeliverable = useCallback(<K extends keyof Deliverable>(id: string, field: K, value: Deliverable[K]) => {
-    setData(prev => ({
+    editData(prev => ({
       ...prev,
       detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
         d.id === id ? { ...d, [field]: value } : d
       ),
     }))
-  }, [])
+  }, [editData])
 
   const getFormatStandardPrice = useCallback((formatKey: string): number => {
     const post = pricingConfig.postprodukcja
@@ -369,45 +315,59 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     return typeof price === 'number' ? price : 0
   }, [pricingConfig])
 
+  // Format w cenniku i karty, które go używają, zmieniają się jedną zmianą dokumentu.
   const addCustomFormat = useCallback((name: string, standardPrice: number) => {
     const key = `Format: ${name.trim()}`
     if (!key || key === 'Format: ') return
-    setPricingConfig({
-      ...pricingConfig,
-      postprodukcja: { ...pricingConfig.postprodukcja, [key]: Math.round(standardPrice) },
-    })
-  }, [pricingConfig, setPricingConfig])
+    edit((current) => ({
+      ...current,
+      pricingConfig: {
+        ...current.pricingConfig,
+        postprodukcja: { ...current.pricingConfig.postprodukcja, [key]: Math.round(standardPrice) },
+      },
+    }))
+  }, [edit])
 
   const editCustomFormat = useCallback((oldName: string, newName: string, standardPrice: number) => {
     const oldKey = oldName.startsWith('Format: ') ? oldName : `Format: ${oldName}`
     const newKey = `Format: ${newName.trim()}`
     if (!newKey || newKey === 'Format: ') return
-    const post = { ...pricingConfig.postprodukcja }
-    delete post[oldKey]
-    post[newKey] = Math.round(standardPrice)
-    setPricingConfig({ ...pricingConfig, postprodukcja: post })
-    setData(prev => ({
-      ...prev,
-      detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
-        d.format === oldKey ? { ...d, format: newKey } : d
-      ),
-    }))
-  }, [pricingConfig, setPricingConfig])
+    edit((current) => {
+      const post = { ...current.pricingConfig.postprodukcja }
+      delete post[oldKey]
+      post[newKey] = Math.round(standardPrice)
+      return {
+        ...current,
+        pricingConfig: { ...current.pricingConfig, postprodukcja: post },
+        data: {
+          ...current.data,
+          detailedDeliverables: (current.data.detailedDeliverables ?? []).map(d =>
+            d.format === oldKey ? { ...d, format: newKey } : d
+          ),
+        },
+      }
+    })
+  }, [edit])
 
   const removeCustomFormat = useCallback((name: string) => {
     const key = name.startsWith('Format: ') ? name : `Format: ${name}`
-    const post = { ...pricingConfig.postprodukcja }
-    delete post[key]
-    setPricingConfig({ ...pricingConfig, postprodukcja: post })
-    const remaining = Object.keys(post).filter(k => k.startsWith('Format: '))
-    const fallback = remaining[0] ?? ''
-    setData(prev => ({
-      ...prev,
-      detailedDeliverables: (prev.detailedDeliverables ?? []).map(d =>
-        d.format === key ? { ...d, format: fallback } : d
-      ),
-    }))
-  }, [pricingConfig, setPricingConfig])
+    edit((current) => {
+      const post = { ...current.pricingConfig.postprodukcja }
+      delete post[key]
+      const remaining = Object.keys(post).filter(k => k.startsWith('Format: '))
+      const fallback = remaining[0] ?? ''
+      return {
+        ...current,
+        pricingConfig: { ...current.pricingConfig, postprodukcja: post },
+        data: {
+          ...current.data,
+          detailedDeliverables: (current.data.detailedDeliverables ?? []).map(d =>
+            d.format === key ? { ...d, format: fallback } : d
+          ),
+        },
+      }
+    })
+  }, [edit])
 
   const calculateTotalCrewDays = useMemo(() => {
     return function totalCrewDays(): number {
@@ -425,250 +385,81 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   ])
 
   const resetToZero = useCallback(() => {
-    setData({ ...defaultQuoteData })
-    setMarginMultiplier(1.0)
-  }, [])
+    edit((current) => clearedDoc(current, current.pricingConfig))
+  }, [edit])
+
+  const hardReset = useCallback(() => {
+    edit((current) => clearedDoc(current, getUserDefault()))
+  }, [edit])
 
   const saveAsDefaults = useCallback(() => {
     saveAsUserDefault(pricingConfig)
   }, [pricingConfig])
 
-  const hardReset = useCallback(() => {
-    setData({ ...defaultQuoteData })
-    setMarginMultiplier(1.0)
-    const target = getUserDefault()
-    setPricingConfigState(target)
-    savePricingConfig(target)
-    // Write the combined snapshot immediately so a quick refresh can't restore old pricing
-    // from the debounced persist effect's stale capture.
-    void savePersistedSnapshot(buildPersistedSnapshot({
-      data: defaultQuoteData,
-      marginMultiplier: 1.0,
-      pricingConfig: target,
-      templates,
-    })).catch((err) => {
-      console.error('Zapis snapshotu po twardym resecie nie powiódł się:', err)
-    })
-  }, [templates])
+  // Ten sam szkic (także nowy obiekt o tej samej treści) to nie zmiana.
+  const setPdfDraft = useCallback(
+    (draft: unknown, options?: { silent?: boolean }) =>
+      edit(
+        (current) =>
+          current.pdfDraft === draft || JSON.stringify(current.pdfDraft) === JSON.stringify(draft)
+            ? current
+            : { ...current, pdfDraft: draft },
+        options
+      ),
+    [edit]
+  )
 
-  const pdfDraftBridgeRef = useRef<PdfDraftBridge | null>(null)
-  const pdfDraftSnapshotRef = useRef<unknown>(null)
-  const pendingPdfDraftRef = useRef<unknown>(null)
+  const exportSnapshot = useCallback(() => docToSnapshot(doc), [doc])
 
-  const syncPdfDraftSnapshot = useCallback((snapshot: unknown) => {
-    pdfDraftSnapshotRef.current = snapshot
-  }, [])
-
-  const registerPdfDraftBridge = useCallback((bridge: PdfDraftBridge | null) => {
-    pdfDraftBridgeRef.current = bridge
-    if (bridge && pendingPdfDraftRef.current != null) {
-      try {
-        if (pendingPdfDraftRef.current === PDF_DRAFT_RESET) bridge.reset()
-        else bridge.apply(pendingPdfDraftRef.current)
-        pendingPdfDraftRef.current = null
-      } catch {
-        // ignore corrupted pending draft
-      }
-    }
-  }, [])
-
-  /**
-   * Czysty szkic PDF dla wyceny, która nie ma własnego. Bez tego zakładka PDF
-   * odtworzyłaby szkic POPRZEDNIEGO projektu z localStorage — razem z jego
-   * klientem, który trafiał potem do kalkulatora (tak S-AI dostało klienta
-   * Morris & Lloyd).
-   */
-  const resetPdfDraft = useCallback(() => {
-    pdfDraftSnapshotRef.current = null
-    if (pdfDraftBridgeRef.current) {
-      pdfDraftBridgeRef.current.reset()
-      return
-    }
-    pendingPdfDraftRef.current = PDF_DRAFT_RESET
-    try {
-      localStorage.removeItem(PDF_DRAFT_STORAGE_KEY)
-    } catch {
-      // brak localStorage — zakładka PDF i tak dostanie znacznik przy montowaniu
-    }
-  }, [])
-
-  const getPdfDraftSnapshot = useCallback((): unknown => {
-    try {
-      return pdfDraftBridgeRef.current?.snapshot() ?? pdfDraftSnapshotRef.current ?? null
-    } catch {
-      return pdfDraftSnapshotRef.current ?? null
-    }
-  }, [])
-
-  const loadQuoteSnapshot = useCallback((snapshot: {
-    data?: Partial<QuoteData>
-    pricingConfig?: unknown
-    marginMultiplier?: number
-    pdfDraft?: unknown
-  }) => {
-    if (snapshot.data) setData(mergeQuoteDataPartial(snapshot.data))
-    if (snapshot.pricingConfig && typeof snapshot.pricingConfig === 'object') {
-      const migrated = migratePricingConfig(
-        snapshot.pricingConfig as Record<string, Record<string, unknown>>
-      )
-      setPricingConfigState(migrated)
-      savePricingConfig(migrated)
-    }
-    if (typeof snapshot.marginMultiplier === 'number' && Number.isFinite(snapshot.marginMultiplier)) {
-      setMarginMultiplier(snapshot.marginMultiplier)
-    }
-    if (snapshot.pdfDraft && typeof snapshot.pdfDraft === 'object') {
-      pdfDraftSnapshotRef.current = snapshot.pdfDraft
-      if (pdfDraftBridgeRef.current) {
-        try {
-          pdfDraftBridgeRef.current.apply(snapshot.pdfDraft)
-        } catch {
-          // ignore corrupted PDF draft — keep currently active draft
-        }
-      } else {
-        pendingPdfDraftRef.current = snapshot.pdfDraft
-      }
-    } else {
-      // Wycena bez własnego szkicu PDF (nowy projekt, starsze zapisy) dostaje
-      // czysty szkic, a nie szkic poprzednio otwartej wyceny.
-      resetPdfDraft()
-    }
-  }, [resetPdfDraft])
-
-  // ── Biblioteka wycen (AppData / localStorage) ────────────────────────────────
-  useEffect(() => {
-    let cancelled = false
-    void listSavedQuotes()
-      .then((quotes) => {
-        if (!cancelled) setSavedQuotes(quotes)
-      })
-      .catch(() => {
-        /* brak pliku / brak uprawnień — pusta biblioteka */
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const buildQuoteSnapshot = useCallback((): QuoteSnapshot => ({
-    version: 2,
-    savedAt: new Date().toISOString(),
-    data,
-    pricingConfig,
-    marginMultiplier,
-    pdfDraft: getPdfDraftSnapshot(),
-  }), [data, pricingConfig, marginMultiplier, getPdfDraftSnapshot])
-
-  const saveQuoteToLibrary = useCallback(async (name: string, id?: string, projectId?: string): Promise<string> => {
-    const trimmed = name.trim() || 'Bez nazwy'
-    const now = new Date().toISOString()
-    const existing = id ? savedQuotes.find((q) => q.id === id) : undefined
-    const linkedProject = projectId ?? existing?.projectId
-    const record: SavedQuoteRecord = {
-      // Nieznane pola wpisu (nowsza wersja) przeżywają nadpisanie.
-      ...existing,
-      id: existing?.id ?? createQuoteId(),
-      name: trimmed,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      snapshot: buildQuoteSnapshot(),
-      ...(linkedProject ? { projectId: linkedProject } : {}),
-    }
-    const next = await upsertSavedQuote(record)
-    setSavedQuotes(next)
-    setActiveQuoteId(record.id)
-    setActiveQuoteName(record.name)
-    return record.id
-  }, [savedQuotes, buildQuoteSnapshot])
-
-  const loadQuoteFromLibrary = useCallback((id: string) => {
-    const record = savedQuotes.find((q) => q.id === id)
-    if (!record) return
-    loadQuoteSnapshot(record.snapshot)
-    setActiveQuoteId(record.id)
-    setActiveQuoteName(record.name)
-  }, [savedQuotes, loadQuoteSnapshot])
-
-  const deleteQuoteFromLibrary = useCallback(async (id: string) => {
-    const next = await deleteSavedQuote(id)
-    setSavedQuotes(next)
-    if (activeQuoteId === id) {
-      setActiveQuoteId(null)
-      setActiveQuoteName(null)
-    }
-  }, [activeQuoteId])
-
-  const startNewQuote = useCallback(() => {
-    setActiveQuoteId(null)
-    setActiveQuoteName(null)
-  }, [])
-
-  const saveTemplate = useCallback((name: string) => {
-    const template: SavedTemplate = {
-      id: `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      name: name.trim() || 'Bez nazwy',
-      state: { ...data },
-      createdAt: new Date().toISOString(),
-    }
-    setTemplates(prev => {
-      const next = [...prev, template]
-      saveTemplatesToStorage(next)
-      return next
-    })
-  }, [data])
-
-  const deleteTemplate = useCallback((id: string) => {
-    setTemplates(prev => {
-      const next = prev.filter(t => t.id !== id)
-      saveTemplatesToStorage(next)
-      return next
-    })
-  }, [])
-
-  const loadTemplate = useCallback((id: string) => {
-    const list = templates ?? []
-    const template = list.find(t => t.id === id)
-    if (!template) return
-    setIsCalculating(true)
-    setTimeout(() => {
-      setData(mergeQuoteDataPartial(template.state))
-      setIsCalculating(false)
-    }, 500)
-  }, [templates])
+  const importSnapshot = useCallback(
+    (raw: unknown) => {
+      const imported = docFromSnapshot(raw)
+      if (!imported || !projectId) return false
+      edit(() => imported, { replace: true })
+      return true
+    },
+    [edit, projectId]
+  )
 
   const setQuoteCurrency = useCallback((next: QuoteCurrency, choice?: ExchangeRateChoice) => {
-    setData((prev) => switchQuoteCurrency(prev, next, choice))
-  }, [])
+    editData((prev) => switchQuoteCurrency(prev, next, choice))
+  }, [editData])
 
   const setExchangeRate = useCallback((choice: ExchangeRateChoice) => {
-    setData((prev) => withRate(prev, choice))
-  }, [])
+    editData((prev) => withRate(prev, choice))
+  }, [editData])
 
   // Wycena w PLN: oba widoki to te same obiekty co `data` i `pricingConfig`.
   const views = useMemo(() => quoteViews(data, pricingConfig), [data, pricingConfig])
   const { money } = views
   const clientData = views.client.data
   const clientPricing = views.client.pricing
-  const { sumaNetto, vat, sumaBrutto } = computeQuoteTotals(clientData, marginMultiplier, clientPricing)
-  const totals: Totals = { sumaNetto, vat, sumaBrutto }
-  const breakdown = buildQuoteBreakdown(clientData, marginMultiplier, clientPricing)
-  const breakdownPln =
-    money.currency === 'PLN'
-      ? breakdown
-      : breakdown.map((phase) => ({ ...phase, phaseNetto: toPln(phase.phaseNetto, money) }))
+  // Stałe między renderami, dopóki wycena się nie zmieni — zakładka PDF odbudowuje
+  // szkic na zmianę tych wartości, a zapis szkicu odświeża kontekst.
+  const totals = useMemo<Totals>(() => {
+    const { sumaNetto, vat, sumaBrutto } = computeQuoteTotals(clientData, marginMultiplier, clientPricing)
+    return { sumaNetto, vat, sumaBrutto }
+  }, [clientData, marginMultiplier, clientPricing])
+  const breakdown = useMemo(
+    () => buildQuoteBreakdown(clientData, marginMultiplier, clientPricing),
+    [clientData, marginMultiplier, clientPricing]
+  )
+  const breakdownPln = useMemo(
+    () =>
+      money.currency === 'PLN'
+        ? breakdown
+        : breakdown.map((phase) => ({ ...phase, phaseNetto: toPln(phase.phaseNetto, money) })),
+    [breakdown, money]
+  )
   const formatQuoteCurrency = useCallback((amount: number) => formatMoney(amount, money.currency), [money.currency])
 
   const value: QuoteContextValue = {
+    projectId,
     data,
     updateField,
-    templates,
-    saveTemplate,
-    deleteTemplate,
-    loadTemplate,
     totals,
     formatCurrency: formatQuoteCurrency,
     formatPln: formatCurrency,
-    isCalculating,
     money,
     clientData,
     clientPricing,
@@ -683,8 +474,6 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     pricingConfig,
     setPricingConfig,
     updatePricingValue,
-    reloadPricingFromStorage,
-    resetPricingToDefault: resetPricing,
     addShootingDay,
     removeShootingDay,
     updateShootingDay,
@@ -702,22 +491,16 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     resetToZero,
     saveAsDefaults,
     hardReset,
-    loadQuoteSnapshot,
+    pdfDraft: doc.pdfDraft,
+    setPdfDraft,
+    syncFieldsSilently,
+    docEpoch,
+    exportSnapshot,
+    importSnapshot,
     pdfTexts,
     setPdfTexts,
     portfolioCatalogue,
     setPortfolioCatalogue,
-    registerPdfDraftBridge,
-    syncPdfDraftSnapshot,
-    getPdfDraftSnapshot,
-    savedQuotes,
-    activeQuoteId,
-    activeQuoteName,
-    buildQuoteSnapshot,
-    saveQuoteToLibrary,
-    loadQuoteFromLibrary,
-    deleteQuoteFromLibrary,
-    startNewQuote,
   }
 
   return (

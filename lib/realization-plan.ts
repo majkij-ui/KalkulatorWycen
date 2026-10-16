@@ -127,10 +127,10 @@ const NO_PLAN: PlanFigures = {
 }
 
 /**
- * Plan projektu. `live` = bieżący stan kalkulatora (ten projekt jest w nim
- * wgrany): projekt z wyceną albo z wyceną właśnie budowaną liczy plan z
- * kalkulatora, więc edycja planu widać od razu. Projekt bez wyceny i z pustym
- * kalkulatorem ma za plan zaimportowany wynik.
+ * Plan projektu. `live` = dokument wyceny tego projektu (z niezapisanymi
+ * jeszcze zmianami): projekt z wyceną albo z wyceną właśnie budowaną liczy
+ * plan z niego, więc edycję planu widać od razu. Projekt bez wyceny i z pustą
+ * wyceną ma za plan zaimportowany wynik.
  */
 export function projectPlan(
   project: Pick<Project, 'quote' | 'financials'>,
@@ -142,23 +142,6 @@ export function projectPlan(
   if (project.quote) return planFromQuote(project.quote as FinancialsSource) ?? NO_PLAN
   if (project.financials) return planFromFinancials(project.financials)
   return NO_PLAN
-}
-
-/** Czy plan w kalkulatorze różni się od zapisanego w projekcie (trzeba kliknąć „Zapisz"). */
-export function isPlanUnsaved(
-  project: Pick<Project, 'quote'>,
-  live: { data: Partial<QuoteData>; pricingConfig?: unknown; marginMultiplier?: number }
-): boolean {
-  if (!project.quote) return !isBlankQuoteData(live.data)
-  const saved = planFromQuote(project.quote as FinancialsSource)
-  const current = planFromQuote(live)
-  if (!saved || !current) return false
-  const same = (a: number, b: number) => Math.abs(a - b) < 0.005
-  return !(
-    same(saved.revenue, current.revenue) &&
-    same(saved.costs, current.costs) &&
-    same(saved.tax, current.tax)
-  )
 }
 
 // ── Rzeczywistość ────────────────────────────────────────────────────────────
