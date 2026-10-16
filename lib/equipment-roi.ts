@@ -19,6 +19,7 @@
 
 import { daysBetween } from './calendar-layout'
 import { projectGearRevenue, type GearRevenue } from './gear-revenue'
+import { isOnSet, onSetItems } from './gear-backstage'
 import { gearDayDate, hasGearLogged, projectGearDays } from './gear-usage'
 import { gearDaysWithCalendarDates } from './realization-days'
 import type { TimelineEvent } from './event-types'
@@ -59,8 +60,18 @@ export interface ProjectGearSummary {
   clientPaidExact: boolean
 }
 
+/**
+ * Katalog do statystyk: zaplecze (`onSet === false`) nie bierze udziału w
+ * „odpracował / zarobił / spłacie", więc dla statystyk jest jak pozycja
+ * usunięta z katalogu — także gdy ktoś poda pełną listę.
+ */
 function toCatalogMap(catalog: EquipmentItem[] | Map<string, EquipmentItem>): Map<string, EquipmentItem> {
-  return catalog instanceof Map ? catalog : new Map(catalog.map((item) => [item.id, item]))
+  if (catalog instanceof Map) {
+    return [...catalog.values()].every(isOnSet)
+      ? catalog
+      : new Map([...catalog].filter(([, item]) => isOnSet(item)))
+  }
+  return new Map(onSetItems(catalog).map((item) => [item.id, item]))
 }
 
 /** Opcje statystyk: `events` = wydarzenia kalendarza, z których dni biorą daty. */
@@ -266,6 +277,7 @@ export function computeGearReport(
   options: { now?: Date } & GearStatsOptions = {}
 ): GearReport {
   const today = toDateKey(options.now ?? new Date())
+  items = onSetItems(items)
   const byId = toCatalogMap(items)
   const acc = new Map<
     string,

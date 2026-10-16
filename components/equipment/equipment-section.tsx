@@ -17,6 +17,7 @@ import { AlertTriangle, ArrowUpRight, ChevronDown, Loader2, Package, Plus, Searc
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
+import { investedSplit } from '@/lib/gear-backstage'
 import { computeGearReport, type EquipmentRoi, type MissingGearProject } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { EquipmentItemSheet, formatPayoff } from './equipment-item-sheet'
+import { BackstagePanel } from './backstage-panel'
 import { GearKitsPanel } from './gear-kits-panel'
 
 function pln(amount: number): string {
@@ -39,6 +41,12 @@ function formatDate(dateKey: string | null): string {
 function normalize(text: string): string {
   return text.toLocaleLowerCase('pl').normalize('NFD').replace(/\p{Diacritic}/gu, '')
 }
+
+const TABS = [
+  { value: 'plan', label: 'Na plan' },
+  { value: 'zaplecze', label: 'Zaplecze i drobiazgi' },
+] as const
+type EquipmentTab = (typeof TABS)[number]['value']
 
 const SORTS = [
   { value: 'kategoria', label: 'Kategoriami' },
@@ -220,10 +228,11 @@ function MissingGearBanner({
 }
 
 export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
-  const { items, isLoading } = useEquipment()
+  const { items, allItems, isLoading } = useEquipment()
   const { projects } = useProjectHub()
   const { allEvents } = useEvents()
 
+  const [tab, setTab] = useState<EquipmentTab>('plan')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('kategoria')
   const [showRetired, setShowRetired] = useState(false)
@@ -235,6 +244,9 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
     [items, projects, allEvents]
   )
   const { totals } = report
+  // Kafelek „Zainwestowane" liczy cały katalog i rozbija go na plan / zaplecze;
+  // statystyki (report, `items`) obejmują tylko sprzęt na plan.
+  const invested = useMemo(() => investedSplit(allItems), [allItems])
 
   const active = items.filter((i) => !i.retiredAt)
   const missingRate = active.filter((i) => i.rentalDayRate <= 0).length
@@ -260,7 +272,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
       .map(([category, rows]) => ({ category, rows: rows.sort(byName) }))
   }, [visible, sort])
 
-  const sheetItem: EquipmentItem | null = sheetItemId ? (items.find((i) => i.id === sheetItemId) ?? null) : null
+  const sheetItem: EquipmentItem | null = sheetItemId ? (allItems.find((i) => i.id === sheetItemId) ?? null) : null
   const sheetRoi = sheetItemId ? report.items.find((r) => r.item.id === sheetItemId) : undefined
   const sheetOpen = sheetItemId === null || sheetItem !== null
 
@@ -276,20 +288,70 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         </p>
       </header>
 
-      {items.length > 0 && (
+      <div role="tablist" aria-label="Rodzaj sprzętu" className="mb-5 flex gap-1 border-b border-white/5">
+        {TABS.map(({ value, label }) => {
+          const count = value === 'plan' ? items.length : invested.backstageCount
+          return (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              id={`equipment-tab-${value}`}
+              aria-selected={tab === value}
+              aria-controls="equipment-tabpanel"
+              onClick={() => setTab(value)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-white/60 ${
+                tab === value
+                  ? 'border-emerald-400 text-white'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              {label}
+              <span className="ml-1.5 text-xs tabular-nums text-zinc-600">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div role="tabpanel" id="equipment-tabpanel" aria-labelledby={`equipment-tab-${tab}`}>
+      {allItems.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile
             label="Zainwestowane"
-            value={pln(totals.invested)}
+            value={pln(invested.total)}
             lines={[
-              `${totals.activeCount} ${plural(totals.activeCount, 'pozycja', 'pozycje', 'pozycji')}${
+              `na plan ${pln(invested.onSet)} · ${totals.activeCount} ${plural(totals.activeCount, 'pozycja', 'pozycje', 'pozycji')}${
                 totals.retiredCount > 0
-                  ? ` · ${totals.retiredCount} ${plural(totals.retiredCount, 'wycofana', 'wycofane', 'wycofanych')}`
+                  ? ` + ${totals.retiredCount} ${plural(totals.retiredCount, 'wycofana', 'wycofane', 'wycofanych')}`
                   : ''
               }`,
+              `zaplecze ${pln(invested.backstage)} · ${invested.backstageCount} ${plural(invested.backstageCount, 'pozycja', 'pozycje', 'pozycji')}`,
             ]}
-            warn={missingPrice > 0 ? `${missingPrice} bez ceny zakupu` : undefined}
+            warn={
+              tab === 'plan'
+                ? missingPrice > 0
+                  ? `${missingPrice} bez ceny zakupu`
+                  : undefined
+                : invested.backstageUnpriced > 0
+                  ? `${invested.backstageUnpriced} bez ceny zakupu`
+                  : undefined
+            }
           />
+          {tab === 'zaplecze' ? (
+            <>
+              <Tile
+                label="Zaplecze"
+                value={pln(invested.backstage)}
+                lines={['koszt, który nie jedzie na plan']}
+              />
+              <Tile
+                label="Bez daty zakupu"
+                value={String(invested.backstageUndated)}
+                lines={['pozycje do uzupełnienia, żeby koszt trafił do właściwego miesiąca']}
+              />
+            </>
+          ) : items.length > 0 && (
+          <>
           <Tile
             label="Odpracował"
             value={pln(totals.rentValue)}
@@ -313,9 +375,21 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
             warn={totals.unassignedClientPaid > 0 ? `+${pln(totals.unassignedClientPaid)} nieprzypisane` : undefined}
           />
           <Tile label="Nieużywane" value={String(totals.unusedCount)} lines={['aktywne pozycje bez dnia na planie']} />
+          </>
+          )}
         </div>
       )}
 
+      {tab === 'zaplecze' ? (
+        isLoading ? (
+          <div className="flex justify-center py-16 text-zinc-600">
+            <Loader2 className="size-5 animate-spin" />
+          </div>
+        ) : (
+          <BackstagePanel onOpen={(id) => setSheetItemId(id)} />
+        )
+      ) : (
+      <>
       <MissingGearBanner missing={report.missingGear} onOpenProject={onOpenProject} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -400,6 +474,9 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
       )}
 
       {items.length > 0 && <GearKitsPanel />}
+      </>
+      )}
+      </div>
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && setSheetItemId(undefined)}>
         <SheetContent

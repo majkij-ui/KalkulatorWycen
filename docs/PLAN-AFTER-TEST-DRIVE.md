@@ -712,3 +712,74 @@ analytics script.
   nothing replaces imported financials without a yes).
 - „Cofnij zmiany z tej sesji" goes back to the first open in this app session, not to an arbitrary earlier version.
 - `components/quote-pdf-document.tsx` (react-pdf, unused, no type error) is still in the tree.
+
+## 10. Z1 as built *(2026-10-16, branch `claude/z1-zaplecze-equipment-fed32c`)*
+
+„Zaplecze i drobiazgi" (§3.5): gear that never goes on set (laptop, magic arm, SD cards, cables) is tracked as a
+cost but never shows up in a picker or a payoff number. Based on `origin/v3/project-hub` (b469106).
+
+**Data.** `EquipmentItem.onSet?: false`, additive, no version bump. Missing = on set, so every existing item stays as
+it is. Only `false` is stored: moving an item back to „Na plan" deletes the key, so the file looks like before Z1; any
+other value (`true`, garbage) is dropped on read. `.passthrough()` kept.
+
+**Filter at the source.** `lib/equipment-context.tsx` now exposes two lists:
+- `items` = **on-set only**. Every consumer that reads `useEquipment().items` is excluded from zaplecze without being
+  touched: the quote gear picker and kits (`produkcja-gear.tsx`, unedited), the Realizacja gear grid and packing lists
+  (`project-realization.tsx`, `project-equipment.tsx`), the call sheet's packing list, and the payoff stats.
+  A future reader gets the safe list by default.
+- `allItems` = whole catalogue. Used by the Sprzęt screen, the item panel, the kits panel (labels) and the three
+  calendar files that draw gear purchases (`calendar-section.tsx`, `event-form.tsx`, `project-timeline.tsx`; one-line
+  switch each), because a purchase is a cost whichever kind it is.
+- Belt and braces in the pure code (`lib/equipment-roi.ts`, `buildPackingList` and `applyKitToGearDay` in
+  `lib/gear-usage.ts`): they ignore `onSet === false` even if someone hands them the full list. No calculator tab file
+  was edited; `lib/quote-gear.ts` untouched (Q2).
+
+**`lib/gear-backstage.ts`** (pure, `lib/gear-backstage.test.ts`, 17 tests):
+- `isOnSet`, `onSetItems`, `backstageItems`, `withOnSet` (move between kinds, round-trips to the original record).
+- `gearPurchases(items)` → `{ itemId, name, date, price, quantity, onSet, undated }[]` for the S4 ledger:
+  `price` = purchase price × quantity; **all** items are listed (zaplecze, on-set and retired: selling does not undo
+  the spend); `date` is `YYYY-MM-DD` or `null`, with `undated: true` so the ledger can show those for completion
+  instead of dropping them; items without a price stay in with `price: 0`. Sorted by date, undated last, then name.
+- `investedSplit(items)` → on-set / zaplecze / total plus counts of unpriced and undated zaplecze.
+- `parseBackstageRows`, `parseMoney`, `parseDateText` for the paste box (below).
+
+**Sprzęt screen.**
+- Tabs „Na plan" / „Zaplecze i drobiazgi" (counts on the tabs).
+- „Zainwestowane" tile: total, with „na plan" and „zaplecze" lines. The Odpracował / Zarobił / Nieużywane tiles and the
+  kits panel belong to „Na plan"; on the zaplecze tab the tiles are zaplecze total and „Bez daty zakupu".
+- Zaplecze tab (`components/equipment/backstage-panel.tsx`): one entry row (name, price per unit, date, qty, note).
+  **Enter saves and stays in the row** (focus returns to the name; the date is kept, because purchases arrive in
+  batches). „Wklej listę": one item per line, `name ; price ; date ; qty ; note`, separated by `;` or a tab (so cells
+  pasted from a spreadsheet work); price accepts „9 500", „140,50 zł"; date accepts `2025-03-12` and `12.03.2025`.
+  Unreadable dates are reported by line number and the item goes in without a date; nothing is guessed.
+- Rows show date („bez daty" / „bez ceny" flagged), qty × unit price and total. Click opens the item panel.
+- Item panel: new „Rodzaj" section with „Przenieś do zaplecza" / „Przenieś na plan". A zaplecze item has no rental
+  rate, category, stats or project history. Moving an on-set item that was already on set in won/done projects asks
+  first (see known limits). Retire and delete are unchanged (retire is the soft way out).
+
+**Verified.** `npm test` 602 pass (585 before + 17). `tsc` clean. 14 deliberate mutations, all caught (`isOnSet` always
+true, price ignoring qty, `undated` never set, `withOnSet` leaving the key, backstage counted as on-set, impossible
+date accepted, undated sorted first, qty 0 not normalised, no filter in `computeGearReport`, none in the catalogue map,
+none in the packing list, none in kit apply, schema accepting `true`, schema without the field). Browser preview with
+seeded localStorage (restored afterwards): tabs and tile split; fast entry (Enter twice, focus back to name); paste of
+three lines with one bad date; move to and from zaplecze (no `onSet` key left in storage after moving back); the
+quote's „Dodaj z mojego sprzętu" picker, the Realizacja grid and packing list showed no zaplecze items; calendar and
+projects views render; no console errors; 375 px wide: no horizontal scroll.
+
+**Known limits.**
+- An item moved to zaplecze **after** it was used keeps its old lines in projects. Stats treat it like an item deleted
+  from the catalogue: its days stop counting for Odpracował / Zarobił and quote money for it becomes „nieprzypisane";
+  packing lists and pickers skip it. The Realizacja day header (`Sprzęt: N pozycji`) and the „Na planie (N)" filter
+  still count such stale lines. The move asks for confirmation when the item was used in won/done projects.
+- A kit that contains an item later moved to zaplecze shows it as „(zaplecze)" and does not add or price it.
+- Calendar and monthly „zakupy sprzętu" include zaplecze purchases (they are costs).
+- No hard delete was added; the existing „Usuń z katalogu" still exists as before.
+
+**For S4.** Read `gearPurchases(allItems)` (not `items`). Zaplecze rows carry `onSet: false`; both kinds are costs.
+Depreciation for on-set gear stays S4's call. Undated purchases need a policy (flag, or fall back to the file date).
+
+**Real data (read-only).** `equipment.json` has 22 items (the brief said 18), none marked `onSet`. Nothing in it looks
+like zaplecze (no laptop, cards, cables or arms). Possible edge cases for M.J.: Rode Wireless GO II ×2 and Viltrox
+6-inch (both bought in 2026, likely on set), Manfrotto Statyw (tripod, on set). Three items have no purchase date
+(Sony 85mm f/1.8, Tamron 17-28mm, Amaran Halo 600X) and Sony A7S III is noted „zużyty, martwe HDMI" (retire?). Nothing
+was changed.

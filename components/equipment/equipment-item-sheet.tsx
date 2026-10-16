@@ -7,11 +7,12 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, ArrowUpRight, RotateCcw, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { itemUsageHistory, type EquipmentRoi } from '@/lib/equipment-roi'
+import { isOnSet, withOnSet } from '@/lib/gear-backstage'
 import {
   EQUIPMENT_CATEGORIES,
   EQUIPMENT_CATEGORY_LABELS,
@@ -19,7 +20,7 @@ import {
   toDateKey,
   type EquipmentItem,
 } from '@/lib/project-types'
-import { dayLabel } from '@/lib/pl-plural'
+import { dayLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -106,6 +107,10 @@ export function EquipmentItemSheet({
   const [retireDate, setRetireDate] = useState(() => toDateKey(new Date()))
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmMove, setConfirmMove] = useState(false)
+  /** Zaplecze: bez stawki rentalowej, statystyk i historii projektów. */
+  const backstage = !!item && !isOnSet(item)
+  const usedInProjects = roi?.projectsUsed ?? 0
 
   const { allEvents } = useEvents()
   const history = useMemo(
@@ -144,6 +149,13 @@ export function EquipmentItemSheet({
     setSaved(true)
   }
 
+  /** Przenosi pozycję między „na plan" a zapleczem (zapisane pola zostają jak były). */
+  const move = async (onSet: boolean) => {
+    if (!item) return
+    await updateItem(withOnSet(item, onSet))
+    onClose()
+  }
+
   const retire = async () => {
     if (!item || !DATE_KEY.test(retireDate)) return
     await updateItem({ ...item, retiredAt: retireDate })
@@ -163,7 +175,7 @@ export function EquipmentItemSheet({
     <div className="flex flex-col gap-6">
       <header>
         <div className="text-[11px] uppercase tracking-widest text-zinc-500">
-          {item ? equipmentCategoryLabel(item.category) : 'Nowy sprzęt'}
+          {item ? (backstage ? 'Zaplecze i drobiazgi' : equipmentCategoryLabel(item.category)) : 'Nowy sprzęt'}
         </div>
         <h2 className="mt-1 text-xl font-bold tracking-tight text-white">{item ? item.name : 'Dodaj sprzęt'}</h2>
         {item?.retiredAt && (
@@ -225,6 +237,7 @@ export function EquipmentItemSheet({
           <Input value={draft.name} onChange={(e) => set({ name: e.target.value })} className={field} autoFocus={!item} />
         </label>
         <div className="grid grid-cols-2 gap-3">
+          {!backstage && (
           <label className={label}>
             Kategoria
             <select
@@ -240,6 +253,7 @@ export function EquipmentItemSheet({
               <option value={CUSTOM}>Własna…</option>
             </select>
           </label>
+          )}
           <label className={label}>
             Sztuk
             <Input
@@ -251,7 +265,7 @@ export function EquipmentItemSheet({
             />
           </label>
         </div>
-        {draft.category === CUSTOM && (
+        {!backstage && draft.category === CUSTOM && (
           <label className={label}>
             Nazwa kategorii
             <Input
@@ -283,6 +297,7 @@ export function EquipmentItemSheet({
             />
           </label>
         </div>
+        {!backstage && (
         <label className={label}>
           Rental za dzień{quantity > 1 ? ' (za sztukę)' : ''}
           <Input
@@ -293,6 +308,7 @@ export function EquipmentItemSheet({
             className={`${field} tabular-nums`}
           />
         </label>
+        )}
         <label className={label}>
           Notatki
           <Textarea
@@ -318,7 +334,7 @@ export function EquipmentItemSheet({
         </div>
       </section>
 
-      {item && (
+      {item && !backstage && (
         <section>
           <h3 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
             Projekty ({history.length})
@@ -359,6 +375,46 @@ export function EquipmentItemSheet({
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+      )}
+
+      {item && (
+        <section className="flex flex-col gap-2 border-t border-white/5 pt-4">
+          <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Rodzaj</h3>
+          <p className="text-[11px] text-zinc-600">
+            {backstage
+              ? 'Zaplecze nie trafia do wyceny, Realizacji ani list pakowania i nie ma statystyk spłaty.'
+              : 'Na plan: pojawia się w wycenie, zestawach, Realizacji i listach pakowania.'}
+          </p>
+          {!backstage && usedInProjects > 0 && confirmMove ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="text-xs text-amber-100/90">
+                Był na planie w {usedInProjects} {plural(usedInProjects, 'projekcie', 'projektach', 'projektach')}.
+                Po przeniesieniu do zaplecza te dni przestaną się liczyć do „Odpracował" i „Zarobił" (kwoty z wycen
+                zostaną jako nieprzypisane), a w wycenach i Realizacji pozycja zniknie z list wyboru.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" onClick={() => void move(false)} className="h-8">
+                  Przenieś mimo to
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmMove(false)} className="h-8">
+                  Anuluj
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!backstage && usedInProjects > 0) setConfirmMove(true)
+                else void move(backstage)
+              }}
+              className="h-9 w-fit gap-2 border-white/10"
+            >
+              <ArrowRightLeft className="size-4" />
+              {backstage ? 'Przenieś na plan' : 'Przenieś do zaplecza'}
+            </Button>
           )}
         </section>
       )}

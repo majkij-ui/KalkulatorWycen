@@ -179,6 +179,13 @@ export const equipmentItemSchema = z
      */
     retiredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
     notes: z.string().catch(''),
+    /**
+     * `false` = zaplecze i drobiazgi (laptop, magic arm, karty, kable): koszt,
+     * który liczymy, ale sprzęt nigdy nie jedzie na plan, więc nie trafia do
+     * list wyboru ani do statystyk spłaty. Brak pola = na plan (wszystkie
+     * dotychczasowe pozycje). Tylko `false` ma znaczenie; `true` nie jest zapisywane.
+     */
+    onSet: z.literal(false).optional().catch(undefined),
   })
   .passthrough()
 export type EquipmentItem = z.infer<typeof equipmentItemSchema>

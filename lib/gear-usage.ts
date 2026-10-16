@@ -9,6 +9,7 @@
  * Funkcje edycji są niemutujące: biorą listę dni i zwracają nową.
  */
 
+import { onSetItems } from './gear-backstage'
 import { addDays, daysBetween } from './calendar-layout'
 import {
   createGearDayId,
@@ -237,7 +238,8 @@ export function buildPackingList(
   catalog: EquipmentItem[],
   dayId?: string
 ): PackingGroup[] {
-  const byId = new Map(catalog.map((item) => [item.id, item]))
+  // Zaplecze nigdy nie jedzie na plan, więc nie trafia na listę pakowania.
+  const byId = new Map(onSetItems(catalog).map((item) => [item.id, item]))
   const days = projectGearDays(project).filter((day) => !dayId || day.id === dayId)
   const totals = new Map<string, { qty: number; days: number }>()
 
@@ -334,9 +336,9 @@ export function applyKitToGearDay(
   days: GearDay[],
   dayId: string,
   kit: { itemId: string; qty: number }[],
-  catalog: Pick<EquipmentItem, 'id' | 'quantity' | 'retiredAt'>[]
+  catalog: Pick<EquipmentItem, 'id' | 'quantity' | 'retiredAt' | 'onSet'>[]
 ): GearDay[] {
-  const byId = new Map(catalog.map((item) => [item.id, item]))
+  const byId = new Map(onSetItems(catalog).map((item) => [item.id, item]))
   return days.map((day) => {
     if (day.id !== dayId) return day
     let next = day

@@ -174,7 +174,7 @@ function ContactCard({ project, lead }: { project: Project; lead: Lead | null })
 export function ProjectTimeline({ project }: { project: Project }) {
   const today = toDateKey(new Date())
   const { events } = useEvents()
-  const { items } = useEquipment()
+  const { allItems: items } = useEquipment()
   const [form, setForm] = useState<{ target: FormTarget; key: number } | null>(null)
   const [notice, setNotice] = useState<EventNoticeState | null>(null)
 
