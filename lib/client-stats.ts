@@ -259,8 +259,11 @@ export interface ClientStats {
   sharePct: number | null
   /** Lata ze zleceniami albo przychodem, malejąco. */
   years: ClientYear[]
-  /** Zysk zleceń: najlepsza wiedza (przychód − podatek − koszty z Realizacji albo z planu). */
-  profit: number
+  /**
+   * Marża na realizacji zleceń (S4, warstwa 1): najlepsza wiedza o przychodzie
+   * − koszty z Realizacji albo z planu, PRZED podatkiem — jak w Finansach.
+   */
+  margin: number
   marginPct: number | null
   /** Zlecenia bez żadnej kwoty (ani planu, ani faktur) — liczą się jako 0 zł. */
   missingFinancials: number
@@ -307,7 +310,7 @@ function scopeStats(
   const jobs = own.filter(isJob)
   const jobMoney = jobs.map((p) => moneyOf(p, money))
   const { revenue } = scopeRevenue(own, scope, null, money)
-  const profit = jobMoney.reduce((sum, m) => sum + (m.profit ?? 0), 0)
+  const margin = jobMoney.reduce((sum, m) => sum + (m.margin ?? 0), 0)
 
   const yearSet = new Set<number>()
   jobMoney.forEach((m) => revenueYears(m).forEach((year) => yearSet.add(year)))
@@ -333,8 +336,8 @@ function scopeStats(
     revenue,
     sharePct: share(revenue, totalRevenue(projects, null, money)),
     years,
-    profit,
-    marginPct: revenue > 0 ? (profit / revenue) * 100 : null,
+    margin,
+    marginPct: revenue > 0 ? (margin / revenue) * 100 : null,
     missingFinancials: jobMoney.filter((m) => m.revenue === null).length,
     invoicedJobs: jobMoney.filter((m) => m.revenueBasis === 'invoices').length,
     repeat: jobs.length >= REPEAT_MIN_JOBS,
@@ -434,7 +437,7 @@ export function groupStats(
         revenue: 0,
         sharePct: null,
         years: [],
-        profit: 0,
+        margin: 0,
         marginPct: null,
         missingFinancials: 0,
         invoicedJobs: 0,

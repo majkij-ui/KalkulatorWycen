@@ -413,6 +413,13 @@ export const fixedCostSchema = z
      * nigdy nie liczy się dwa razy (`subscriptions.ts`).
      */
     subscriptionId: z.string().min(1).optional().catch(undefined),
+    /**
+     * Pozycje katalogu sprzętu, które SĄ w tej kwocie (S4): ręczny „Sprzęt"
+     * za miesiąc obejmował zakup, który jest też w katalogu. Rejestr marży
+     * liczy wtedy z tej pozycji tylko resztę (kwota − ceny tych pozycji), a
+     * sam zakup — z katalogu. Kwota w pliku zostaje taka, jak była zapłacona.
+     */
+    catalogueItemIds: z.array(z.string().min(1)).optional().catch(undefined),
     /** Miękkie usunięcie (ISO); „Cofnij" zdejmuje znacznik. */
     deletedAt: z.string().optional().catch(undefined),
   })

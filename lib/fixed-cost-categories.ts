@@ -9,6 +9,11 @@
  * zawsze; etykiety można zmieniać. Nieznany klucz (z nowszej wersji) zostaje
  * w pliku, a tu liczy się jako „Inne".
  *
+ * `gear` (S4): zakupy sprzętu wpisane ręcznie, spoza katalogu (drobiazgi,
+ * miesięczne sumy z arkusza). Sprzęt z katalogu liczy rejestr marży sam
+ * (`gear-costs.ts`); ta kategoria trzyma resztę w wierszu „Sprzęt" kosztów
+ * firmy, a nie w „Inne".
+ *
  * Moduł czysty — testy w `fixed-cost-categories.test.ts`.
  */
 
@@ -22,6 +27,7 @@ export const COST_CATEGORY_KEYS = [
   'office',
   'telecom',
   'insurance',
+  'gear',
   'other',
 ] as const
 export type CostCategory = (typeof COST_CATEGORY_KEYS)[number]
@@ -34,6 +40,7 @@ export const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
   office: 'Księgowość / biuro',
   telecom: 'Telefon i internet',
   insurance: 'Ubezpieczenia',
+  gear: 'Sprzęt spoza katalogu',
   other: 'Inne',
 }
 
@@ -46,6 +53,7 @@ export const COST_CATEGORY_SHORT: Record<CostCategory, string> = {
   office: 'biuro',
   telecom: 'tel.',
   insurance: 'ubezp.',
+  gear: 'sprzęt',
   other: 'inne',
 }
 

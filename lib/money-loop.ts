@@ -117,8 +117,14 @@ export interface ProjectMoney {
   costsNote: CostsNote
   taxRatePercent: number
   tax: number
-  /** `null`, gdy przychód nieznany. */
+  /** `null`, gdy przychód nieznany. Po podatku (ryczałt projektu). */
   profit: number | null
+  /**
+   * Marża na realizacji (S4, warstwa 1): przychód − koszty bezpośrednie, PRZED
+   * podatkiem. `null`, gdy przychód nieznany. Brak kosztów liczy się jako 0,
+   * a `costsBasis` mówi, że ich nie znamy.
+   */
+  margin: number | null
   marginPct: number | null
   /** Przychód rozpisany na daty; suma = `revenue`. */
   pieces: RevenuePiece[]
@@ -160,7 +166,13 @@ const sum = (values: number[]) => values.reduce((total, value) => total + value,
  * Pieniądze jednego projektu. `events` mogą zawierać wydarzenia innych
  * projektów — bierzemy tylko te z `projectId` projektu.
  */
-export function projectMoney(project: MoneyProject, events: MoneyEvent[], today: string): ProjectMoney {
+export function projectMoney(
+  project: MoneyProject,
+  events: MoneyEvent[],
+  today: string,
+  /** Ryczałt projektu bez planu (company.json, S4); brak = `DEFAULT_TAX_RATE`. */
+  defaultTaxRatePercent: number = DEFAULT_TAX_RATE
+): ProjectMoney {
   const own = events.filter((e) => e.projectId === project.id)
   const stats = threadStats(own, today)
   const { invoices, unpairedPayments } = stats
@@ -232,9 +244,10 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
   }
 
   // ── Wynik ──────────────────────────────────────────────────────────────────
-  const taxRatePercent = plan?.taxRatePercent ?? DEFAULT_TAX_RATE
+  const taxRatePercent = plan?.taxRatePercent ?? defaultTaxRatePercent
   const tax = revenue === null ? 0 : revenue * (taxRatePercent / 100)
   const profit = revenue === null ? null : revenue - tax - (costs ?? 0)
+  const margin = revenue === null ? null : revenue - (costs ?? 0)
   const marginPct = profit !== null && revenue !== null && revenue > 0 ? (profit / revenue) * 100 : null
 
   // ── Daty ───────────────────────────────────────────────────────────────────
@@ -287,6 +300,7 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
     taxRatePercent,
     tax,
     profit,
+    margin,
     marginPct,
     pieces,
     paid,
@@ -295,12 +309,17 @@ export function projectMoney(project: MoneyProject, events: MoneyEvent[], today:
 }
 
 /** Pieniądze wszystkich projektów — liczone raz, potem dzielone na okresy. */
-export function moneyLedger(projects: MoneyProject[], events: MoneyEvent[], today: string): ProjectMoney[] {
+export function moneyLedger(
+  projects: MoneyProject[],
+  events: MoneyEvent[],
+  today: string,
+  defaultTaxRatePercent?: number
+): ProjectMoney[] {
   const byProject = new Map<string, MoneyEvent[]>()
   events.forEach((e) => {
     if (e.projectId) byProject.set(e.projectId, [...(byProject.get(e.projectId) ?? []), e])
   })
-  return projects.map((p) => projectMoney(p, byProject.get(p.id) ?? [], today))
+  return projects.map((p) => projectMoney(p, byProject.get(p.id) ?? [], today, defaultTaxRatePercent))
 }
 
 // ── Okres ────────────────────────────────────────────────────────────────────
