@@ -6,7 +6,7 @@
  * uszkodzony plik też ląduje w kopii, a kopia jest bajt w bajt tym, co leżało
  * na dysku.
  *
- * Retencja (propozycja dla M.J., jedna stała): zostaje 14 ostatnich kopii ORAZ
+ * Retencja (potwierdzona przez M.J. 2026-10-16, jedna stała): zostaje 14 ostatnich kopii ORAZ
  * najnowsza kopia z każdego dnia z ostatnich 30 dni. Kilka startów dziennie nie
  * wypycha więc wczorajszej kopii, a po wypadku wciąż jest kopia sprzed godziny.
  *

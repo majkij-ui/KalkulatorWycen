@@ -721,7 +721,7 @@ analytics script.
 subscriptions, campaigns, equipment, gear-kits, crew, crew-roles, client-groups, call-sheets, inbox-decisions and the
 new company.json — into `backups/auto-<YYYY-MM-DD-HHmm>/`. The copy is the file's text, unparsed (a corrupt file is
 backed up as it is); missing files are skipped; a fresh install creates nothing. Start-up waits for it at most 3 s.
-- **Retention (proposal for M.J., one constant `DEFAULT_RETENTION` in `lib/auto-backup.ts`): keep the last 14 copies
+- **Retention (confirmed by M.J. 2026-10-16; one constant `DEFAULT_RETENTION` in `lib/auto-backup.ts`): keep the last 14 copies
   AND the newest copy of each day for the last 30 days.** Several starts a day don't push out yesterday's copy, and
   there is always a copy from minutes ago. Real data is ~0.35 MB per copy, so at most ~44 folders ≈ 15 MB. The
   alternatives („last 14" only, „one per day for 30 days" only) are a one-line change.
