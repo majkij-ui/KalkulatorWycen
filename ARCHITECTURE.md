@@ -60,7 +60,8 @@ synchronous. Providers: `ProjectHubProvider` → `QuoteProvider` → equipment, 
 ## Where logic lives
 
 - **Pure modules in `lib/`** (no React, no Tauri, tested with `node --test`): schemas (`*-types.ts`),
-  calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`,
+  calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`, `margin-ledger`,
+  `gear-costs`,
   `subscriptions`, `client-money`, `client-stats`, `crew-rates`, `gear-usage`, `equipment-roi`,
   `thread-stats`, `realization-plan`), decisions (`project-save`, `quote-documents`, `inbox`,
   `inbox-validate`, `auto-backup`, `company-settings-core`). Put every rule here, with a test.
@@ -98,6 +99,14 @@ the user; the app never changes a status silently. A lead is a `lead_in` event, 
   `subscriptionId`. Company result = project profit − fixed costs of the period (`finance-calc`).
 - **Client money** (`client-money.ts`, S2): Klienci and the Projekty client filter use the same best
   knowledge as Finance, per revenue piece date; client groups count as one client.
+- **Margin ledger** (`margin-ledger.ts`, S4) — the one place money screens read the two layers from.
+  Facts in: the money loop, fixed costs with subscription charges, the gear catalogue (`gear-costs.ts`),
+  marketing. Layer 1 „Marża na realizacji" = revenue − direct costs, before tax (`ProjectMoney.margin`,
+  also what Klienci shows). Layer 2 „Wynik po kosztach firmy" = layer 1 − tax − ZUS − fixed − gear −
+  marketing; per project only in a year view (company costs split by revenue share). Gear purchases come
+  from the catalogue only: spread over 36 months from 5,000 zł (company.json) or in full; manual
+  „Sprzęt spoza katalogu" (`category: 'gear'`) counts in full, minus `catalogueItemIds` it covered.
+  S5 should call `marginSummary` rather than re-adding numbers.
 
 ## Adding a collection
 
