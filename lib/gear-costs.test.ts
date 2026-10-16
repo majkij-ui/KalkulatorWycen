@@ -190,3 +190,11 @@ test('próg i miesiące z company.json; złe wartości = domyślne', () => {
   const lines = gearCostLines([item('laptop', 4500, '2026-03-10')], true, gearSpreadSettings({ gearSpreadThresholdPln: 3000 })).lines
   assert.equal(lines[0].mode, 'spread')
 })
+
+test('zakup z pierwszego miesiąca okresu nie jest „przeniesiony"; próg 0 zł = rozkładaj wszystko', () => {
+  const y = gearCostInPeriod([item('styczen', 36000, '2026-01-02'), item('grudzien', 36000, '2025-12-30')], [], YEAR(2026), true, S)
+  assert.equal(y.lines.find((l) => l.line.itemId === 'styczen')!.carried, false)
+  assert.equal(y.lines.find((l) => l.line.itemId === 'grudzien')!.carried, true)
+  near(y.carried, 12000)
+  assert.equal(gearSpreadSettings({ gearSpreadThresholdPln: 0 }).thresholdPln, 0)
+})

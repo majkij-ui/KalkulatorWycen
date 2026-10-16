@@ -1,0 +1,69 @@
+{
+  "note": "S4: ręczne „Sprzęt…” z 2026 → kategoria „Sprzęt spoza katalogu” (gear; type zostaje other). Sierpień obejmował Rode Wireless GO II ×2 (1 600 zł), wrzesień Viltrox 6-inch (800 zł) — potwierdzone przez M.J. 2026-10-16; rejestr marży liczy z tych dwóch wpisów tylko resztę, a zakupy z katalogu. Kwoty i miesiące bez zmian. Obiektyw sprzedany w czerwcu: otwarte.",
+  "update": {
+    "finances.json": [
+      {
+        "id": "fc-retro2026-2026-02-sprzet",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-03-sprzet",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-04-sprzet",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-05-sprzet",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-06-sprzet-po-odjeciu-sprzedazy-obiektywu",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-07-sprzet",
+        "set": {
+          "category": "gear"
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-08-sprzet",
+        "set": {
+          "category": "gear",
+          "catalogueItemIds": [
+            "eq-1791901788868-nvmo4bk"
+          ]
+        },
+        "ifMissing": true
+      },
+      {
+        "id": "fc-retro2026-2026-09-sprzet-do-20-09",
+        "set": {
+          "category": "gear",
+          "catalogueItemIds": [
+            "eq-viltrox-6-inch"
+          ]
+        },
+        "ifMissing": true
+      }
+    ]
+  }
+}

@@ -372,3 +372,35 @@ test('domyślny ryczałt z company.json dla projektu bez planu', () => {
   // Projekt z planem trzyma swoją stawkę.
   near(moneyLedger([project('b')], [], TODAY, 12)[0].taxRatePercent, 8.5)
 })
+
+test('„Sprzęt spoza katalogu" powiązany z katalogiem: stałe bez zmian, sprzęt = zapłacona kwota', () => {
+  const s = marginSummary(
+    input([], {
+      fixedCosts: [
+        fixed('aug', '2026-08', 5_156.73, { category: 'gear', catalogueItemIds: ['rode'] }),
+        fixed('soft', '2026-08', 100, { category: 'software' }),
+      ],
+      equipment: [gear('rode', 800, '2026-08-01', { quantity: 2 })],
+      spread: false,
+    }),
+    MONTH(2026, 8)
+  )
+  near(s.company.fixed, 100)
+  near(s.company.gear, 5_156.73)
+})
+
+test('dodatkowa faktura w następnym roku: przychód w tym roku, koszty zostają w roku kotwicy', () => {
+  const projects = [project('a', { date: '2026-11-10', costs: [cost(2_000)] })]
+  const events = [
+    ev('a', 'invoice_sent', '2026-11-20', { amountNetto: 10_000 }),
+    ev('a', 'extra_sale', '2027-01-10', { what: 'surówka', amountNetto: 1_000 }),
+    ev('a', 'invoice_sent', '2027-01-15', { amountNetto: 1_000 }),
+  ]
+  const next = marginSummary(input(projects, { events }), YEAR(2027))
+  const r = row(next, 'a')
+  assert.equal(r.anchored, false)
+  assert.equal(r.revenue, 1_000)
+  assert.equal(r.costs, 0)
+  assert.equal(r.margin, 1_000)
+  assert.equal(row(marginSummary(input(projects, { events }), YEAR(2026)), 'a').margin, 8_000)
+})
