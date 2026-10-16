@@ -170,6 +170,13 @@ Finance 2026 unchanged (167,813 zł revenue, 82,574 zł project profit). Not app
 subscription and category patches (`imports/2026-10-13-s1-*.json`) and the S2 client groups. Next: Zaplecze
 (main session), then S4.
 
+**Merged and installed 2026-10-16 (Z1, F1 → S4 → Q2):** only conflicts were this document's as-built sections
+(kept in order §9–§12). 690 tests, `tsc` clean. Applied: S1 patches, S2 client groups, S4 gear patch (8 „Sprzęt…"
+entries → `gear`, Rode / Viltrox linked). The Q2 Morris variant patch was already in `projects.json` (written
+15:42 with a backup; a re-run is „bez zmian"). Real data, read-only: 2026 revenue 179,538 zł and project profit
+82,822 zł unchanged; result after company costs 31,131 zł in the cash view, 2,992 zł with gear spread (28,139 zł
+carried from 2023–2025 purchases). Not yet started on the desktop: the F1 first start (no `company.json` yet).
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
