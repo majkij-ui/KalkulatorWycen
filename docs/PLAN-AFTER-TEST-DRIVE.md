@@ -783,3 +783,85 @@ like zaplecze (no laptop, cards, cables or arms). Possible edge cases for M.J.: 
 6-inch (both bought in 2026, likely on set), Manfrotto Statyw (tripod, on set). Three items have no purchase date
 (Sony 85mm f/1.8, Tamron 17-28mm, Amaran Halo 600X) and Sony A7S III is noted „zużyty, martwe HDMI" (retire?). Nothing
 was changed.
+
+## 11. F1 as built
+
+*(2026-10-16, branch `claude/f1-fundamenty-tech-debt-8b1b86`, on top of `v3/project-hub` `411a12d`)*
+
+**Automatic backups.** At every start (desktop only) the hub copies its data files — projects, events, finances,
+subscriptions, campaigns, equipment, gear-kits, crew, crew-roles, client-groups, call-sheets, inbox-decisions and the
+new company.json — into `backups/auto-<YYYY-MM-DD-HHmm>/`. The copy is the file's text, unparsed (a corrupt file is
+backed up as it is); missing files are skipped; a fresh install creates nothing. Start-up waits for it at most 3 s.
+- **Retention (confirmed by M.J. 2026-10-16; one constant `DEFAULT_RETENTION` in `lib/auto-backup.ts`): keep the last 14 copies
+  AND the newest copy of each day for the last 30 days.** Several starts a day don't push out yesterday's copy, and
+  there is always a copy from minutes ago. Real data is ~0.35 MB per copy, so at most ~44 folders ≈ 15 MB. The
+  alternatives („last 14" only, „one per day for 30 days" only) are a one-line change.
+- Pruning touches only folders named exactly `auto-YYYY-MM-DD-HHmm`; `backups/*.json` from `npm run data`, anything
+  else and future-dated folders (clock changes) are never removed. Pruning runs only after a fully successful copy.
+- A failed copy shows „Nie udało się zrobić automatycznej kopii danych (…)" at the bottom of the window; the app works
+  normally. A failed prune only logs.
+- Capabilities: read/write/mkdir/read-dir in `$APPDATA/**` were already there; **new: `fs:allow-remove` scoped to
+  `$APPDATA/backups/auto-*` and `$APPDATA/backups/auto-*/**` only.**
+
+**Business settings → `company.json`.** PDF texts, the portfolio catalogue and „Zapisz stawki jako domyślne" moved from
+the window's localStorage into `company.json`: a one-record collection (`{ version, items: [{ id: "company", … }] }`,
+so `createCollectionStore`, the backups and `npm run data -- apply` with `update` work unchanged). Fields: `pdfTexts`,
+`portfolio`, `defaultPricing`, reserved `name`, `contact`, `defaultTaxRatePercent`, `defaultCurrency` (nothing reads
+them yet), `migratedFromLocalStorage`, timestamps; passthrough. Content fields are accepted loosely (`unknown`) and
+cleaned by the getters on read, so a write can never drop what is in the file.
+
+| Case | Behaviour |
+|---|---|
+| First start, no company.json | created from `quote-gen-pdf-texts`, `quote-gen-portfolio-catalogue`, `quote-gen-user-default-pricing` (PDF texts: string fields only, as the getter did); the keys stay |
+| An old key unreadable (bad JSON, wrong shape) | skipped and logged; the rest migrates; the key stays in localStorage |
+| Later starts | file read into memory before providers mount; localStorage no longer read |
+| Edit PDF texts / catalogue / default prices | memory at once, file in the background (read–merge–write, unknown fields kept), old key still written as a mirror (rolling back to an older build keeps working) |
+| company.json exists but unreadable | never overwritten; getters fall back to localStorage as before F1; notice „Nie udało się odczytać pliku company.json…" |
+| Creating the file fails | same fallback, notice |
+| A later write fails | change stays in memory and localStorage until quit; notice |
+| `npm run data` | `company.json` in `SCHEMAS`; `update` per field; a value the schema would „fix" is refused (checked: `defaultTaxRatePercent: "8,5"` refused, a valid update applied with a backup) |
+
+`getPdfTextsConfig`, `getPortfolioCatalogue`, `getSavedUserDefault`, `getUserDefault` and the savers kept their
+signatures; `quote-context`, `quote-documents` and the calculator tabs are untouched (Q2). UI-only preferences stay in
+localStorage. **Start-up order** (`components/app-root.tsx`): carry-over → backup → company.json → providers.
+
+**Screens.** Ustawienia: card „Dane i kopie zapasowe" (this start's backup folder and file count, pruned count, data
+folder path; where the settings were read from). Bottom notice bar (`components/app-notices.tsx`) for background
+failures.
+
+**Docs.** `ARCHITECTURE.md` (repo root). The old QuoteGen `architecture.md` clashed with it on the case-insensitive
+disk and moved to `docs/architecture-quotegen-legacy.md`. Release skill `.claude/skills/wydanie/SKILL.md` with
+`real-data-check.mts` (read-only; quote financials and Finance year totals with the code of a given tree).
+
+**Tests:** 615 (585 before; +30): `auto-backup.test.ts` (15: folder names, parsing, retention cases, copy/prune with an
+in-memory fs, failures, the backup list covers every store's file), `company-settings.test.ts` (15: migration, schema
+passthrough, getters from the file, saves to file + mirror, foreign fields kept, unreadable file, no file loaded).
+31 deliberate mutations, 31 caught (three survived at first — future-dated folders, minutes 60, an empty key — and got
+assertions). `npx tsc --noEmit` 0 errors.
+
+**Real data (read-only, hashes and mtimes of every `*.json` unchanged):** with `real-data-check.mts`, old tree
+(`411a12d`) vs this branch: all 11 saved quotes identical and equal to the stored financials; Finance 2026 identical
+(revenue 179,538 zł, profit 82,822 zł, project costs 81,455 zł, fixed costs 51,692 zł, 19 projects).
+
+**Verified in the browser preview** (dev, seeded localStorage, restored afterwards): first start created the company
+record from the three keys (keys kept); a new project's quote starts from the migrated default price (rezOp 3,333 zł)
+and its PDF shows the migrated company name and producer; editing „Edytuj treści PDF" saved to the file and the mirror;
+after a reload with a diverging old key the file wins; a corrupt company record shows the notice, is left untouched, the
+app runs; no console errors. The Ustawienia card shows the browser wording (no backups in the preview).
+
+**Desktop-only checks for the main session** (installed app, real data):
+1. Start the hub: `backups/auto-<today>-<HHmm>/` appears with the data files (8 today: no gear-kits, crew-roles,
+   client-groups, call-sheets files yet; company.json from the second start on); `backups/*.json` untouched.
+   Ustawienia → „Dane i kopie zapasowe" shows the folder.
+2. First start: `company.json` created; `migratedFromLocalStorage.keys` lists what the window had (Q1 noted a saved
+   default price list). Check the default price list, PDF texts and catalogue look as before.
+3. Change a PDF text, quit, restart: the change is there and in `company.json`.
+4. Start 15+ times (or drop dummy `backups/auto-2026-01-0X-0800` folders in while the hub is closed): old `auto-`
+   folders are pruned per the rule; a folder with another name is not. If nothing is pruned and the console says
+   „sprzątanie … nie powiodło się", the `fs:allow-remove` scope does not match — the backup itself still works.
+5. `npm run data -- apply` with a `company.json` update (hub closed) is picked up on the next start.
+
+**Known limits / next:**
+- The backup runs once per start, not periodically; a hub left open for days has only the start-of-session copy.
+- `name`, `contact`, tax rate and currency are reserved in `company.json` without UI (branding session).
+- Notices are per session; a dismissed notice comes back on the next failing start.

@@ -17,6 +17,10 @@ import { listAllProjects } from '@/lib/project-library'
 import { pendingQuotes } from '@/lib/project-migration-core'
 import { migrateQuotesToProjects, readSkippedQuoteIds, skipQuoteIds } from '@/lib/project-migration'
 import { plural } from '@/lib/pl-plural'
+import { isTauriRuntime } from '@/lib/storage'
+import { lastAutoBackup } from '@/lib/auto-backup-tauri'
+import { companyLoadStatus, type CompanyLoadStatus } from '@/lib/company-settings'
+import { DEFAULT_RETENTION } from '@/lib/auto-backup'
 
 interface LegacyQuote {
   id: string
@@ -131,6 +135,48 @@ function LegacyImportCard() {
   )
 }
 
+const COMPANY_STATUS: Record<CompanyLoadStatus, string> = {
+  loaded: 'czytane z pliku company.json.',
+  migrated: 'plik company.json utworzony przy tym starcie (z pamięci okna; stare wpisy zostały na miejscu).',
+  unreadable: 'pliku company.json nie da się odczytać — działają z pamięci okna, plik zostaje nietknięty.',
+  'write-failed': 'nie udało się utworzyć company.json — działają z pamięci okna, jak dotąd.',
+  skipped: 'nie wczytano.',
+}
+
+/** Kopie zapasowe i plik ustawień firmy (F1) — tylko do wglądu. */
+function DataSafetyCard() {
+  const backup = lastAutoBackup()
+  const result = backup?.result
+  let backupLine: string
+  if (!isTauriRuntime()) backupLine = 'W przeglądarce (podgląd) kopie nie są robione — dotyczą tylko aplikacji na komputerze.'
+  else if (!result) backupLine = 'Kopia przy tym starcie jeszcze trwa albo nie ruszyła.'
+  else if (!result.ok) backupLine = 'Kopia przy tym starcie nie udała się (szczegóły w komunikacie na dole okna).'
+  else if (!result.folder) backupLine = 'Nie było jeszcze plików danych do skopiowania.'
+  else
+    backupLine = `Kopia z tego startu: ${result.folder} (${result.copied.length} ${plural(
+      result.copied.length,
+      'plik',
+      'pliki',
+      'plików'
+    )})${result.pruned.length ? `, usunięto ${result.pruned.length} ${plural(result.pruned.length, 'starą kopię', 'stare kopie', 'starych kopii')}` : ''}.`
+
+  return (
+    <section className="rounded-xl border border-white/10 bg-zinc-900/30 p-4">
+      <h2 className="text-sm font-semibold text-white">Dane i kopie zapasowe</h2>
+      <p className="mt-1 text-xs text-zinc-500">
+        Przy każdym starcie aplikacja kopiuje pliki danych do folderu backups/auto-…. Zostaje {DEFAULT_RETENTION.keepLast}{' '}
+        ostatnich kopii i najnowsza z każdego dnia z ostatnich {DEFAULT_RETENTION.dailyDays} dni. Kopii robionych przez
+        Claude&apos;a (backups/*.json) aplikacja nie rusza.
+      </p>
+      <p className="mt-3 text-sm text-zinc-300">{backupLine}</p>
+      {backup?.dir && <p className="mt-1 break-all text-xs text-zinc-500">Folder danych: {backup.dir}</p>}
+      <p className="mt-3 text-sm text-zinc-300">
+        Teksty PDF, katalog realizacji i domyślny cennik: {COMPANY_STATUS[companyLoadStatus()]}
+      </p>
+    </section>
+  )
+}
+
 export function SettingsSection() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -139,7 +185,8 @@ export function SettingsSection() {
         Cennik, teksty PDF i katalog realizacji są w ustawieniach wyceny — ikona koła zębatego w nagłówku kalkulatora
         otwartego projektu. Każdy projekt ma własny cennik; „Zapisz stawki jako domyślne" ustawia cennik nowych wycen.
       </p>
-      <div className="mt-6 max-w-xl">
+      <div className="mt-6 max-w-xl space-y-4">
+        <DataSafetyCard />
         <LegacyImportCard />
       </div>
     </div>

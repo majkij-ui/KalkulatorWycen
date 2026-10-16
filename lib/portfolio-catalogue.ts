@@ -2,7 +2,8 @@
  * App-level catalogue of the studio's own video references ("Przykładowe realizacje").
  *
  * This is a global library — NOT part of a single quote. It is managed under the cog
- * (Settings → "Katalog realizacji") and persisted in its own localStorage key. On the
+ * (Settings → "Katalog realizacji") and persisted in `company.json` (F1; the old
+ * localStorage key is still mirrored and used when the file is not loaded). On the
  * PDF assembly tab, each portfolio row can be filled by picking an entry from this
  * catalogue (a dropdown) or by typing a one-off URL.
  *
@@ -10,13 +11,15 @@
  * printed in the PDF.
  */
 
+import { getLoadedCompany, LEGACY_COMPANY_KEYS, patchLoadedCompany } from './company-settings-core'
+
 export interface PortfolioCatalogueEntry {
   id: string
   name: string
   url: string
 }
 
-const STORAGE_KEY = 'quote-gen-portfolio-catalogue'
+const STORAGE_KEY = LEGACY_COMPANY_KEYS.portfolio
 
 export function makeCatalogueId(): string {
   // Stable-enough unique id without pulling in a uuid dependency.
@@ -33,14 +36,19 @@ function sanitizeEntry(raw: unknown): PortfolioCatalogueEntry | null {
   return { id, name, url }
 }
 
+function sanitizeList(parsed: unknown): PortfolioCatalogueEntry[] {
+  if (!Array.isArray(parsed)) return []
+  return parsed.map(sanitizeEntry).filter((e): e is PortfolioCatalogueEntry => e !== null)
+}
+
 export function getPortfolioCatalogue(): PortfolioCatalogueEntry[] {
   if (typeof window === 'undefined') return []
+  const company = getLoadedCompany()
+  if (company) return sanitizeList(company.portfolio)
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(sanitizeEntry).filter((e): e is PortfolioCatalogueEntry => e !== null)
+    return sanitizeList(JSON.parse(raw))
   } catch {
     return []
   }
@@ -48,10 +56,9 @@ export function getPortfolioCatalogue(): PortfolioCatalogueEntry[] {
 
 export function savePortfolioCatalogue(entries: PortfolioCatalogueEntry[]): void {
   if (typeof window === 'undefined') return
+  const clean = sanitizeList(entries)
+  patchLoadedCompany({ portfolio: clean })
   try {
-    const clean = (Array.isArray(entries) ? entries : [])
-      .map(sanitizeEntry)
-      .filter((e): e is PortfolioCatalogueEntry => e !== null)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(clean))
   } catch {
     // ignore quota / serialization failures

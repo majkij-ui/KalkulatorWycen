@@ -1,3 +1,5 @@
+> Superseded by `ARCHITECTURE.md` (repo root) for the hub. Kept for the history of the original QuoteGen calculator.
+
 # Technical Architecture
 
 ## State Management

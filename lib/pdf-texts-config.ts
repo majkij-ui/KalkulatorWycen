@@ -12,6 +12,8 @@
  *   termRevisions / termRevisions_en → {count}, {price}
  */
 
+import { getLoadedCompany, LEGACY_COMPANY_KEYS, patchLoadedCompany } from './company-settings-core'
+
 export interface PdfTextsConfig {
   // Company / header info — Polish
   companyName: string
@@ -84,35 +86,44 @@ export const DEFAULT_PDF_TEXTS: PdfTextsConfig = {
     'Amounts are stated net of VAT. VAT will be added in line with applicable regulations.',
 }
 
-const STORAGE_KEY = 'quote-gen-pdf-texts'
+const STORAGE_KEY = LEGACY_COMPANY_KEYS.pdfTexts
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
+/** Zapisane teksty nałożone na domyślne (tylko pola tekstowe). */
+function mergeWithDefaults(parsedRaw: unknown): PdfTextsConfig {
+  // Strip undefined / non-string values from the parsed payload so older saves
+  // (which may explicitly carry `termFoo_en: undefined`) don't override the
+  // defaults during the spread merge below.
+  const sanitized: Partial<PdfTextsConfig> = {}
+  if (parsedRaw && typeof parsedRaw === 'object') {
+    for (const [k, v] of Object.entries(parsedRaw)) {
+      if (typeof v === 'string') (sanitized as Record<string, string>)[k] = v
+    }
+  }
+  return { ...deepClone(DEFAULT_PDF_TEXTS), ...sanitized }
+}
+
+/** Teksty PDF z `company.json` (F1); bez wczytanego pliku — z localStorage, jak dawniej. */
 export function getPdfTextsConfig(): PdfTextsConfig {
   if (typeof window === 'undefined') return deepClone(DEFAULT_PDF_TEXTS)
+  const company = getLoadedCompany()
+  if (company) return mergeWithDefaults(company.pdfTexts)
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return deepClone(DEFAULT_PDF_TEXTS)
-    const parsedRaw = JSON.parse(raw) as Partial<PdfTextsConfig> | null
-    // Strip undefined / non-string values from the parsed payload so older saves
-    // (which may explicitly carry `termFoo_en: undefined`) don't override the
-    // defaults during the spread merge below.
-    const sanitized: Partial<PdfTextsConfig> = {}
-    if (parsedRaw && typeof parsedRaw === 'object') {
-      for (const [k, v] of Object.entries(parsedRaw)) {
-        if (typeof v === 'string') (sanitized as Record<string, string>)[k] = v
-      }
-    }
-    return { ...deepClone(DEFAULT_PDF_TEXTS), ...sanitized }
+    return mergeWithDefaults(JSON.parse(raw))
   } catch {
     return deepClone(DEFAULT_PDF_TEXTS)
   }
 }
 
+/** Zapis do `company.json`; stary klucz localStorage dalej odświeżany (powrót do starszej wersji). */
 export function savePdfTextsConfig(config: PdfTextsConfig): void {
   if (typeof window === 'undefined') return
+  patchLoadedCompany({ pdfTexts: { ...config } })
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
   } catch {
