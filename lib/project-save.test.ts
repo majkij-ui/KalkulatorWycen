@@ -92,7 +92,7 @@ test('marża ani cennik bez pozycji wyceny nie nadpisują zaimportowanych finans
   assert.deepEqual(plan.project.financials, IMPORTED)
 })
 
-test('pusta wycena startuje od domyślnego cennika użytkownika, a bez niego nie rusza bieżącego', () => {
+test('pusta wycena startuje od domyślnego cennika użytkownika; bez niego migawka nie ma cennika', () => {
   const custom = { ...DEFAULT_PRICING, produkcja: { ...DEFAULT_PRICING.produkcja, rezOp: 3100 } }
   assert.equal(blankQuoteSnapshot('ACME', custom).pricingConfig, custom)
   assert.equal('pricingConfig' in blankQuoteSnapshot('ACME', null), false)
@@ -191,6 +191,19 @@ test('klient z nagłówka wygrywa z etykietą PDF; PDF uzupełnia tylko pustego 
   const filled = planProjectSave({ project: noClient, snapshot: legalName, now: NOW })
   assert.ok(filled.status === 'ready')
   assert.equal(filled.project.client, 'Tchibo Polska Sp. z o.o.')
+})
+
+test('edytowany szkic PDF to praca: lead dostaje wycenę, retro-projekt pyta', () => {
+  const draft = { pdfDraft: { terminZdjec: 'listopad' } }
+  const lead = project({ status: 'quote', financials: null })
+  const saved = planProjectSave({ project: lead, snapshot: snapshot(blankQuoteSnapshot(lead.client).data, draft), now: NOW })
+  assert.ok(saved.status === 'ready')
+  assert.equal(saved.source, 'calculator')
+  assert.deepEqual((saved.project.quote as QuoteSnapshot).pdfDraft, draft.pdfDraft)
+
+  const retro = project()
+  const asked = planProjectSave({ project: retro, snapshot: snapshot(blankQuoteSnapshot(retro.client).data, draft), now: NOW })
+  assert.equal(asked.status, 'needs-confirmation')
 })
 
 test('canReprefillBlankQuote: tylko gdy nic by nie przepadło', () => {
