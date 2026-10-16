@@ -170,6 +170,27 @@ Finance 2026 unchanged (167,813 zł revenue, 82,574 zł project profit). Not app
 subscription and category patches (`imports/2026-10-13-s1-*.json`) and the S2 client groups. Next: Zaplecze
 (main session), then S4.
 
+## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
+
+**Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
+loaded into („openProject" → `loadQuoteSnapshot`) and written back from („Zapisz"). This caused the
+S-AI client leak, prices carried between projects, „Nowy projekt" inheriting old data and library copies
+turning into duplicate projects (bug #5). M.J. also loses unsaved work when leaving a project and coming
+back.
+
+**Decided:**
+1. **Retire „Moje wyceny"** (the quote library sheet, its save buttons and the migration banner). One
+   place to save a quote — the project.
+2. **No singleton calculator.** A project's quote is its own document; the Wycena tab edits it in place.
+   Its state stays with the project while you move between tabs, screens and other projects, and survives
+   a restart. Opening another project opens that project's document.
+3. **Variants A/B/C come next (Q2)**, in their own session. Q1 must not block them: the document model
+   leaves room for several variants of one project, and everything that counts money (financials,
+   Realizacja plan, Finance, reports) reads one chosen variant.
+
+Order: foundation clean-up (dead code, strict build) goes into Q1 step 0; Q1 runs alone on the
+calculator; Q2 after Q1; S4 can start after Q1 is merged.
+
 ## 5. S1 as built
 
 *(2026-10-13, branch `claude/fixed-costs-subscriptions-1a3bd1`; merged and installed the same day.)*
@@ -551,3 +572,7 @@ no console errors besides the missing Vercel analytics script. The hub data fold
 - Rate edits do not rewrite descriptions already in a draft (as with any calculator change since T9b); the stale
   warning shows when prices differ.
 - The calculator's tab strip overflows by a few pixels below ~900 px (existed before S3).
+
+## 8. Q1 as built
+
+*(not built yet — Q1 writes here)*
