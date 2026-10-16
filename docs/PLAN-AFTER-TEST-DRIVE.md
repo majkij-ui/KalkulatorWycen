@@ -21,11 +21,13 @@ decision. Decisions A–F were confirmed by M.J. on 2026-10-13 (see each section
 
 ## 2. Root causes of the two bugs (checked in code and data)
 
-- **#5 Recurring banner — not reproduced yet.** First suspect was the migration banner („Znaleziono N
-  zapisanych wycen"): the S-AI library quote's project `p-1791701624673-7mau8nz` was deleted on 11.10 as a
-  duplicate. But the start-up count already includes deleted projects (`listAllProjects`), so on today's
-  data it is 0, and no other start-up notice in the hub talks about an unsaved quote. Waiting for the exact
-  wording / a screenshot from M.J. (and which app: the hub or the old QuoteGen).
+- **#5 Recurring banner — fixed 2026-10-16 (`5f8923d`).** M.J.'s screenshot showed the migration banner
+  („Znaleziono 1 zapisanych wycen"). Cause: saving the calculator into „Moje wyceny" while a project is open
+  made a library copy linked to nothing, so the banner offered to turn it into a new project. That is how
+  the S-AI duplicate (deleted 11.10) appeared; on 16.10 it was „Morris Lloyd - Wisła Październik" (saved
+  14.10, same quote as the project „Morris & Lloyd — rolki, październik (Wisła)"). Now library saves from an
+  open project store `projectId` and are never pending; the banner names the quotes and has „Pomiń" (per
+  quote or all, remembered on this computer); „Przenieś" skips both.
 - **#4 Jumping thread.** Groups are sorted by the newest date among their **pending** proposals
   (`groupProposals`, `lib/inbox.ts`). Accepting the newest items re-sorts the group lower; a leftover
   `project_update` (contact) often has no date and drops to the bottom. Fix: a stable order for the session
