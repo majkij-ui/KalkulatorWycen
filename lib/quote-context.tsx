@@ -13,6 +13,11 @@
  *
  * Siedzi WEWNĄTRZ `ProjectHubProvider` (otwarty projekt i magazyn dokumentów)
  * i NAD resztą dostawców (Ekipa czyta role z cennika otwartej wyceny).
+ *
+ * Warianty (Q2): `QuoteProvider` daje wariant WYBRANY do rozliczeń (Realizacja,
+ * Ekipa). Kalkulator w zakładce Wycena owija się w `QuoteDocScope` z
+ * dokumentem oglądanego wariantu, więc reszta aplikacji nigdy nie liczy z
+ * wariantu, który tylko przeglądasz.
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -38,12 +43,20 @@ import {
 } from './quote-currency'
 import { PriceDisplayProvider } from './price-display'
 import { blankDoc, docFromSnapshot, docToSnapshot, type QuoteDoc } from './quote-documents'
+import { hasAlternatives, listVariants, parseDocId } from './quote-variants'
 import type { QuoteSnapshot } from './quote-library'
 import { useProjectHub } from './project-hub-context'
 
 interface QuoteContextValue {
   /** Id projektu, którego wycenę widać (`null` = żaden projekt nie jest otwarty). */
   projectId: string | null
+  /** Dokument w magazynie (id projektu = wybrany wariant, `projekt#wariant` = pozostały). */
+  docId: string | null
+  /**
+   * Nazwa oglądanego wariantu, gdy projekt ma kilka (do nazwy pliku PDF i
+   * „Wycena wysłana"); `null` = projekt z jedną wyceną, jak dotąd.
+   */
+  variantLabel: string | null
   data: QuoteData
   updateField: <K extends keyof QuoteData>(key: K, value: QuoteData[K]) => void
   /** Sumy oferty w walucie wyceny (EUR w wycenie w euro). */
@@ -153,39 +166,25 @@ function useDefaultPricing(): PricingConfigShape | null {
   return pricing
 }
 
-export function QuoteProvider({ children }: { children: React.ReactNode }) {
-  const { activeProject, quoteDocs } = useProjectHub()
-  // Każda zmiana w magazynie (edycja, zapis, nowy dokument) odświeża kalkulator.
-  useSyncExternalStore(quoteDocs.subscribe, quoteDocs.version, quoteDocs.version)
+/** Wspólne dla wszystkich dokumentów: teksty PDF, katalog realizacji, mój domyślny cennik. */
+interface QuoteSharedValue {
+  pdfTexts: PdfTextsConfig
+  setPdfTexts: (config: PdfTextsConfig) => void
+  portfolioCatalogue: PortfolioCatalogueEntry[]
+  setPortfolioCatalogue: (entries: PortfolioCatalogueEntry[]) => void
+  defaultPricing: PricingConfigShape | null
+}
 
+const QuoteSharedContext = createContext<QuoteSharedValue | null>(null)
+
+/** Kalkulator wariantu wybranego do rozliczeń w otwartym projekcie. */
+export function QuoteProvider({ children }: { children: React.ReactNode }) {
+  const { activeProject } = useProjectHub()
   const [pdfTexts, setPdfTextsState] = useState<PdfTextsConfig>(() => getPdfTextsConfig())
   const [portfolioCatalogue, setPortfolioCatalogueState] = useState<PortfolioCatalogueEntry[]>(() =>
     getPortfolioCatalogue()
   )
-
   const defaultPricing = useDefaultPricing()
-  const idleDoc = useMemo(() => blankDoc('', defaultPricing), [defaultPricing])
-
-  const projectId = activeProject?.id ?? null
-  const doc = projectId ? quoteDocs.get(projectId) : idleDoc
-  const docEpoch = projectId ? quoteDocs.state(projectId).epoch : 0
-  const { data, pricingConfig, marginMultiplier } = doc
-
-  /** Zmiana dokumentu otwartego projektu (bez projektu — nic). */
-  const edit = useCallback(
-    (updater: (doc: QuoteDoc) => QuoteDoc, options?: { silent?: boolean; replace?: boolean }) => {
-      if (projectId) quoteDocs.edit(projectId, updater, options)
-    },
-    [projectId, quoteDocs]
-  )
-  const editData = useCallback(
-    (updater: (data: QuoteData) => QuoteData) =>
-      edit((current) => {
-        const next = updater(current.data)
-        return next === current.data ? current : { ...current, data: next }
-      }),
-    [edit]
-  )
 
   const setPdfTexts = useCallback((config: PdfTextsConfig) => {
     setPdfTextsState(config)
@@ -196,6 +195,59 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setPortfolioCatalogueState(entries)
     savePortfolioCatalogue(entries)
   }, [])
+
+  const shared = useMemo(
+    () => ({ pdfTexts, setPdfTexts, portfolioCatalogue, setPortfolioCatalogue, defaultPricing }),
+    [pdfTexts, setPdfTexts, portfolioCatalogue, setPortfolioCatalogue, defaultPricing]
+  )
+
+  return (
+    <QuoteSharedContext.Provider value={shared}>
+      <QuoteDocScope docId={activeProject?.id ?? null}>{children}</QuoteDocScope>
+    </QuoteSharedContext.Provider>
+  )
+}
+
+/**
+ * Kalkulator jednego dokumentu wyceny otwartego projektu (`docId` z
+ * `variantDocId`). Dokument innego projektu niż otwarty = pusta wycena, jak
+ * bez projektu.
+ */
+export function QuoteDocScope({ docId: requestedDocId, children }: { docId: string | null; children: React.ReactNode }) {
+  const shared = useContext(QuoteSharedContext)
+  if (!shared) throw new Error('QuoteDocScope musi być użyty wewnątrz QuoteProvider')
+  const { pdfTexts, setPdfTexts, portfolioCatalogue, setPortfolioCatalogue, defaultPricing } = shared
+  const { activeProject, quoteDocs } = useProjectHub()
+  // Każda zmiana w magazynie (edycja, zapis, nowy dokument) odświeża kalkulator.
+  useSyncExternalStore(quoteDocs.subscribe, quoteDocs.version, quoteDocs.version)
+
+  const idleDoc = useMemo(() => blankDoc('', defaultPricing), [defaultPricing])
+
+  const projectId = activeProject?.id ?? null
+  const docId = requestedDocId && projectId && parseDocId(requestedDocId).projectId === projectId ? requestedDocId : null
+  const doc = docId ? quoteDocs.get(docId) : idleDoc
+  const docEpoch = docId ? quoteDocs.state(docId).epoch : 0
+  const { data, pricingConfig, marginMultiplier } = doc
+  const variantLabel = useMemo(() => {
+    if (!activeProject || !docId || !hasAlternatives(activeProject)) return null
+    return listVariants(activeProject).find((v) => v.docId === docId)?.label ?? null
+  }, [activeProject, docId])
+
+  /** Zmiana tego dokumentu (bez projektu — nic). */
+  const edit = useCallback(
+    (updater: (doc: QuoteDoc) => QuoteDoc, options?: { silent?: boolean; replace?: boolean }) => {
+      if (docId) quoteDocs.edit(docId, updater, options)
+    },
+    [docId, quoteDocs]
+  )
+  const editData = useCallback(
+    (updater: (data: QuoteData) => QuoteData) =>
+      edit((current) => {
+        const next = updater(current.data)
+        return next === current.data ? current : { ...current, data: next }
+      }),
+    [edit]
+  )
 
   const updateField = useCallback(<K extends keyof QuoteData>(key: K, value: QuoteData[K]) => {
     editData((prev) => (Object.is(prev[key], value) ? prev : { ...prev, [key]: value }))
@@ -414,11 +466,11 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const importSnapshot = useCallback(
     (raw: unknown) => {
       const imported = docFromSnapshot(raw)
-      if (!imported || !projectId) return false
+      if (!imported || !docId) return false
       edit(() => imported, { replace: true })
       return true
     },
-    [edit, projectId]
+    [edit, docId]
   )
 
   const setQuoteCurrency = useCallback((next: QuoteCurrency, choice?: ExchangeRateChoice) => {
@@ -455,6 +507,8 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
 
   const value: QuoteContextValue = {
     projectId,
+    docId,
+    variantLabel,
     data,
     updateField,
     totals,

@@ -448,6 +448,28 @@ const quoteSnapshotPassthrough = z.custom<QuoteSnapshot>(
   (value) => !!value && typeof value === 'object'
 )
 
+/**
+ * Wariant wyceny (Q2): inna wersja oferty dla tego samego projektu (tańsza,
+ * droższa „kotwica", środek). Pełna migawka wyceny z własnym szkicem PDF.
+ * Warianty NIGDY nie liczą pieniędzy — finanse, plan i statystyki czytają
+ * wyłącznie `Project.quote` (wariant wybrany do rozliczeń). Zasady w
+ * `quote-variants.ts`.
+ */
+export const quoteVariantSchema = z
+  .object({
+    id: z.string().min(1),
+    /** Nazwa na przełączniku i w nazwie pliku PDF („B", „2 dni"). */
+    label: z.string().catch(''),
+    /** `null` = pusta wycena (uszkodzona migawka też, zamiast gubić wariant). */
+    snapshot: quoteSnapshotPassthrough.nullable().catch(null),
+    createdAt: z.string().catch(''),
+    updatedAt: z.string().catch(''),
+    /** Miękkie usunięcie (ISO) — „Cofnij" przywraca. */
+    deletedAt: z.string().optional().catch(undefined),
+  })
+  .passthrough()
+export type QuoteVariant = z.infer<typeof quoteVariantSchema>
+
 /** Osoba kontaktowa — kopiowana z poprzedniego projektu tego samego klienta. */
 export const projectContactSchema = z
   .object({
@@ -489,6 +511,15 @@ export const projectSchema = z
     /** `null` = lead bez wyceny. Uszkodzona wartość też daje `null`, nie odrzuca projektu. */
     quote: quoteSnapshotPassthrough.nullable().catch(null),
     financials: projectFinancialsSchema.nullable().catch(null),
+    /**
+     * Pozostałe warianty wyceny (Q2). Brak = projekt z jedną wyceną, jak dotąd.
+     * `quote` to zawsze wariant wybrany do rozliczeń.
+     */
+    quoteVariants: lenientArray(quoteVariantSchema).optional(),
+    /** Nazwa wariantu w `quote` (brak = „A"). */
+    quoteLabel: z.string().optional().catch(undefined),
+    /** Trwałe id wariantu w `quote` — wariant zachowuje je przy zamianie (brak = `main`). */
+    quoteVariantId: z.string().optional().catch(undefined),
     /** Stary kształt użycia sprzętu; czytany tylko, gdy brak `gearDays`. */
     equipment: z.array(projectEquipmentUsageSchema).catch([]),
     /**

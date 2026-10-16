@@ -25,7 +25,18 @@ import {
 import { backfillMissingFinancials } from './quote-financials'
 import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
-import { createQuoteDocumentStore, type QuoteDocState, type QuoteDocumentStore } from './quote-documents'
+import { blankDoc, createQuoteDocumentStore, docToSnapshot, type QuoteDocState, type QuoteDocumentStore } from './quote-documents'
+import {
+  addVariantPatch,
+  asksWhichVariant,
+  chooseVariantPlan,
+  createVariantId,
+  deleteVariantPatch,
+  renameVariantPatch,
+  restoreVariantPatch,
+  variantSnapshotPatch,
+  type ChooseVariantPlan,
+} from './quote-variants'
 import { isTauriRuntime } from './storage'
 import { applyClientChoice, type ClientChoice } from './clients'
 import { parseListPrefs, type ProjectListPrefs } from './project-list'
@@ -77,6 +88,33 @@ interface ProjectHubValue {
    */
   changeActiveClient: (name: string) => Promise<ClientChoice | null>
   setStatus: (id: string, status: ProjectStatus) => Promise<void>
+  /**
+   * Zmiana statusu z ekranu (nagłówek, sugestia po wydarzeniu). Przejście do
+   * „W realizacji" / „Zrealizowany" projektu z wariantami najpierw pyta, który
+   * wariant przyjął klient (`statusQuestion`) — status zmienia dopiero odpowiedź.
+   */
+  requestStatus: (id: string, status: ProjectStatus) => Promise<void>
+  /** Otwarte pytanie „Który wariant przyjął klient?" (`null` = brak). */
+  statusQuestion: { projectId: string; to: ProjectStatus } | null
+  /** Odpowiedź: id wariantu (wybór + status) albo `null` = anuluj (nic się nie zmienia). */
+  answerStatusQuestion: (variantId: string | null) => Promise<'done' | 'blocked'>
+
+  // Warianty wyceny (Q2, `quote-variants.ts`)
+  /**
+   * „+ Wariant": kopia dokumentu `fromDocId` (z niezapisanymi zmianami) albo
+   * pusta wycena (`null`, mój domyślny cennik). Zwraca id nowego wariantu.
+   */
+  addVariant: (projectId: string, fromDocId: string | null) => Promise<string | null>
+  renameVariant: (projectId: string, variantId: string, label: string) => Promise<void>
+  /** Miękkie usunięcie; wybranego nie da się usunąć (`false`). */
+  deleteVariant: (projectId: string, variantId: string) => Promise<boolean>
+  restoreVariant: (projectId: string, variantId: string) => Promise<void>
+  /**
+   * „Wybrany do rozliczeń": zamiana migawek i finanse z nowego wyboru.
+   * Wszystkie dokumenty projektu zapisują się przed zamianą; potem budują się
+   * od nowa (nowy punkt „Cofnij zmiany z tej sesji").
+   */
+  chooseVariant: (projectId: string, variantId: string) => Promise<ChooseVariantPlan>
   /**
    * Miękkie usunięcie projektu (`deletedAt`). Zwraca usunięty rekord — jego
    * znacznik dostaje też wątek (`project-deletion.ts`), a „Cofnij" go przywraca.
@@ -222,6 +260,12 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       write: async (id, patch) => {
         await patchProjectRef.current(id, patch)
       },
+      // Wariant: tylko jego wpis na NAJŚWIEŻSZEJ wersji projektu (bez finansów).
+      writeVariant: async (projectId, variantId, snapshot) => {
+        const latest = projectsRef.current.find((p) => p.id === projectId)
+        const patch = latest ? variantSnapshotPatch(latest, variantId, snapshot, new Date()) : null
+        if (patch) await patchProjectRef.current(projectId, patch)
+      },
     })
   )
 
@@ -267,7 +311,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   /** Wyjście z projektu: jego czekające zmiany zapisują się od razu, bez czekania na opóźnienie. */
   const leaveActive = useCallback(() => {
     const current = activeIdRef.current
-    if (current) void quoteDocs.flush(current)
+    if (current) void quoteDocs.flushProject(current)
   }, [quoteDocs])
 
   const openProject = useCallback(
@@ -340,6 +384,107 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       await patchProject(id, { status })
     },
     [patchProject]
+  )
+
+  // ── Warianty wyceny ───────────────────────────────────────────────────────
+
+  const addVariant = useCallback(
+    async (projectId: string, fromDocId: string | null) => {
+      const project = projectsRef.current.find((p) => p.id === projectId)
+      if (!project) return null
+      const now = new Date()
+      const source = fromDocId ? quoteDocs.get(fromDocId) : blankDoc(project.client, getSavedUserDefault())
+      const { patch, variant } = addVariantPatch(project, {
+        id: createVariantId(),
+        snapshot: docToSnapshot(source, now),
+        now,
+      })
+      await patchProject(projectId, patch)
+      return variant.id
+    },
+    [patchProject, quoteDocs]
+  )
+
+  const renameVariant = useCallback(
+    async (projectId: string, variantId: string, label: string) => {
+      const project = projectsRef.current.find((p) => p.id === projectId)
+      const patch = project ? renameVariantPatch(project, variantId, label, new Date()) : null
+      if (patch) await patchProject(projectId, patch)
+    },
+    [patchProject]
+  )
+
+  const deleteVariant = useCallback(
+    async (projectId: string, variantId: string) => {
+      const docId = `${projectId}#${variantId}`
+      // Czekające zmiany najpierw do pliku — „Cofnij" przywraca wariant z nimi.
+      await quoteDocs.flush(docId)
+      const project = projectsRef.current.find((p) => p.id === projectId)
+      const patch = project ? deleteVariantPatch(project, variantId, new Date()) : null
+      if (!patch) return false
+      await patchProject(projectId, patch)
+      quoteDocs.forget(docId)
+      return true
+    },
+    [patchProject, quoteDocs]
+  )
+
+  const restoreVariant = useCallback(
+    async (projectId: string, variantId: string) => {
+      const project = projectsRef.current.find((p) => p.id === projectId)
+      const patch = project ? restoreVariantPatch(project, variantId) : null
+      if (patch) await patchProject(projectId, patch)
+    },
+    [patchProject]
+  )
+
+  const chooseVariant = useCallback(
+    async (projectId: string, variantId: string): Promise<ChooseVariantPlan> => {
+      await quoteDocs.flushProject(projectId)
+      // Zmiany czekające na „Zastąp" żyją tylko w pamięci — zamiana by je zgubiła.
+      if (quoteDocs.pendingIds().some((id) => id === projectId || id.startsWith(`${projectId}#`))) return { status: 'blocked' }
+      const project = projectsRef.current.find((p) => p.id === projectId)
+      if (!project) return { status: 'missing' }
+      const plan = chooseVariantPlan(project, variantId, new Date())
+      if (plan.status !== 'ready') return plan
+      await patchProject(projectId, plan.patch)
+      // Migawki zamieniły się miejscami — dokumenty projektu budują się od nowa.
+      quoteDocs.forget(projectId)
+      return plan
+    },
+    [patchProject, quoteDocs]
+  )
+
+  const [statusQuestion, setStatusQuestion] = useState<ProjectHubValue['statusQuestion']>(null)
+
+  const requestStatus = useCallback(
+    async (id: string, status: ProjectStatus) => {
+      const project = projectsRef.current.find((p) => p.id === id)
+      if (!project) return
+      if (asksWhichVariant(project, status)) {
+        setStatusQuestion({ projectId: id, to: status })
+        return
+      }
+      await patchProject(id, { status })
+    },
+    [patchProject]
+  )
+
+  const answerStatusQuestion = useCallback(
+    async (variantId: string | null) => {
+      const question = statusQuestion
+      if (!question || variantId === null) {
+        setStatusQuestion(null)
+        return 'done' as const
+      }
+      const plan = await chooseVariant(question.projectId, variantId)
+      // Pytanie zostaje otwarte — najpierw decyzja o finansach z importu.
+      if (plan.status === 'blocked') return 'blocked' as const
+      setStatusQuestion(null)
+      if (plan.status !== 'missing') await patchProject(question.projectId, { status: question.to })
+      return 'done' as const
+    },
+    [chooseVariant, patchProject, statusQuestion]
   )
 
   const updateProject = useCallback(
@@ -428,6 +573,14 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     updateProjects,
     changeActiveClient,
     setStatus,
+    requestStatus,
+    statusQuestion,
+    answerStatusQuestion,
+    addVariant,
+    renameVariant,
+    deleteVariant,
+    restoreVariant,
+    chooseVariant,
     removeProject,
     restoreProject,
     reloadProjects,

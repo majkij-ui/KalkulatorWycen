@@ -23,9 +23,12 @@
  * Bez Reacta i bez Tauri — timery i zapis wstrzykiwane, więc całość jest
  * testowana w `quote-documents.test.ts`.
  *
- * Q2 (warianty A/B/C): klucz dokumentu to `docId`. Dziś to id projektu, czyli
- * wybrany wariant (`Project.quote`); kolejne warianty dostaną własne klucze i
- * własny zapis, a wszystko, co liczy pieniądze, dalej czyta `Project.quote`.
+ * Q2 (warianty A/B/C, `quote-variants.ts`): klucz dokumentu to `docId`. Id
+ * projektu = wariant wybrany do rozliczeń (`Project.quote`, zapis jak wyżej);
+ * `projekt#wariant` = pozostały wariant — jego zapis (`writeVariant`) zmienia
+ * tylko jego wpis w `Project.quoteVariants`: bez finansów i bez pytania o
+ * import, bo warianty nie liczą pieniędzy. „Cofnij zmiany z tej sesji" działa
+ * na każdy dokument osobno.
  */
 
 import { DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
@@ -34,6 +37,7 @@ import { blankQuoteSnapshot, planProjectSave } from './project-save'
 import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
 import type { QuoteData } from './quote-types'
+import { findVariant, parseDocId } from './quote-variants'
 
 // ── Dokument ─────────────────────────────────────────────────────────────────
 
@@ -139,6 +143,8 @@ export interface QuoteDocumentStoreOptions {
   /** Domyślny cennik użytkownika dla pustych wycen (`null` = fabryczny). */
   defaultPricing: () => PricingConfigShape | null
   write: (id: string, patch: QuoteDocPatch) => Promise<void>
+  /** Zapis wariantu (niewybranego): tylko jego migawka w `Project.quoteVariants`. */
+  writeVariant?: (projectId: string, variantId: string, snapshot: QuoteSnapshot | null) => Promise<void>
   delayMs?: number
   setTimer?: (fn: () => void, ms: number) => unknown
   clearTimer?: (handle: unknown) => void
@@ -157,6 +163,8 @@ export interface QuoteDocumentStore {
   /** Zapisz teraz (zamiast po opóźnieniu). */
   flush: (id: string) => Promise<void>
   flushAll: () => Promise<void>
+  /** Zapisz teraz wszystkie dokumenty projektu (wybrany i warianty). */
+  flushProject: (projectId: string) => Promise<void>
   /** „Zastąp" — zapis wyceny zamiast finansów z importu. */
   confirmReplace: (id: string) => Promise<void>
   /** „Cofnij zmiany" przy pytaniu o import — porzuca czekające zmiany. */
@@ -165,7 +173,10 @@ export interface QuoteDocumentStore {
   restoreSession: (id: string) => Promise<void>
   /** Projekty z niezapisanymi zmianami (np. czekające na odpowiedź). */
   pendingIds: () => string[]
-  /** Projekt usunięty — porzuć jego dokument. */
+  /**
+   * Porzuć dokument (następny odczyt zbuduje go z projektu od nowa). Samo id
+   * projektu porzuca też dokumenty jego wariantów (projekt usunięty).
+   */
   forget: (id: string) => void
   subscribe: (listener: () => void) => () => void
   /** Numer wersji magazynu — dla `useSyncExternalStore`. */
@@ -197,8 +208,16 @@ interface Entry {
 
 const BLANK_PREFIX = '\u0000blank:'
 
+interface DocSource {
+  project: Project
+  /** `Project.quote` (wybrany) albo migawka wariantu; `null` = pusta wycena. */
+  quote: unknown
+  /** `null` = wybrany wariant (zapis z finansami). */
+  variantId: string | null
+}
+
 /** Źródło dokumentu: zapisana wycena albo pusta wycena danego klienta. */
-function sourceOf(project: Pick<Project, 'quote' | 'client'>): { ref: unknown; key: () => string } {
+function sourceOf(project: { quote: unknown; client: string }): { ref: unknown; key: () => string } {
   if (project.quote) {
     const quote = project.quote
     return { ref: quote, key: () => JSON.stringify(quote) }
@@ -226,17 +245,31 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     listeners.forEach((listener) => listener())
   }
 
-  const derive = (project: Pick<Project, 'quote' | 'client'>) => docFromProject(project, options.defaultPricing())
+  const derive = (source: DocSource) =>
+    docFromSnapshot(source.quote) ?? blankDoc(source.project.client, options.defaultPricing())
 
-  /** Wpis projektu, zsynchronizowany z projektem, gdy nic nie czeka na zapis. */
+  /**
+   * Skąd dokument: wybrany wariant = `Project.quote`, pozostały = jego migawka.
+   * `null` = projektu albo wariantu nie ma.
+   */
+  function sourceFor(id: string): DocSource | null {
+    const { projectId, variantId } = parseDocId(id)
+    const project = options.getProject(projectId)
+    if (!project) return null
+    if (variantId === null) return { project, quote: project.quote, variantId: null }
+    const variant = findVariant(project, variantId)
+    return variant ? { project, quote: variant.snapshot ?? null, variantId } : null
+  }
+
+  /** Wpis dokumentu, zsynchronizowany z projektem, gdy nic nie czeka na zapis. */
   function entryFor(id: string): Entry | null {
-    const project = options.getProject(id)
+    const found = sourceFor(id)
     const entry = entries.get(id)
-    if (!project) return entry ?? null
-    const source = sourceOf(project)
+    if (!found) return entry ?? null
+    const source = sourceOf({ quote: found.quote, client: found.project.client })
     if (!entry) {
       const created: Entry = {
-        doc: derive(project),
+        doc: derive(found),
         sourceRef: source.ref,
         sourceKey: source.key(),
         dirty: false,
@@ -246,7 +279,7 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
         status: 'saved',
         prompt: null,
         epoch: 0,
-        origin: { quote: project.quote, financials: project.financials },
+        origin: { quote: found.quote as Project['quote'], financials: found.project.financials },
         changedThisSession: false,
         savedThisSession: false,
         error: null,
@@ -260,7 +293,7 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     const key = source.key()
     if (key !== entry.sourceKey) {
       // Zmiana z zewnątrz (inny ekran, „Scal osoby", zmiana klienta pustej wyceny).
-      entry.doc = derive(project)
+      entry.doc = derive(found)
       entry.sourceKey = key
       entry.epoch += 1
     }
@@ -323,15 +356,21 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
   }
 
   async function save(id: string, entry: Entry, replaceFinancials: boolean): Promise<void> {
-    const project = options.getProject(id)
-    if (!project) {
-      // Projekt usunięty w międzyczasie — nie ma dokąd zapisać.
+    const found = sourceFor(id)
+    if (!found) {
+      // Projekt (albo wariant) usunięty w międzyczasie — nie ma dokąd zapisać.
       entry.dirty = false
       entry.status = 'saved'
       return
     }
+    const { project, variantId } = found
     const doc = entry.doc
     const snapshot = docToSnapshot(doc, now())
+    if (variantId !== null) {
+      // Wariant nie liczy pieniędzy: sama migawka, bez finansów i bez pytania o import.
+      await persist(id, entry, snapshot, () => writeVariant(project.id, variantId, snapshot))
+      return
+    }
     const plan = planProjectSave({ project, snapshot, replaceFinancials, now: now() })
     if (plan.status === 'needs-confirmation') {
       entry.status = 'needs-confirmation'
@@ -345,15 +384,27 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
       entry.prompt = null
       return
     }
-    entry.status = 'saving'
-    entry.editedDuringSave = false
-    notify()
-    try {
-      await options.write(id, {
+    await persist(id, entry, snapshot, () =>
+      options.write(id, {
         quote: snapshot,
         financials: plan.project.financials,
         client: plan.project.client,
       })
+    )
+  }
+
+  function writeVariant(projectId: string, variantId: string, snapshot: QuoteSnapshot | null): Promise<void> {
+    if (!options.writeVariant) return Promise.reject(new Error('Zapis wariantów niedostępny'))
+    return options.writeVariant(projectId, variantId, snapshot)
+  }
+
+  /** Zapis migawki i stan wpisu po nim (wspólne dla wybranego wariantu i pozostałych). */
+  async function persist(id: string, entry: Entry, snapshot: QuoteSnapshot, run: () => Promise<void>): Promise<void> {
+    entry.status = 'saving'
+    entry.editedDuringSave = false
+    notify()
+    try {
+      await run()
       entry.sourceRef = snapshot
       entry.sourceKey = JSON.stringify(snapshot)
       entry.savedThisSession = true
@@ -398,6 +449,12 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     await Promise.all([...entries.keys()].map((id) => flush(id)))
   }
 
+  const ofProject = (projectId: string) => (id: string) => id === projectId || parseDocId(id).projectId === projectId
+
+  async function flushProject(projectId: string): Promise<void> {
+    await Promise.all([...entries.keys()].filter(ofProject(projectId)).map((id) => flush(id)))
+  }
+
   async function confirmReplace(id: string): Promise<void> {
     const entry = entries.get(id)
     if (!entry || entry.status !== 'needs-confirmation') return
@@ -431,9 +488,11 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     if (!entry) return
     cancelTimer(entry)
     while (entry.saving) await entry.saving
-    if (options.getProject(id)) {
+    const found = sourceFor(id)
+    if (found) {
       try {
-        await options.write(id, { quote: entry.origin.quote, financials: entry.origin.financials })
+        if (found.variantId !== null) await writeVariant(found.project.id, found.variantId, entry.origin.quote)
+        else await options.write(id, { quote: entry.origin.quote, financials: entry.origin.financials })
       } catch (err) {
         entry.status = 'error'
         entry.error = describeError(err)
@@ -452,9 +511,12 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
   }
 
   function forget(id: string) {
-    const entry = entries.get(id)
-    if (entry) cancelTimer(entry)
-    entries.delete(id)
+    const drop = parseDocId(id).variantId === null ? ofProject(id) : (key: string) => key === id
+    for (const [key, entry] of [...entries.entries()]) {
+      if (!drop(key)) continue
+      cancelTimer(entry)
+      entries.delete(key)
+    }
     notify()
   }
 
@@ -464,6 +526,7 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     edit,
     flush,
     flushAll,
+    flushProject,
     confirmReplace,
     discard,
     restoreSession,
