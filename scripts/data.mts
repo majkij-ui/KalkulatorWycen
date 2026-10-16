@@ -62,6 +62,7 @@ import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
 import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
 import { clientGroupSchema } from '../lib/client-groups'
+import { companySchema } from '../lib/company-settings-core'
 import {
   equipmentItemSchema,
   fixedCostSchema,
@@ -85,6 +86,8 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'call-sheets.json': callSheetSchema,
   'subscriptions.json': subscriptionSchema,
   'client-groups.json': clientGroupSchema,
+  // Ustawienia firmy (F1): jeden rekord `id: "company"` — zmiany przez `update`.
+  'company.json': companySchema,
 }
 
 type Item = Record<string, unknown> & { id: string }

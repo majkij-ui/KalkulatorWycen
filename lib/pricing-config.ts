@@ -2,7 +2,12 @@
  * Konfiguracja stawek netto (PLN) dla kalkulatora wyceny wideo.
  * Jedna stawka bazowa na pozycję (poprzedni format tani/standard/agresywny jest migrowany
  * automatycznie – wartość "standard" staje się stawką bazową).
+ *
+ * „Mój domyślny cennik" leży w `company.json` (F1); stary klucz localStorage jest
+ * dalej odświeżany i czytany tylko wtedy, gdy pliku nie wczytano.
  */
+
+import { getLoadedCompany, LEGACY_COMPANY_KEYS, patchLoadedCompany } from './company-settings-core'
 
 /** @deprecated Stary format wielo-tierowy; używany wyłącznie do migracji danych z localStorage/settings.json */
 export interface LegacyTierPrices {
@@ -162,7 +167,7 @@ function migrateSection(
   return result
 }
 
-const USER_DEFAULT_KEY = 'quote-gen-user-default-pricing'
+const USER_DEFAULT_KEY = LEGACY_COMPANY_KEYS.defaultPricing
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
@@ -206,12 +211,24 @@ export const USER_DEFAULT_PRICING_EVENT = 'nonoise-user-default-pricing'
 /** Save the current config as the user's personal default (new quotes and „Wyczyść" start from it). */
 export function saveAsUserDefault(config: PricingConfigShape): void {
   if (typeof window === 'undefined') return
+  patchLoadedCompany({ defaultPricing: deepClone(config) as unknown as Record<string, unknown> })
   try {
     localStorage.setItem(USER_DEFAULT_KEY, JSON.stringify(config))
-    window.dispatchEvent(new Event(USER_DEFAULT_PRICING_EVENT))
   } catch {
     // ignore
   }
+  window.dispatchEvent(new Event(USER_DEFAULT_PRICING_EVENT))
+}
+
+/** Surowy zapisany cennik domyślny: z `company.json`, a bez wczytanego pliku z localStorage. */
+function readSavedDefault(): Record<string, Record<string, unknown>> | null {
+  const company = getLoadedCompany()
+  if (company) {
+    const saved = company.defaultPricing
+    return saved && typeof saved === 'object' ? (saved as Record<string, Record<string, unknown>>) : null
+  }
+  const raw = localStorage.getItem(USER_DEFAULT_KEY)
+  return raw ? (JSON.parse(raw) as Record<string, Record<string, unknown>>) : null
 }
 
 /**
@@ -223,9 +240,8 @@ export function saveAsUserDefault(config: PricingConfigShape): void {
 export function getSavedUserDefault(): PricingConfigShape | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = localStorage.getItem(USER_DEFAULT_KEY)
-    if (!raw) return null
-    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
+    const saved = readSavedDefault()
+    return saved ? migratePricingConfig(saved) : null
   } catch {
     return null
   }
@@ -235,9 +251,8 @@ export function getSavedUserDefault(): PricingConfigShape | null {
 export function getUserDefault(): PricingConfigShape {
   if (typeof window === 'undefined') return deepClone(DEFAULT_PRICING)
   try {
-    const raw = localStorage.getItem(USER_DEFAULT_KEY)
-    if (!raw) return deepClone(DEFAULT_PRICING)
-    return migratePricingConfig(JSON.parse(raw) as Record<string, Record<string, unknown>>)
+    const saved = readSavedDefault()
+    return saved ? migratePricingConfig(saved) : deepClone(DEFAULT_PRICING)
   } catch {
     return deepClone(DEFAULT_PRICING)
   }
