@@ -65,6 +65,13 @@ export const companySchema = z
     /** Zarezerwowane (dziś: ryczałt 8,5 % w `realization-plan.ts`, waluta per wycena). */
     defaultTaxRatePercent: optional(z.number()),
     defaultCurrency: optional(z.string()),
+    /**
+     * S4, decyzja B: zakup sprzętu od tej kwoty (zł netto, cena × sztuki)
+     * rozkładamy na `gearSpreadMonths` miesięcy; brak = 5 000 zł / 36 mies.
+     * Czyta `gearSpreadSettings` (`gear-costs.ts`).
+     */
+    gearSpreadThresholdPln: optional(z.number()),
+    gearSpreadMonths: optional(z.number()),
     /** Skąd przyszły dane przy pierwszym utworzeniu pliku. */
     migratedFromLocalStorage: optional(
       z.object({ at: z.string(), keys: z.array(z.string()) }).passthrough()

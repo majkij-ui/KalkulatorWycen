@@ -124,8 +124,9 @@ test('clientStats: przychód łącznie i w latach, udział (także w roku), zysk
     { year: 2026, revenue: 20_000, jobs: 2, sharePct: 40 },
     { year: 2025, revenue: 10_000, jobs: 1, sharePct: 50 },
   ])
-  assert.equal(s.profit, 10_000)
-  assert.equal(s.marginPct, (10_000 / 30_000) * 100)
+  // Marża na realizacji (S4) = przychód − koszty z planu (tu 0), przed podatkiem — nie `zysk`.
+  assert.equal(s.margin, 30_000)
+  assert.equal(s.marginPct, 100)
   assert.equal(s.missingFinancials, 1)
   assert.equal(s.repeat, true)
   assert.deepEqual(
@@ -407,11 +408,12 @@ test('pętla: przychód klienta = faktury (gdy pełne), rok po dacie faktury, zy
   // Udział w roku liczony z przychodu firmy w tym roku (Inny z faktury: 44 000, nie plan 40 000).
   assert.equal(s.years[0].sharePct, (65_000 / (65_000 + 44_000)) * 100)
   assert.equal(totalRevenue(projects, 2025, m), 8_000)
-  // Zysk = najlepsza wiedza: przychód − podatek − koszty (plan, bo brak kosztów w Realizacji).
-  const expectedProfit = [equal, lower, extraLater, advance, invoicedOnly].reduce((sum, p) => sum + m.get(p.id)!.profit!, 0)
-  assert.equal(s.profit, expectedProfit)
+  // Marża = najlepsza wiedza: przychód − koszty (plan, bo brak kosztów w Realizacji), przed podatkiem.
+  const expectedMargin = [equal, lower, extraLater, advance, invoicedOnly].reduce((sum, p) => sum + m.get(p.id)!.margin!, 0)
+  assert.equal(s.margin, expectedMargin)
+  assert.ok(Math.abs(m.get(lower.id)!.margin! - (18_000 - 6_000)) < 0.001)
   assert.ok(Math.abs(m.get(lower.id)!.profit! - (18_000 - 18_000 * 0.085 - 6_000)) < 0.001)
-  assert.ok(Math.abs(m.get(equal.id)!.profit! - (10_000 - 850)) < 0.001)
+  assert.ok(Math.abs(m.get(equal.id)!.margin! - 10_000) < 0.001)
   // Słupki wielkości: wartości z najlepszej wiedzy.
   assert.deepEqual(
     s.size.points.map((point) => point.value),

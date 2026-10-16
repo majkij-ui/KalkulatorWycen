@@ -272,10 +272,10 @@ export function ClientPage({
           }
         />
         <Tile
-          label="Zysk"
-          value={pln(stats.profit)}
+          label="Marża na realizacji"
+          value={pln(stats.margin)}
           lines={[
-            stats.marginPct === null ? 'brak zleceń' : `marża ${pct(stats.marginPct)}`,
+            stats.marginPct === null ? 'brak zleceń' : `${pct(stats.marginPct)} przychodu · przed podatkiem`,
             jobs === 0
               ? ''
               : stats.invoicedJobs === jobs

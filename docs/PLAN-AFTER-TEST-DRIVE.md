@@ -865,3 +865,123 @@ app runs; no console errors. The Ustawienia card shows the browser wording (no b
 - The backup runs once per start, not periodically; a hub left open for days has only the start-of-session copy.
 - `name`, `contact`, tax rate and currency are reserved in `company.json` without UI (branding session).
 - Notices are per session; a dismissed notice comes back on the next failing start.
+
+## 12. S4 as built
+
+*(2026-10-16, branch `claude/warstwy-marzy-s4-77d607`, on top of `v3/project-hub` `7c8ac53`.)*
+
+M.J. confirmed the rules on 2026-10-16 after a real-data example and the case table below: layer 1 is before
+tax; Klienci shows layer 1 too; the toggle defaults to on and switches every number, including layer 2 per
+project; Rode Wireless GO II is inside the August „Sprzęt" (5,156.73 zł) and Viltrox inside September's
+(970.81 zł); which lens was sold in June stays open.
+
+**One ledger.** `lib/margin-ledger.ts` (pure) is what Finance reads, and what S5 should read:
+`marginSummary(input, period)` and `marginTrend(input, year)`. Input = the money loop (`moneyLedger`), the
+year's fixed costs with subscription charges (`fixedCostsInYear`), the whole gear catalogue (`allItems`), the
+toggle, the gear settings, today and an optional set of project ids (client / group filter,
+`projectIdsInScope` over S2's `scopeKeys`). Output: per-project rows (period revenue, direct costs, layer 1,
+tax, and in a year view share / overhead / layer 2), company costs (tax, ZUS, subscriptions and other fixed
+costs, marketing, gear), totals for the company and for the filter, „wstępnie", the gear breakdown, and the
+untouched `MoneySummary` underneath (payments, coverage, plan). Nothing new is duplicated: revenue, costs and
+tax are the money loop's; fixed costs go through `summarizeFixedCosts`; purchases through Z1's
+`gearPurchases`.
+- `ProjectMoney.margin` (money loop) = best-known revenue − best-known costs, before tax; `ClientMoney`
+  carries it and `ClientStats.profit` became `margin` (the Klienci tile „Marża na realizacji").
+- `moneyLedger(…, defaultTaxRatePercent?)`: a project without a plan takes company.json's
+  `defaultTaxRatePercent` (`companyTaxRate`, else 8.5 %). Nothing sets it today, so no number moves.
+- `lib/gear-costs.ts` (pure): `gearCostLines` (catalogue purchase → `spread` / `full` line with first and
+  last month, monthly amount, retirement, unspread rest), `gearCostInPeriod`, `linkedCost` /
+  `countedAmount` for manual entries that cover a catalogue item, `gearSpreadSettings`.
+
+**Data (additive, no version bump):**
+- Fixed-cost category `gear` („Sprzęt spoza katalogu"), `type` stays `other`, so older builds count it under
+  „Inne".
+- `FixedCost.catalogueItemIds?: string[]` — the catalogue items this manual amount included; the ledger counts
+  `amount − their prices` from the entry and the items from the catalogue. The amount in the file stays what
+  was paid. A bad value drops to `undefined` without touching the record.
+- company.json `gearSpreadThresholdPln?` (default 5,000) and `gearSpreadMonths?` (default 36, no UI). The
+  threshold is edited next to the toggle („od 5 000 zł na 36 mies.").
+- The toggle and the Finance client filter are UI preferences in localStorage
+  (`nonoise-finance-spread-gear`, `nonoise-finance-client`).
+
+**Real-life cases → behaviour** (tests in `margin-ledger.test.ts`, `gear-costs.test.ts`,
+`money-loop-labels.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| Job with Realizacja costs | layer 1 = revenue − Realizacja costs (T6 rules: partial in production keeps the plan) |
+| Job without Realizacja costs | plan costs, tagged „plan"; plan 0 shows „brak kosztów · w planie 0 zł" |
+| Retro import, invoice + financials only | invoice revenue, plan costs |
+| No plan, no invoice | „brak kwoty": no layer 1, share 0 |
+| EUR job | in zł: plan = € × the frozen rate, the invoice (zł) replaces it |
+| Extra sale | revenue, layer 1 and the year share go up; an extra invoiced next year counts there without costs |
+| 6,000 zł gear in May | on: 166.67 zł a month 05.2026–04.2029 (2026: 1,333.33); off: 6,000 in May |
+| Laptop in Zaplecze, 4,500 zł | below the threshold: in full in its month in both views |
+| Threshold | ≥ 5,000 zł, per purchase line (price × quantity); 0 = spread everything |
+| Yearly subscription | in full in its payment month in both views (the toggle is gear only) |
+| Month without jobs | no rows, layer 1 = 0, result = −company costs |
+| Current / open period | „wstępnie": company costs to the end of the period from plan (subscription charges, spread gear) |
+| Client group | its rows and sums; year view: its layer 2 = the sum of its jobs', shares over all jobs; other views: layer 1 only (result tile „dla klienta tylko w widoku roku") |
+| Lost project | not counted anywhere |
+| Retired item | spreading stops after the retirement month; „nierozłożone X zł" is shown, not counted (no sale price yet); the cash view is unchanged |
+| Undated / unpriced item | counted nowhere, listed „bez daty zakupu — uzupełnij" |
+| Manual „Sprzęt" covering a catalogue item | the entry counts the rest, the item counts from the catalogue — total = what was paid |
+| A year without revenue | company costs stay unallocated; result = −costs |
+
+**Finance UI** (Projekty tab): a bar with the client / group filter (same picker as Projekty) and the toggle
+„Rozłóż duże zakupy sprzętu" with the threshold. Tiles: Przychód netto · Marża na realizacji (direct costs,
+% of revenue, vs plan) · Koszty firmy (tax, ZUS, stałe i subskrypcje, marketing, sprzęt in the chosen view;
+with a filter in a year view: the group's share) · Wynik po kosztach firmy (green / red, „wstępnie"). Chart:
+layer 1 bars, company-cost bars, result line. „Plan a rzeczywistość" rows: Przychód · Koszty · Marża na
+realizacji · (year only) Po kosztach firmy with „podatek X · koszty firmy Y (share %)" · Zapłata. New panel
+„Sprzęt w kosztach firmy": the catalogue lines in the period (carried ones first, „z 2024"), manual entries
+with what was subtracted, retired rests, undated items, and the sentence „2026 niesie 28 139 zł z
+rozkładania zakupów sprzed tego okresu (np. RED Komodo X pakiet: 1 583 zł / mies. do 03.2027)". The
+„Koszty stałe i subskrypcje" tab gets the category „Sprzęt spoza katalogu" in its picker.
+
+**Real data (read-only; the hub folder's hashes unchanged by this session).** `real-data-check.mts`, old
+tree `7c8ac53` vs this branch: identical (11 quotes; 2026 revenue 179,538 zł, project profit after tax
+82,822 zł, costs 81,455 zł, fixed costs 51,692 zł). Layers for 2026 with the patch simulated in memory:
+
+| | sprzęt w całości | rozłożony |
+|---|---|---|
+| Marża na realizacji | 98,083 | 98,083 |
+| Koszty firmy (tax 15,261 · ZUS 17,604 · stałe 13,339 · marketing 8,134 · sprzęt) | 66,953 (sprzęt 12,615) | 95,091 (sprzęt 40,754, of which 28,139 carried from 2023–2025) |
+| Wynik po kosztach firmy | **31,131** (= Finance before S4) | **2,992** |
+
+Per job (spread): S-AI 31,960 → −10,645 (44.8 %); JHJ 13,355 → −299; Morris & Lloyd pakiet 9,290 → 710;
+CIONET TribesDay II 6,700 → 2,357. CIONET + DE Group 2026: revenue 23,020, layer 1 19,860, layer 2 7,668
+(spread) / 11,275 (cash); Klienci shows the same 19,860. Without the patch the cash view shows 28,731
+(Rode and Viltrox counted twice). Undated: Amaran Halo 600X, Sony 85mm, Tamron 17-28 (8,540 zł).
+
+**Patch for the main session** — `imports/2026-10-16-s4-gear.json` (dry run against the real folder:
+finances.json 8 changed, 0 new): `category: "gear"` (ifMissing) on the eight 2026 „Sprzęt…" entries;
+`catalogueItemIds` on August (`eq-1791901788868-nvmo4bk`, Rode ×2) and September (`eq-viltrox-6-inch`).
+Amounts and months unchanged. Apply with the hub closed.
+
+**Tests:** 670 (632 before; +38: `gear-costs` 13, `margin-ledger` 23, labels 2; `client-stats` assertions
+moved to `margin`). 40 deliberate mutations across `gear-costs`, `margin-ledger`, `money-loop`,
+`client-money`, `client-stats`, labels, schema and categories: 36 caught at first; the four survivors (first
+month of a period counted as „carried", threshold 0, a linked gear entry subtracted twice, costs of a
+project anchored in another period) got tests — 40 / 40. `tsc` clean.
+
+**Verified on the production export** (`npm run build`, launch config „export") with the real data (patch
+applied in memory) seeded into localStorage, restored byte for byte afterwards: year 2026 tiles and every
+row as above; toggle off → 31,131 zł; filter „CIONET + DE Group" (rows, 13 % of revenue, its share of company
+costs, result); Q3 (no layer-2 column, not „wstępnie") and Q4 („wstępnie", result tile „tylko w widoku
+roku"); threshold edited to 3,000 zł (company record updated; DJI Ronin 3,500 zł starts spreading, +1,167 zł);
+reload keeps the toggle and threshold; Klienci group tile; phone width. Fixed during the check: the threshold
+field now selects its value on focus.
+
+**Desktop-only checks for the main session:** the threshold edit writes `gearSpreadThresholdPln` into
+company.json and survives a restart; after applying the patch, Finance 2026 in the cash view = 31,131 zł.
+
+**Known limits / next:**
+- Sale price for retired gear is not modelled (the rest is only shown); tax depreciation rules are not modelled.
+- A yearly subscription is not spread (cash only); a later toggle could spread it like gear.
+- With a client filter, layer 2 exists only in the year view (decision A); the trend line stays company-wide.
+- The month list for Finance periods still has no „Miesiąc" kind in the picker (the chart shows months).
+- Pre-existing: at 375 px the phone top bar is 29 px wider than the screen on every section (10 icons);
+  Finance itself fits.
+- Open for M.J.: which lens was sold in June 2026 (−577.99 zł entry) — if it is in the catalogue, set its
+  `retiredAt`.

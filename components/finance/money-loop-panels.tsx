@@ -8,7 +8,8 @@
  */
 
 import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react'
-import type { MoneySummary, OpenInvoice, PaymentDays, PeriodProjectMoney } from '@/lib/money-loop'
+import type { MarginSummary, ProjectMargin } from '@/lib/margin-ledger'
+import type { OpenInvoice, PaymentDays } from '@/lib/money-loop'
 import {
   BASIS_LABEL,
   afterDays,
@@ -16,9 +17,10 @@ import {
   days,
   dueText,
   formatDate,
+  marginText,
   paymentText,
   pln,
-  profitText,
+  resultText,
   revenueText,
   shortDate,
   type Basis,
@@ -64,19 +66,24 @@ function Cell({ label, text, className = '' }: { label: string; text: CellText; 
   )
 }
 
-const GRID = 'grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]'
+const GRID4 = 'grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))]'
+/** Widok roku: piąta kolumna „Po kosztach firmy" (warstwa 2 per projekt, decyzja A). */
+const GRID5 = 'grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5 xl:grid-cols-[minmax(0,1.5fr)_repeat(5,minmax(0,1fr))]'
 
 function PlanActualRow({
   row,
   project,
   open,
+  perProject,
   onOpen,
 }: {
-  row: PeriodProjectMoney
+  row: ProjectMargin
   project: Project
   open: OpenInvoice[]
+  perProject: boolean
   onOpen: (id: string) => void
 }) {
+  const GRID = perProject ? GRID5 : GRID4
   const { money } = row
   const partOfWhole = money.revenue !== null && Math.abs(row.revenue - money.revenue) >= 0.5
   return (
@@ -85,7 +92,9 @@ function PlanActualRow({
       onClick={() => onOpen(project.id)}
       className={`group ${GRID} w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/5`}
     >
-      <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:col-span-4 xl:col-span-1">
+      <div
+        className={`col-span-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 ${perProject ? 'sm:col-span-5' : 'sm:col-span-4'} xl:col-span-1`}
+      >
         <span className="flex min-w-0 max-w-full items-center gap-1.5">
           <span className="truncate text-sm text-zinc-200">{project.name || 'Bez nazwy'}</span>
           <ArrowRight className="size-3.5 shrink-0 text-zinc-700 transition-colors group-hover:text-zinc-300" />
@@ -100,7 +109,8 @@ function PlanActualRow({
       </div>
       <Cell label="Przychód" text={revenueText(money)} />
       <Cell label="Koszty" text={costsText(money)} />
-      <Cell label="Zysk" text={profitText(money)} />
+      <Cell label="Marża na realizacji" text={marginText(row)} />
+      {perProject && <Cell label="Po kosztach firmy" text={resultText(row)} />}
       <Cell label="Zapłata" text={paymentText(money, open)} />
     </button>
   )
@@ -113,24 +123,27 @@ export function PlanVsActual({
   pipeline,
   onOpenProject,
 }: {
-  summary: MoneySummary
+  summary: MarginSummary
   projectsById: Map<string, Project>
   openByProject: Map<string, OpenInvoice[]>
   /** Wyceny okresu — pokazywane szaro, poza wynikiem. */
   pipeline: Project[]
   onOpenProject: (id: string) => void
 }) {
-  const rows = summary.projects
-    .filter((row) => projectsById.has(row.money.id))
-    .sort((a, b) => a.money.anchor.localeCompare(b.money.anchor))
+  const rows = summary.projects.filter((row) => projectsById.has(row.money.id))
+  const { perProject } = summary
+  const GRID = perProject ? GRID5 : GRID4
 
   return (
     <section className="mb-6 rounded-xl border border-white/5 bg-zinc-900/40 p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Plan a rzeczywistość</h2>
         <p className="text-[11px] text-zinc-500">
-          Faktury zastępują plan, gdy są; koszty — gdy wpisano je w Realizacji. Data przy projekcie:
-          pierwsza faktura, a bez faktur — data księgowa.
+          Faktury zastępują plan, gdy są; koszty — gdy wpisano je w Realizacji. Marża na realizacji jest przed
+          podatkiem.{' '}
+          {perProject
+            ? 'Po kosztach firmy: minus ryczałt i część kosztów firmy wg udziału w przychodzie roku.'
+            : 'Wynik po kosztach firmy per projekt — w widoku roku.'}
         </p>
       </div>
 
@@ -144,7 +157,8 @@ export function PlanVsActual({
             <span>Projekt</span>
             <span className="text-right">Przychód</span>
             <span className="text-right">Koszty</span>
-            <span className="text-right">Zysk</span>
+            <span className="text-right">Marża na realizacji</span>
+            {perProject && <span className="text-right">Po kosztach firmy</span>}
             <span className="text-right">Zapłata</span>
           </div>
           {rows.map((row) => (
@@ -153,6 +167,7 @@ export function PlanVsActual({
               row={row}
               project={projectsById.get(row.money.id)!}
               open={openByProject.get(row.money.id) ?? []}
+              perProject={perProject}
               onOpen={onOpenProject}
             />
           ))}

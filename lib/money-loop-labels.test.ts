@@ -135,3 +135,45 @@ test('różnica ze znakiem: zaokrąglenie symetryczne, zero to brak różnicy', 
   assert.equal(plain(signedPln(-882.5)), '−883 zł')
   assert.equal(signedPln(0.4), null)
 })
+
+// ── S4: warstwy marży ────────────────────────────────────────────────────────
+
+import { marginText, resultText, sharePct } from './money-loop-labels'
+
+const marginRow = (m: ReturnType<typeof money>, extra: Partial<Parameters<typeof marginText>[0]> = {}) => ({
+  money: m,
+  revenue: m.revenue ?? 0,
+  costs: m.costs ?? 0,
+  margin: m.margin ?? 0,
+  known: m.revenue !== null,
+  anchored: true,
+  ...extra,
+})
+
+test('S4 marża na realizacji: plan, rzeczywistość z Δ do planu, brak kwoty, wartość ujemna', () => {
+  const plan = marginText(marginRow(money({})))
+  assert.equal(plain(plan.value), '8 000 zł')
+  assert.equal(plan.basis, 'plan')
+  assert.equal(plan.note, '80% przychodu')
+
+  const actual = marginText(marginRow(money({ costs: [cost(3_000)] })))
+  assert.equal(plain(actual.value), '7 000 zł')
+  assert.equal(actual.basis, null)
+  assert.equal(plain(actual.note), '70% przychodu · plan 8 000 zł · −1 000 zł')
+
+  const none = marginText(marginRow(money({ financials: undefined })))
+  assert.equal(none.value, 'brak kwoty')
+  assert.equal(none.muted, true)
+
+  const loss = marginText(marginRow(money({ costs: [cost(12_000)] })))
+  assert.equal(loss.warn, true)
+})
+
+test('S4 wynik po kosztach firmy: tylko w roku, z podatkiem i udziałem', () => {
+  assert.equal(resultText({ result: null, overhead: null, share: null, tax: 0, known: true }).note, 'tylko w widoku roku')
+  const text = resultText({ result: 1_962.6, overhead: 23_160, share: 0.448, tax: 6_837.4, known: true })
+  assert.equal(plain(text.value), '1 963 zł')
+  assert.equal(plain(text.note), 'podatek 6 837 zł · koszty firmy 23 160 zł (44,8%)')
+  assert.equal(resultText({ result: -10, overhead: 5, share: 0.1, tax: 1, known: true }).warn, true)
+  assert.equal(sharePct(0.046), '4,6%')
+})

@@ -19,7 +19,7 @@ import type { ProjectMoney } from './money-loop'
 import { toYear, type Project } from './project-types'
 
 /** Tyle z `ProjectMoney`, ile potrzebują Klienci i Projekty. */
-export type ClientMoney = Pick<ProjectMoney, 'revenue' | 'profit' | 'pieces' | 'anchor' | 'revenueBasis'>
+export type ClientMoney = Pick<ProjectMoney, 'revenue' | 'profit' | 'margin' | 'pieces' | 'anchor' | 'revenueBasis'>
 
 /** Pieniądze projektów po id (`moneyLedger` → `Map`). */
 export type MoneyById = ReadonlyMap<string, ClientMoney>
@@ -30,6 +30,7 @@ export function planMoney(project: Pick<Project, 'date' | 'financials'>): Client
   return {
     revenue,
     profit: project.financials ? project.financials.zysk : null,
+    margin: project.financials ? project.financials.sumaNetto - project.financials.koszty : null,
     pieces: revenue === null ? [] : [{ day: project.date, amount: revenue, source: 'plan', paid: false }],
     anchor: project.date,
     revenueBasis: revenue === null ? 'none' : 'plan',
