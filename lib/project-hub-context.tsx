@@ -23,7 +23,8 @@ import {
   upsertProject,
 } from './project-library'
 import { listImportableQuotes } from './legacy-app'
-import { migrateQuotesToProjects, type MigrationResult } from './project-migration'
+import { migrateQuotesToProjects, readSkippedQuoteIds, skipQuoteIds, type MigrationResult } from './project-migration'
+import { pendingQuotes } from './project-migration-core'
 import { backfillMissingFinancials } from './quote-financials'
 import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
@@ -97,7 +98,11 @@ interface ProjectHubValue {
 
   /** Ile starych wycen czeka na przeniesienie (0 = nic do zrobienia). */
   pendingQuoteCount: number
+  /** Te wyceny z nazwami — baner mówi, o które chodzi. */
+  pendingQuoteList: { id: string; name: string; updatedAt: string }[]
   runMigration: () => Promise<MigrationResult>
+  /** „Pomiń": te wyceny nie wracają na baner (np. kopia czegoś, co już jest projektem). */
+  skipPendingQuotes: (ids: string[]) => void
 
   /** Projekty bez policzonych finansów (np. świeżo zmigrowane). */
   missingFinancialsCount: number
@@ -169,7 +174,8 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   }, [])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [pendingQuoteCount, setPendingQuoteCount] = useState(0)
+  const [pendingQuoteList, setPendingQuoteList] = useState<{ id: string; name: string; updatedAt: string }[]>([])
+  const pendingQuoteCount = pendingQuoteList.length
 
   // Pierwsze wczytanie + sprawdzenie, czy są stare wyceny do przeniesienia.
   // Migracji NIE uruchamiamy automatycznie — to ruch na realnych danych
@@ -181,10 +187,14 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       if (cancelled) return
       setProjects(loaded.filter((p) => !p.deletedAt))
       // Usunięte też się liczą: usunięta wycena nie jest „do przeniesienia".
-      const migratedIds = new Set(
-        loaded.map((p) => p.migratedFromQuoteId).filter((id): id is string => !!id)
+      // Kopie zapisane z projektu i pominięte też nie (`pendingQuotes`).
+      setPendingQuoteList(
+        pendingQuotes(quotes, loaded, readSkippedQuoteIds()).map((q) => ({
+          id: q.id,
+          name: q.name,
+          updatedAt: q.updatedAt,
+        }))
       )
-      setPendingQuoteCount(quotes.filter((q) => !migratedIds.has(q.id)).length)
       setIsLoading(false)
     })()
     return () => {
@@ -363,10 +373,15 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     const result = await migrateQuotesToProjects()
     setProjects((await listAllProjects()).filter((p) => !p.deletedAt))
     if (result.status === 'migrated' || result.status === 'skipped-already-done') {
-      setPendingQuoteCount(0)
+      setPendingQuoteList([])
     }
     return result
   }, [setProjects])
+
+  const skipPendingQuotes = useCallback((ids: string[]) => {
+    const skipped = skipQuoteIds(ids)
+    setPendingQuoteList((list) => list.filter((q) => !skipped.has(q.id)))
+  }, [])
 
   /** Projekt bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
   const missingFinancialsCount = useMemo(
@@ -412,7 +427,9 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     removeProject,
     restoreProject,
     pendingQuoteCount,
+    pendingQuoteList,
     runMigration,
+    skipPendingQuotes,
     missingFinancialsCount,
     backfillFinancials,
   }

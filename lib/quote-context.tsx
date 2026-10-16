@@ -129,7 +129,8 @@ interface QuoteContextValue {
   /** Builds the full snapshot of the current state (also used by JSON export). */
   buildQuoteSnapshot: () => QuoteSnapshot
   /** Save current state under a name; overwrites when `id` given. Returns the record id. */
-  saveQuoteToLibrary: (name: string, id?: string) => Promise<string>
+  /** `projectId` = projekt otwarty przy zapisie; kopia z projektu nie wraca na baner migracji. */
+  saveQuoteToLibrary: (name: string, id?: string, projectId?: string) => Promise<string>
   loadQuoteFromLibrary: (id: string) => void
   deleteQuoteFromLibrary: (id: string) => Promise<void>
   /** Detach from the active library quote (start a fresh unsaved draft). */
@@ -558,16 +559,20 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     pdfDraft: getPdfDraftSnapshot(),
   }), [data, pricingConfig, marginMultiplier, getPdfDraftSnapshot])
 
-  const saveQuoteToLibrary = useCallback(async (name: string, id?: string): Promise<string> => {
+  const saveQuoteToLibrary = useCallback(async (name: string, id?: string, projectId?: string): Promise<string> => {
     const trimmed = name.trim() || 'Bez nazwy'
     const now = new Date().toISOString()
     const existing = id ? savedQuotes.find((q) => q.id === id) : undefined
+    const linkedProject = projectId ?? existing?.projectId
     const record: SavedQuoteRecord = {
+      // Nieznane pola wpisu (nowsza wersja) przeżywają nadpisanie.
+      ...existing,
       id: existing?.id ?? createQuoteId(),
       name: trimmed,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       snapshot: buildQuoteSnapshot(),
+      ...(linkedProject ? { projectId: linkedProject } : {}),
     }
     const next = await upsertSavedQuote(record)
     setSavedQuotes(next)

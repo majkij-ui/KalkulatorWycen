@@ -25,6 +25,33 @@ import { toDateKey } from './project-types'
 const BACKUP_PREFIX = 'quotes.backup-'
 const WEB_BACKUP_PREFIX = 'nonoise-quotes-backup-'
 const MIGRATION_FLAG_KEY = 'nonoise-v3-migration-done'
+/**
+ * Wyceny, których użytkownik nie chce przenosić („Pomiń" na banerze). Tylko
+ * wygoda: zgubiona lista = baner wróci, nic się nie stanie z danymi. Plik starej
+ * aplikacji jest tylko do odczytu, więc nie zapisujemy tego przy wycenie.
+ */
+const MIGRATION_SKIPPED_KEY = 'nonoise-migration-skipped-v1'
+
+export function readSkippedQuoteIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = JSON.parse(localStorage.getItem(MIGRATION_SKIPPED_KEY) ?? '[]')
+    return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export function skipQuoteIds(ids: string[]): Set<string> {
+  const next = readSkippedQuoteIds()
+  ids.forEach((id) => next.add(id))
+  try {
+    localStorage.setItem(MIGRATION_SKIPPED_KEY, JSON.stringify([...next]))
+  } catch {
+    // bez zapisu baner wróci przy następnym starcie — dane są nietknięte
+  }
+  return next
+}
 
 export interface MigrationResult {
   status: 'migrated' | 'skipped-empty' | 'skipped-already-done' | 'aborted-no-backup'
@@ -88,7 +115,7 @@ export async function migrateQuotesToProjects(): Promise<MigrationResult> {
 
   // Z usuniętymi: usunięta wycena nie wraca, a zapis całości jej nie gubi.
   const existing = await listAllProjects()
-  const pending = pendingQuotes(quotes, existing)
+  const pending = pendingQuotes(quotes, existing, readSkippedQuoteIds())
 
   if (pending.length === 0) {
     return {

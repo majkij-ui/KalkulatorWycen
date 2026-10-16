@@ -95,6 +95,19 @@ test('migracja jest idempotentna — druga próba nie ma czego przenosić', () =
   assert.equal(secondRun.length, 0, 'ponowne uruchomienie nie duplikuje projektów')
 })
 
+test('kopia zapisana do biblioteki z projektu i wycena pominięta nie wracają na baner', () => {
+  const fromProject = quote({ id: 'q-copy', projectId: 'p-morris' })
+  const skipped = quote({ id: 'q-skip' })
+  const fresh = quote({ id: 'q-new' })
+  assert.deepEqual(
+    pendingQuotes([fromProject, skipped, fresh], [], new Set(['q-skip'])).map((q) => q.id),
+    ['q-new']
+  )
+  // Usunięty projekt z migracji też trzyma swoją wycenę (S-AI, 11.10).
+  const migrated = { ...(quoteToProject(fresh, NOW) as Project), deletedAt: '2026-10-11T06:53:51.574Z' }
+  assert.deepEqual(pendingQuotes([fresh], [migrated]), [])
+})
+
 test('nowa wycena dodana po migracji zostaje wykryta', () => {
   const first = quote({ id: 'q-1' })
   const migrated = [quoteToProject(first, NOW)] as Project[]

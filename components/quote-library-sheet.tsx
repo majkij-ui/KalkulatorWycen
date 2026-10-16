@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useQuote } from '@/lib/quote-context'
+import { useProjectHub } from '@/lib/project-hub-context'
 import { isTauriRuntime } from '@/lib/storage'
 import { FolderOpen, Save, FilePlus2, Trash2, Download, Upload, Check } from 'lucide-react'
 
@@ -39,6 +40,8 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
     loadQuoteSnapshot,
     data,
   } = useQuote()
+  // Kopia do biblioteki pamięta projekt, z którego ją zapisano (baner migracji).
+  const { activeProject } = useProjectHub()
 
   const [newName, setNewName] = useState('')
   const [libraryError, setLibraryError] = useState<string | null>(null)
@@ -66,7 +69,7 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
   const handleSaveAsNew = async () => {
     try {
       setLibraryError(null)
-      const id = await saveQuoteToLibrary(newName.trim() || suggestedName())
+      const id = await saveQuoteToLibrary(newName.trim() || suggestedName(), undefined, activeProject?.id)
       setNewName('')
       flashSaved(id)
     } catch (err) {
@@ -79,7 +82,7 @@ export function QuoteLibrarySheet({ open, onOpenChange }: QuoteLibrarySheetProps
     if (!activeQuoteId) return
     try {
       setLibraryError(null)
-      const id = await saveQuoteToLibrary(activeQuoteName ?? suggestedName(), activeQuoteId)
+      const id = await saveQuoteToLibrary(activeQuoteName ?? suggestedName(), activeQuoteId, activeProject?.id)
       flashSaved(id)
     } catch (err) {
       console.error('Zapis wyceny do biblioteki nie powiódł się:', err)

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Settings, RotateCcw, FolderOpen, Save, Eraser, FileText, PenLine, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuote } from '@/lib/quote-context'
+import { useProjectHub } from '@/lib/project-hub-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
 import { BipolarSlider } from '@/components/ui/bipolar-slider'
 import { SettingsSheet } from '@/components/settings-sheet'
@@ -26,6 +27,8 @@ export function StickyHeader() {
     money,
     sumaNettoPln,
   } = useQuote()
+  // Kopia do „Moje wyceny" pamięta projekt, z którego ją zapisano (baner migracji).
+  const { activeProject } = useProjectHub()
 
   const [sheetOpen, setSheetOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -86,7 +89,7 @@ export function StickyHeader() {
       setLibraryOpen(true)
       return
     }
-    void saveQuoteToLibrary(activeQuoteName ?? 'Bez nazwy', activeQuoteId)
+    void saveQuoteToLibrary(activeQuoteName ?? 'Bez nazwy', activeQuoteId, activeProject?.id)
       .then(() => {
         if (quoteSavedTimerRef.current) clearTimeout(quoteSavedTimerRef.current)
         setQuoteSaved(true)

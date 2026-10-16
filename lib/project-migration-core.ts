@@ -57,13 +57,19 @@ export function quoteToProject(quote: SavedQuoteRecord, now: Date = new Date()):
   }
 }
 
-/** Wyceny jeszcze nieprzeniesione. */
+/**
+ * Wyceny jeszcze nieprzeniesione. `existingProjects` MUSI zawierać usunięte —
+ * usunięty projekt z migracji nie może wskrzesić swojej wyceny. Nie liczą się
+ * też kopie zapisane do biblioteki z otwartego projektu (`projectId`) ani
+ * wyceny pominięte przez użytkownika („Pomiń" na banerze).
+ */
 export function pendingQuotes(
   quotes: SavedQuoteRecord[],
-  existingProjects: Project[]
+  existingProjects: Project[],
+  skippedIds: ReadonlySet<string> = new Set()
 ): SavedQuoteRecord[] {
   const migrated = readMigratedIds(existingProjects)
-  return quotes.filter((q) => !migrated.has(q.id))
+  return quotes.filter((q) => !migrated.has(q.id) && !q.projectId && !skippedIds.has(q.id))
 }
 
 /**

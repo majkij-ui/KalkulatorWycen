@@ -31,6 +31,12 @@ export interface SavedQuoteRecord {
   createdAt: string
   updatedAt: string
   snapshot: QuoteSnapshot
+  /**
+   * Projekt, z którego zapisano tę kopię do „Moje wyceny". Taka wycena już JEST
+   * w projektach, więc baner „Znaleziono … zapisanych wycen" jej nie liczy
+   * (inaczej „Przenieś do projektów" robił z niej duplikat projektu).
+   */
+  projectId?: string
 }
 
 interface QuotesLibraryFile {
