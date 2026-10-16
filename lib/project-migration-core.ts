@@ -61,7 +61,7 @@ export function quoteToProject(quote: SavedQuoteRecord, now: Date = new Date()):
  * Wyceny jeszcze nieprzeniesione. `existingProjects` MUSI zawierać usunięte —
  * usunięty projekt z migracji nie może wskrzesić swojej wyceny. Nie liczą się
  * też kopie zapisane do biblioteki z otwartego projektu (`projectId`) ani
- * wyceny pominięte przez użytkownika („Pomiń" na banerze).
+ * wyceny pominięte przez użytkownika („Pomiń" przy imporcie).
  */
 export function pendingQuotes(
   quotes: SavedQuoteRecord[],
@@ -72,16 +72,3 @@ export function pendingQuotes(
   return quotes.filter((q) => !migrated.has(q.id) && !q.projectId && !skippedIds.has(q.id))
 }
 
-/**
- * Łączy biblioteki wycen z kilku źródeł (stara aplikacja QuoteGen + biblioteka
- * w samym hubie). Ta sama wycena (to samo id) liczy się raz — wygrywa nowsza
- * wersja, żeby ponowny import podchwycił poprawki zrobione w starej aplikacji.
- */
-export function mergeQuoteSources(...sources: SavedQuoteRecord[][]): SavedQuoteRecord[] {
-  const byId = new Map<string, SavedQuoteRecord>()
-  sources.flat().forEach((quote) => {
-    const current = byId.get(quote.id)
-    if (!current || (quote.updatedAt ?? '') > (current.updatedAt ?? '')) byId.set(quote.id, quote)
-  })
-  return [...byId.values()].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-}

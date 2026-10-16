@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * „Ustawienia wyceny" (koło zębate w nagłówku kalkulatora): cennik TEJ wyceny,
+ * moje stawki domyślne, teksty PDF, katalog realizacji i plik JSON wyceny
+ * (eksport / wczytanie do tego projektu). Szablony wycen wycofano w Q1 —
+ * żaden nie był zapisany, a warianty (Q2) zastąpią „start od innej wyceny".
+ */
+
 import { useRef, useState } from 'react'
 import {
   Sheet,
@@ -7,55 +14,100 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useQuote } from '@/lib/quote-context'
+import { useProjectHub } from '@/lib/project-hub-context'
+import { isTauriRuntime } from '@/lib/storage'
 import { SettingsModal } from '@/components/settings-modal'
 import { PdfTextsModal } from '@/components/pdf-texts-modal'
 import { PortfolioCatalogueModal } from '@/components/portfolio-catalogue-modal'
-import { BookmarkPlus, FileText, Film, Trash2, Save, Check } from 'lucide-react'
+import { Download, FileText, Film, Save, Check, Upload } from 'lucide-react'
 
 interface SettingsSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
+function downloadBlob(content: string, fileName: string, mimeType = 'application/json') {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
-  const {
-    templates,
-    saveTemplate,
-    deleteTemplate,
-    loadTemplate,
-    saveAsDefaults,
-  } = useQuote()
+  const { saveAsDefaults, exportSnapshot, importSnapshot } = useQuote()
+  const { activeProject } = useProjectHub()
   const [priceEditorOpen, setPriceEditorOpen] = useState(false)
   const [pdfTextsOpen, setPdfTextsOpen] = useState(false)
   const [portfolioOpen, setPortfolioOpen] = useState(false)
-  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
-  const [saveTemplateName, setSaveTemplateName] = useState('')
   const [defaultsSaved, setDefaultsSaved] = useState(false)
   const defaultsSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const handleSaveTemplate = () => {
-    saveTemplate(saveTemplateName)
-    setSaveTemplateName('')
-    setSaveTemplateOpen(false)
-  }
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [fileMessage, setFileMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   const handleSaveDefaults = () => {
     saveAsDefaults()
     if (defaultsSavedTimerRef.current) clearTimeout(defaultsSavedTimerRef.current)
     setDefaultsSaved(true)
     defaultsSavedTimerRef.current = setTimeout(() => setDefaultsSaved(false), 2000)
+  }
+
+  // ── Plik wyceny (JSON): kopia na dysk / wczytanie do TEGO projektu ──────────
+  const handleExportJson = async () => {
+    setFileMessage(null)
+    const json = JSON.stringify(exportSnapshot(), null, 2)
+    const base = (activeProject?.name.trim() || 'Wycena').replace(/[\\/:*?"<>|]/g, '-')
+    const fileName = `${base}.json`
+
+    if (isTauriRuntime()) {
+      try {
+        const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog')
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+        const chosen = await showSaveDialog({
+          defaultPath: fileName,
+          filters: [{ name: 'Wycena JSON', extensions: ['json'] }],
+        })
+        if (!chosen) return
+        await writeFile(chosen, new TextEncoder().encode(json))
+        setFileMessage({ tone: 'ok', text: 'Zapisano plik wyceny.' })
+      } catch (err) {
+        console.error('Eksport JSON (Tauri) nie powiódł się:', err)
+        setFileMessage({ tone: 'error', text: 'Nie udało się zapisać pliku.' })
+      }
+      return
+    }
+    downloadBlob(json, fileName)
+  }
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setFileMessage(null)
+    const reader = new FileReader()
+    reader.onload = () => {
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(reader.result as string)
+      } catch {
+        parsed = null
+      }
+      if (!importSnapshot(parsed)) {
+        setFileMessage({ tone: 'error', text: `„${file.name}" to nie jest plik wyceny — nic nie zmieniono.` })
+        return
+      }
+      setFileMessage({
+        tone: 'ok',
+        text: `Wczytano „${file.name}". Wycenę sprzed wczytania przywraca „Cofnij zmiany z tej sesji" w nagłówku projektu.`,
+      })
+    }
+    reader.readAsText(file)
   }
 
   return (
@@ -81,6 +133,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
                 onOpenChange(false)
                 setPriceEditorOpen(true)
               }}
+              title="Cennik tej wyceny — zmiana dotyczy tylko otwartego projektu"
             >
               Edytuj stawki (cennik)
             </Button>
@@ -91,7 +144,7 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
                 defaultsSaved ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : ''
               }`}
               onClick={handleSaveDefaults}
-              title="Zapisz obecny cennik jako moje domyślne stawki (przywracane przy twardym resecie)"
+              title="Zapisz cennik tej wyceny jako moje domyślne stawki — od nich startują nowe wyceny i „Wyczyść”"
             >
               {defaultsSaved ? <Check className="size-4 mr-2" /> : <Save className="size-4 mr-2" />}
               {defaultsSaved ? 'Zapisano stawki domyślne' : 'Zapisz stawki jako domyślne'}
@@ -120,97 +173,50 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
               <Film className="size-4 mr-2" />
               Katalog realizacji
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-white/10 bg-zinc-900/40 text-white hover:bg-white/10"
-              onClick={() => setSaveTemplateOpen(true)}
-            >
-              <BookmarkPlus className="size-4 mr-2" />
-              Zapisz obecną wycenę jako szablon
-            </Button>
             <Separator className="bg-white/10" />
 
             <div className="space-y-2">
-              <Label className="text-zinc-400">Szablony wyceny</Label>
-              <div className="rounded-xl border border-white/10 bg-zinc-900/40 divide-y divide-white/5 overflow-hidden">
-                {(templates ?? []).length === 0 ? (
-                  <div className="px-3 py-4 text-center text-sm text-zinc-500">
-                    Brak zapisanych szablonów
-                  </div>
-                ) : (
-                  (templates ?? []).map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-2 p-3 hover:bg-white/5 transition-colors"
-                    >
-                      <button
-                        type="button"
-                        className="flex-1 text-left text-sm text-white truncate min-w-0"
-                        onClick={() => loadTemplate(t.id)}
-                      >
-                        {t.name}
-                      </button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 shrink-0 text-zinc-500 hover:text-red-400 hover:bg-transparent"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteTemplate(t.id)
-                        }}
-                        aria-label="Usuń szablon"
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
+              <Label className="text-zinc-400">Plik wyceny (JSON)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/10 bg-zinc-900/40 text-white hover:bg-white/10"
+                onClick={() => void handleExportJson()}
+              >
+                <Download className="size-4 mr-2" />
+                Eksportuj wycenę do pliku
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/10 bg-zinc-900/40 text-white hover:bg-white/10"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="size-4 mr-2" />
+                Wczytaj wycenę z pliku do tego projektu
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <p className="text-xs text-zinc-500">
+                Wczytany plik zastępuje wycenę tego projektu (dane, cennik, marżę i szkic PDF).
+              </p>
+              {fileMessage && (
+                <p
+                  className={`text-xs ${fileMessage.tone === 'ok' ? 'text-emerald-300/90' : 'text-red-300'}`}
+                  role={fileMessage.tone === 'ok' ? 'status' : 'alert'}
+                >
+                  {fileMessage.text}
+                </p>
+              )}
             </div>
-
           </div>
         </SheetContent>
       </Sheet>
-
-      <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
-        <DialogContent
-          aria-describedby={undefined}
-          className="border-white/10 bg-slate-900/95 text-white backdrop-blur-xl"
-          showCloseButton={true}
-        >
-          <DialogHeader>
-            <DialogTitle className="text-white">Zapisz nowy szablon</DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            <Input
-              placeholder="np. Teledysk 2 dni"
-              value={saveTemplateName}
-              onChange={(e) => setSaveTemplateName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSaveTemplate()}
-              className="border-white/10 bg-zinc-900/40 text-white placeholder:text-zinc-500"
-            />
-          </div>
-          <DialogFooter className="gap-2 border-t border-white/10 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
-              onClick={() => setSaveTemplateOpen(false)}
-            >
-              Anuluj
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSaveTemplate}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Zapisz
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <SettingsModal open={priceEditorOpen} onOpenChange={setPriceEditorOpen} />
       <PdfTextsModal open={pdfTextsOpen} onOpenChange={setPdfTextsOpen} />

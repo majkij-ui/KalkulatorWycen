@@ -5,7 +5,6 @@ import {
   actualFigures,
   compareByCategory,
   crewCostsFromPlan,
-  isPlanUnsaved,
   planFromFinancials,
   planFromQuote,
   planLineCategory,
@@ -89,19 +88,12 @@ test('retro-import bez wyceny: planem jest zaimportowany wynik, stawka ryczałtu
   assert.equal(projectPlan({ quote: null, financials: imported }, building).source, 'quote', 'wycena w budowie')
 })
 
-test('plan liczy się z kalkulatora na żywo, a różnica od zapisu wymaga „Zapisz"', () => {
+test('plan liczy się z dokumentu wyceny na żywo (także przed zapisem)', () => {
   const saved = detailedQuote()
   const project = { quote: saved as never, financials: null }
-  assert.equal(isPlanUnsaved(project, saved), false)
-
   const edited = detailedQuote({ profitTransferAmount: 9999 })
   assert.equal(projectPlan(project, edited).revenue, 9999)
-  assert.equal(isPlanUnsaved(project, edited), true)
-  assert.equal(projectPlan(project, null).revenue, planFromQuote(saved)!.revenue, 'bez kalkulatora — z zapisu')
-
-  const blank = { data: {}, pricingConfig: DEFAULT_PRICING, marginMultiplier: 1 }
-  assert.equal(isPlanUnsaved({ quote: null }, blank), false)
-  assert.equal(isPlanUnsaved({ quote: null }, { ...blank, data: { dniDokumentacji: 1 } }), true)
+  assert.equal(projectPlan(project, null).revenue, planFromQuote(saved)!.revenue, 'bez dokumentu — z zapisu')
 })
 
 test('rzeczywistość: ten sam przychód i ryczałt, własne koszty', () => {

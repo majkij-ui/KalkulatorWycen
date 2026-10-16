@@ -3,7 +3,7 @@
 /**
  * „Plan z wyceny" — dawna zakładka Profit kalkulatora, przeniesiona 1:1
  * (decyzja 5 planu: dane zostają w migawce wyceny, przenosimy tylko ekran).
- * Edytuje wycenę wgraną w kalkulator, więc utrwala ją „Zapisz" w nagłówku.
+ * Edytuje wycenę tego projektu, która zapisuje się sama (Q1).
  */
 
 import { useState } from 'react'
@@ -12,16 +12,7 @@ import type { PlanFigures } from '@/lib/realization-plan'
 import { ProfitTab } from '@/components/tabs/profit'
 import { pln } from '@/components/calendar/calendar-bits'
 
-export function PlanSection({
-  plan,
-  unsaved,
-  defaultOpen,
-}: {
-  plan: PlanFigures
-  /** Plan w kalkulatorze różni się od zapisanego w projekcie. */
-  unsaved: boolean
-  defaultOpen: boolean
-}) {
+export function PlanSection({ plan, defaultOpen }: { plan: PlanFigures; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
@@ -41,11 +32,6 @@ export function PlanSection({
             koszty {pln(plan.costs)} · zysk {pln(plan.profit)}
           </span>
         )}
-        {unsaved && (
-          <span className="rounded-md border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-200">
-            zmieniony — kliknij „Zapisz" u góry
-          </span>
-        )}
         <ChevronDown className={`ml-auto size-4 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -54,8 +40,8 @@ export function PlanSection({
           {plan.source === 'quote' ? (
             <>
               <p className="mb-4 text-xs text-zinc-500">
-                Koszty wyprowadzone z wyceny (stawki bez marży) z Twoimi poprawkami. To część wyceny: zmiany
-                zapisuje „Zapisz" w nagłówku projektu, tak jak zmiany w zakładce Wycena.
+                Koszty wyprowadzone z wyceny (stawki bez marży) z Twoimi poprawkami. To część wyceny i zapisuje się
+                sama, tak jak zmiany w zakładce Wycena.
               </p>
               <ProfitTab />
             </>

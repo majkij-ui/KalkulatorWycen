@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window. Read-only access to the old QuoteGen quote library (plan §5b); writing to its folder is denied. Listing folders is allowed only inside the hub's own data folder (inbox/): fs:default grants read_dir without a path scope.",
+  "description": "Capability for the main window. Read-only access to the old QuoteGen quote library (plan §5b); writing to its folder is denied. Listing folders is allowed only inside the hub's own data folder (inbox/): fs:default grants read_dir without a path scope. core:window:allow-destroy lets the window close after quotes are saved on close (Q1: a close-requested listener holds the close until the save finishes).",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-destroy",
     "fs:default",
     {
       "identifier": "fs:allow-read",

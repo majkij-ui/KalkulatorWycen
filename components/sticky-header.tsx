@@ -2,14 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { Settings, RotateCcw, FolderOpen, Save, Eraser, FileText, PenLine, Check } from 'lucide-react'
+import { Settings, RotateCcw, Eraser, FileText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuote } from '@/lib/quote-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { AnimatedCurrency } from '@/components/animated-currency'
 import { BipolarSlider } from '@/components/ui/bipolar-slider'
 import { SettingsSheet } from '@/components/settings-sheet'
-import { QuoteLibrarySheet } from '@/components/quote-library-sheet'
 import { QuoteCurrencyControl } from '@/components/quote-currency-control'
 import { formatMoney } from '@/lib/quote-currency'
 
@@ -21,29 +20,22 @@ export function StickyHeader() {
     marginMultiplier,
     setMarginMultiplier,
     hardReset,
-    activeQuoteId,
-    activeQuoteName,
-    saveQuoteToLibrary,
     money,
     sumaNettoPln,
   } = useQuote()
-  // Kopia do „Moje wyceny" pamięta projekt, z którego ją zapisano (baner migracji).
+  // Wycena to dokument otwartego projektu — zapisuje się sama (bez „Zapisz").
   const { activeProject } = useProjectHub()
 
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [libraryOpen, setLibraryOpen] = useState(false)
   const [delta, setDelta] = useState<number | null>(null)
   const prevTotalRef = useRef<number | null>(null)
   const prevCurrencyRef = useRef(money.currency)
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Hard-reset: two-click confirmation within 3 s
-  const [hardResetPending, setHardResetPending] = useState(false)
-  const hardResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Save quote: brief success flash
-  const [quoteSaved, setQuoteSaved] = useState(false)
-  const quoteSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Resety zapisują się od razu, więc oba potwierdza się drugim kliknięciem w ciągu 3 s.
+  // „Cofnij zmiany z tej sesji" w nagłówku projektu przywraca wycenę sprzed nich.
+  const [pendingReset, setPendingReset] = useState<'zero' | 'hard' | null>(null)
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Delta animation
   useEffect(() => {
@@ -68,36 +60,17 @@ export function StickyHeader() {
   const displayPercent = Math.round((marginMultiplier - 1) * 100)
   const sign = displayPercent > 0 ? '+' : ''
 
-  // ── Hard Reset ───────────────────────────────────────────────────────────────
-  const handleHardReset = () => {
-    if (!hardResetPending) {
-      setHardResetPending(true)
-      hardResetTimerRef.current = setTimeout(() => setHardResetPending(false), 3000)
-    } else {
-      if (hardResetTimerRef.current) clearTimeout(hardResetTimerRef.current)
-      setHardResetPending(false)
-      hardReset()
-    }
-  }
-
-  // ── Save Quote ───────────────────────────────────────────────────────────────
-  // Zapisuje zmiany w otwartej wycenie jednym kliknięciem. Gdy pracujemy na
-  // niezapisanej kopii roboczej (brak activeQuoteId), otwieramy bibliotekę,
-  // aby nadać nazwę zamiast tworzyć anonimowy wpis.
-  const handleSaveQuote = () => {
-    if (!activeQuoteId) {
-      setLibraryOpen(true)
+  // ── Resety (dwa kliknięcia) ──────────────────────────────────────────────────
+  const handleReset = (kind: 'zero' | 'hard') => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+    if (pendingReset !== kind) {
+      setPendingReset(kind)
+      resetTimerRef.current = setTimeout(() => setPendingReset(null), 3000)
       return
     }
-    void saveQuoteToLibrary(activeQuoteName ?? 'Bez nazwy', activeQuoteId, activeProject?.id)
-      .then(() => {
-        if (quoteSavedTimerRef.current) clearTimeout(quoteSavedTimerRef.current)
-        setQuoteSaved(true)
-        quoteSavedTimerRef.current = setTimeout(() => setQuoteSaved(false), 2000)
-      })
-      .catch((err) => {
-        console.error('Zapis wyceny nie powiódł się:', err)
-      })
+    setPendingReset(null)
+    if (kind === 'hard') hardReset()
+    else resetToZero()
   }
 
   return (
@@ -113,36 +86,16 @@ export function StickyHeader() {
               <span className="text-xl font-bold tracking-tight text-white">NonoiseMedia</span>
               <span className="text-sm text-zinc-400">Kalkulator wycen</span>
 
-              {/* Otwarta wycena — dokument, nad którym pracujesz */}
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={activeQuoteName ?? '__draft__'}
-                  initial={{ opacity: 0, y: -3 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 3 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="mt-1.5"
+              {/* Wycena TEGO projektu — widać, czyj dokument edytujesz, także po przewinięciu */}
+              {activeProject && (
+                <span
+                  title={activeProject.name}
+                  className="mt-1.5 inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-0.5 sm:max-w-[260px]"
                 >
-                  {activeQuoteName ? (
-                    <span
-                      title={activeQuoteName}
-                      className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-0.5 sm:max-w-[260px]"
-                    >
-                      <FileText className="size-3 shrink-0 text-amber-400/80" />
-                      <span className="truncate text-xs font-medium text-amber-100/90">
-                        {activeQuoteName}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/5 px-2.5 py-0.5">
-                      <PenLine className="size-3 shrink-0 text-zinc-500" />
-                      <span className="text-xs font-medium italic text-zinc-500">
-                        Wersja robocza
-                      </span>
-                    </span>
-                  )}
-                </motion.div>
-              </AnimatePresence>
+                  <FileText className="size-3 shrink-0 text-amber-400/80" />
+                  <span className="truncate text-xs font-medium text-amber-100/90">{activeProject.name}</span>
+                </span>
+              )}
             </div>
           </div>
 
@@ -195,53 +148,29 @@ export function StickyHeader() {
 
               {/* Action buttons */}
               <div className="flex items-center gap-1.5">
-                {/* Biblioteka wycen: zapis / wczytywanie nazwanych wycen */}
-                <button
-                  type="button"
-                  onClick={() => setLibraryOpen(true)}
-                  title="Moje wyceny — zapisz i wczytuj wyceny"
-                  aria-label="Moje wyceny"
-                  className="flex h-9 max-w-44 shrink items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  <FolderOpen className="size-4 shrink-0" />
-                  <span className="truncate text-xs font-medium">
-                    {activeQuoteName ?? 'Wyceny'}
-                  </span>
-                </button>
-
-                {/* Divider */}
-                <div className="w-px h-4 bg-white/10" />
-
-                <ActionButton
-                  onClick={handleSaveQuote}
-                  title={
-                    activeQuoteId
-                      ? `Zapisz zmiany w wycenie „${activeQuoteName}”`
-                      : 'Zapisz wycenę — nadaj nazwę w bibliotece'
-                  }
-                  aria-label="Zapisz wycenę"
-                  active={quoteSaved}
-                  activeClass="text-emerald-400 border-emerald-400/40 bg-emerald-400/10"
-                >
-                  {quoteSaved ? <Check className="size-4" /> : <Save className="size-4" />}
-                </ActionButton>
-
-                {/* Divider */}
-                <div className="w-px h-4 bg-white/10" />
-
                 {/* Reset group */}
                 <ActionButton
-                  onClick={resetToZero}
-                  title="Resetuj wycenę do zera (stawki bez zmian)"
-                  aria-label="Resetuj wycenę"
+                  onClick={() => handleReset('zero')}
+                  title={
+                    pendingReset === 'zero'
+                      ? 'Kliknij ponownie, aby wyzerować wycenę tego projektu'
+                      : 'Wyzeruj wycenę tego projektu (stawki bez zmian)'
+                  }
+                  aria-label="Wyzeruj wycenę"
+                  active={pendingReset === 'zero'}
+                  activeClass="text-red-400 border-red-400/40 bg-red-400/10"
                 >
                   <RotateCcw className="size-4" />
                 </ActionButton>
                 <ActionButton
-                  onClick={handleHardReset}
-                  title={hardResetPending ? 'Kliknij ponownie aby potwierdzić twardy reset' : 'Twardy reset — zeruje wycenę i przywraca stawki do domyślnych'}
-                  aria-label="Twardy reset"
-                  active={hardResetPending}
+                  onClick={() => handleReset('hard')}
+                  title={
+                    pendingReset === 'hard'
+                      ? 'Kliknij ponownie, aby wyczyścić wycenę tego projektu'
+                      : 'Wyczyść wycenę tego projektu i przywróć moje domyślne stawki'
+                  }
+                  aria-label="Wyczyść wycenę"
+                  active={pendingReset === 'hard'}
                   activeClass="text-red-400 border-red-400/40 bg-red-400/10"
                 >
                   <Eraser className="size-4" />
@@ -288,7 +217,6 @@ export function StickyHeader() {
       </header>
 
       <SettingsSheet open={sheetOpen} onOpenChange={setSheetOpen} />
-      <QuoteLibrarySheet open={libraryOpen} onOpenChange={setLibraryOpen} />
     </>
   )
 }

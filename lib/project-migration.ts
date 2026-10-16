@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * Migracja: zapisane wyceny (`quotes.json` starej aplikacji + huba) → projekty (`projects.json`).
+ * Import: wyceny starej aplikacji (`quotes.json` QuoteGen) → projekty (`projects.json`).
+ * Od Q1 tylko na żądanie (przycisk w Ustawieniach); biblioteki huba nie czyta.
  *
  * Ten moduł odpowiada wyłącznie za wejście/wyjście; całe mapowanie siedzi w
  * `project-migration-core.ts` i jest pokryte testami.
@@ -17,7 +18,7 @@
 
 import { isTauriRuntime, writeJsonFile } from './storage'
 import type { SavedQuoteRecord } from './quote-library'
-import { listImportableQuotes } from './legacy-app'
+import { listLegacyQuotes } from './legacy-app'
 import { listAllProjects, replaceAllProjects } from './project-library'
 import { pendingQuotes, quoteToProject } from './project-migration-core'
 import { toDateKey } from './project-types'
@@ -26,8 +27,8 @@ const BACKUP_PREFIX = 'quotes.backup-'
 const WEB_BACKUP_PREFIX = 'nonoise-quotes-backup-'
 const MIGRATION_FLAG_KEY = 'nonoise-v3-migration-done'
 /**
- * Wyceny, których użytkownik nie chce przenosić („Pomiń" na banerze). Tylko
- * wygoda: zgubiona lista = baner wróci, nic się nie stanie z danymi. Plik starej
+ * Wyceny, których użytkownik nie chce przenosić („Pomiń" przy imporcie). Tylko
+ * wygoda: zgubiona lista = wycena wróci na listę importu, nic się nie stanie z danymi. Plik starej
  * aplikacji jest tylko do odczytu, więc nie zapisujemy tego przy wycenie.
  */
 const MIGRATION_SKIPPED_KEY = 'nonoise-migration-skipped-v1'
@@ -48,7 +49,7 @@ export function skipQuoteIds(ids: string[]): Set<string> {
   try {
     localStorage.setItem(MIGRATION_SKIPPED_KEY, JSON.stringify([...next]))
   } catch {
-    // bez zapisu baner wróci przy następnym starcie — dane są nietknięte
+    // bez zapisu wycena wróci na listę importu — dane są nietknięte
   }
   return next
 }
@@ -104,11 +105,11 @@ export function isMigrationDone(): boolean {
 }
 
 /**
- * Przenosi wyceny do projektów. Bezpieczna do wywołania przy każdym starcie:
+ * Przenosi wyceny do projektów. Bezpieczna do powtórzenia:
  * już przeniesione wyceny są pomijane, nowe dopisywane.
  */
 export async function migrateQuotesToProjects(): Promise<MigrationResult> {
-  const quotes = await listImportableQuotes()
+  const quotes = await listLegacyQuotes()
   if (quotes.length === 0) {
     return { status: 'skipped-empty', migratedCount: 0, skippedCount: 0, backupLocation: null }
   }

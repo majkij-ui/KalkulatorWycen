@@ -120,7 +120,7 @@ function deepCloneConfig(config: PricingConfigShape): PricingConfigShape {
 }
 
 export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
-  const { pricingConfig, setPricingConfig, resetPricingToDefault, money } = useQuote()
+  const { pricingConfig, setPricingConfig, money } = useQuote()
   const [localConfig, setLocalConfig] = useState<PricingConfigShape>(() => deepCloneConfig(pricingConfig))
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -152,10 +152,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     onOpenChange(false)
   }, [localConfig, setPricingConfig, onOpenChange])
 
+  // Stawki fabryczne w formularzu — do wyceny trafiają dopiero przez „Zapisz" (jak każda zmiana tutaj).
   const reset = useCallback(() => {
     setLocalConfig(deepCloneConfig(DEFAULT_PRICING))
-    resetPricingToDefault()
-  }, [resetPricingToDefault])
+  }, [])
 
   const handleExport = useCallback(() => {
     const dataStr = JSON.stringify(localConfig, null, 2)

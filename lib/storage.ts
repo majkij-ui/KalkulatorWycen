@@ -1,10 +1,6 @@
 import { writeTextFile, readTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { isTauri } from '@tauri-apps/api/core'
 import { appDataDir } from '@tauri-apps/api/path'
-import type { PersistedAppSettings, QuoteData, SavedTemplate } from './quote-types'
-import type { PricingConfigShape } from './pricing-config'
-
-const SETTINGS_FILE = 'settings.json'
 
 export function isTauriRuntime(): boolean {
   return isTauri()
@@ -44,26 +40,4 @@ export async function readJsonFile<T>(
   } catch {
     return null
   }
-}
-
-export function buildPersistedSnapshot(params: {
-  data: QuoteData
-  marginMultiplier: number
-  pricingConfig: PricingConfigShape
-  templates: SavedTemplate[]
-}): PersistedAppSettings {
-  return {
-    data: params.data,
-    marginMultiplier: params.marginMultiplier,
-    pricingConfig: params.pricingConfig,
-    templates: params.templates,
-  }
-}
-
-export async function saveSettings(data: PersistedAppSettings): Promise<void> {
-  await writeJsonFile(SETTINGS_FILE, data)
-}
-
-export async function loadSettings(): Promise<PersistedAppSettings | null> {
-  return readJsonFile<PersistedAppSettings>(SETTINGS_FILE)
 }

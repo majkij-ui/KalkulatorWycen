@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ClipboardList, Clapperboard, Scissors, PlusCircle, FileDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StickyHeader } from '@/components/sticky-header'
-import { CalculatingOverlay } from '@/components/calculating-overlay'
 import { PreprodukcjaTab } from '@/components/tabs/preprodukcja'
 import { ProdukcjaTab } from '@/components/tabs/produkcja'
 import { PostprodukcjaTab } from '@/components/tabs/postprodukcja'
@@ -14,7 +13,9 @@ import { PodgladPdfTab } from '@/components/tabs/podglad-pdf'
 import { useQuote } from '@/lib/quote-context'
 import { currencyUnit } from '@/lib/quote-currency'
 
-const tabs = [
+export type CalculatorTab = 'preprodukcja' | 'produkcja' | 'postprodukcja' | 'dodatkowe' | 'podglad'
+
+const tabs: { value: CalculatorTab; label: string; icon: typeof ClipboardList }[] = [
   { value: 'preprodukcja', label: 'Preprodukcja', icon: ClipboardList },
   { value: 'produkcja', label: 'Produkcja', icon: Clapperboard },
   { value: 'postprodukcja', label: 'Postprodukcja', icon: Scissors },
@@ -22,7 +23,7 @@ const tabs = [
   { value: 'podglad', label: 'Podglad i PDF', icon: FileDown },
 ]
 
-const CATEGORY_TO_TAB: Record<string, string> = {
+const CATEGORY_TO_TAB: Record<string, CalculatorTab> = {
   Preprodukcja: 'preprodukcja',
   Produkcja: 'produkcja',
   Postprodukcja: 'postprodukcja',
@@ -32,15 +33,27 @@ const CATEGORY_TO_TAB: Record<string, string> = {
 /**
  * Widok kalkulatora bez własnego opakowania strony — tło i poświatę dostarcza
  * `AppShell`, dzięki czemu ten sam komponent renderuje się wewnątrz projektu.
+ * Pokazuje wycenę otwartego projektu (jego dokument); zmiany zapisują się same.
+ * `initialTab` / `onTabChange` — projekt pamięta kartę, na której byłeś.
  *
  * Zakładka Profit przeszła do zakładki projektu „Realizacja" jako plan (T5a);
- * jej dane dalej żyją w wycenie, więc „Zapisz" utrwala je jak dotąd.
+ * jej dane dalej żyją w wycenie.
  */
-export function QuoteCalculatorView() {
-  const [activeTab, setActiveTab] = useState('preprodukcja')
-  const { isCalculating, breakdown, money } = useQuote()
+export function QuoteCalculatorView({
+  initialTab,
+  onTabChange,
+}: {
+  initialTab?: CalculatorTab
+  onTabChange?: (tab: CalculatorTab) => void
+} = {}) {
+  const [activeTab, setActiveTabState] = useState<CalculatorTab>(initialTab ?? 'preprodukcja')
+  const setActiveTab = (next: string) => {
+    setActiveTabState(next as CalculatorTab)
+    onTabChange?.(next as CalculatorTab)
+  }
+  const { breakdown, money, docEpoch } = useQuote()
 
-  const phaseNetMap: Record<string, number> = {}
+  const phaseNetMap: Partial<Record<CalculatorTab, number>> = {}
   for (const phase of breakdown) {
     const key = CATEGORY_TO_TAB[phase.category]
     if (key) phaseNetMap[key] = phase.phaseNetto
@@ -80,8 +93,6 @@ export function QuoteCalculatorView() {
           </div>
 
           <div className="relative min-h-[400px]">
-            <CalculatingOverlay isVisible={isCalculating} />
-
             <AnimatePresence mode="wait">
               <motion.div
                 layout
@@ -104,7 +115,8 @@ export function QuoteCalculatorView() {
                   <DodatkoweTab />
                 </TabsContent>
                 <TabsContent value="podglad" className="mt-0">
-                  <PodgladPdfTab />
+                  {/* Wycena podmieniona w całości (import z pliku, zmiana z zewnątrz) — PDF od nowa. */}
+                  <PodgladPdfTab key={docEpoch} />
                 </TabsContent>
               </motion.div>
             </AnimatePresence>

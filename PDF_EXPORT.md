@@ -28,7 +28,15 @@ The user edits the PDF preview in:
 
 - **Tab**: `components/tabs/podglad-pdf.tsx` (`PodgladPdfTab`)
 - Local draft state is `localPdfState` (type `LocalPdfState`)
-- Draft persistence key: `nonoise-pdf-draft` (localStorage)
+- Draft persistence (since Q1, October 2026): the draft is part of the project's quote document — `Project.quote.pdfDraft`
+  (`LocalPdfState` plus the hand-typed „Uwagi” as `uwagiManualText`). Each project has its own draft; it survives tab
+  switches, other projects and a restart. There is no global `nonoise-pdf-draft` key any more (an old one is ignored).
+  - A quote without a draft: the PDF is built from the calculator and follows it; nothing is stored until the first
+    hand edit in the PDF tab.
+  - Hand edits save like any quote change (`setPdfDraft`, `lib/quote-documents.ts`). Automatic fixes of an existing
+    draft (dates, currency reconcile, `followsQuote`) are kept in memory and saved with the next real change, so just
+    looking at the PDF writes nothing.
+  - „Wyczyść edytor” sets the draft back to none (the PDF follows the calculator again).
 
 ### Draft hydration rules (why we changed them)
 
@@ -37,7 +45,7 @@ Historically the draft stored `issueDateIso` and `validUntilIso` and kept restor
 Fix (June 2026):
 - `coerceLocalPdfDraft()` recomputes dates from `new Date()` on every hydration/restore, formatted per active language.
 
-Reference: `HANDOFF.md` and `components/tabs/podglad-pdf.tsx` (`coerceLocalPdfDraft`).
+Reference: `HANDOFF.md` and `lib/pdf-draft.ts` (`coerceLocalPdfDraft`).
 
 ---
 
@@ -148,12 +156,9 @@ download in the browser. No `window.print()` anywhere, no new Tauri permission.
 
 ### Legacy: react-pdf renderer (not used for current export)
 
-There are legacy files using `@react-pdf/renderer`:
-- `components/pdf/quote-pdf-document.tsx`
-- `components/quote-pdf-document.tsx`
-
-They are **not the active export path** anymore.
-They also carry a known TS error (see `HANDOFF.md`) and are treated as legacy/unused.
+There is a legacy file using `@react-pdf/renderer`: `components/quote-pdf-document.tsx`.
+It is **not the active export path** anymore and is unused. (`components/pdf/quote-pdf-document.tsx`, which carried the
+known TS error, was deleted in Q1; `next build` type-checks again.)
 
 ### Plan document: react-to-print first
 
@@ -171,5 +176,6 @@ The Tauri canvas path was added later to work around WKWebView limitations (down
 - **Stale dates**: check `coerceLocalPdfDraft()` recomputes `issueDateIso` / `validUntilIso`.
 - **Wrong currency / „zł" in an EUR PDF**: check `QuoteData.currency` + `exchangeRate` of the quote and the draft's
   `followsQuote` (missing = pre-S3 EUR-on-PDF mode, see "Currency on the PDF").
-- **Saved quote JSON doesn’t restore PDF draft**: ensure the PDF draft snapshot is preserved even when the PDF tab is unmounted (context holds last snapshot; pending snapshot applies on mount).
+- **PDF draft of the wrong project / lost draft**: the draft lives in the project's quote document (`Project.quote.pdfDraft`);
+  the PDF tab reads it on mount and remounts when the document is replaced (`docEpoch`: JSON import, change from outside).
 

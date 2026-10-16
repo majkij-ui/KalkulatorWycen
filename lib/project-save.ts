@@ -1,12 +1,13 @@
 /**
- * Co zapisać po kliknięciu „Zapisz" w pasku projektu — decyzja bez Reacta.
+ * Co zapisać, gdy wycena projektu zapisuje się sama (`quote-documents.ts`) —
+ * decyzja bez Reacta.
  *
- * Projekt bez wyceny (`quote: null`) otwiera się w CZYSTYM kalkulatorze. Taki
+ * Projekt bez wyceny (`quote: null`) otwiera się z PUSTĄ wyceną. Taki
  * projekt może mieć finanse spoza kalkulatora (retro-import z przychodem i
  * kosztami, np. `p-retro2026-…`). Ślepy zapis policzyłby je od nowa z pustej
  * wyceny i po cichu wyzerował prawdziwy przychód w Finansach. Dlatego:
  *
- *   kalkulator nietknięty                   → wycena zostaje `null`, finanse bez zmian
+ *   wycena nietknięta (ani PDF)             → wycena zostaje `null`, finanse bez zmian
  *   wycena zbudowana, projekt bez finansów  → zwykły zapis wyceny + policzone finanse
  *   wycena zbudowana, finanse spoza kalk.   → zapis dopiero po jawnym potwierdzeniu
  *
@@ -21,14 +22,12 @@ import type { PricingConfigShape } from './pricing-config'
 import type { QuoteData } from './quote-types'
 
 /**
- * Migawka, którą `openProject` wgrywa dla projektu bez wyceny: czysty
- * kalkulator z klientem z wątku. Jedna definicja dla otwarcia i dla
- * `isBlankQuoteData`, żeby „nietknięty" znaczyło dokładnie „taki jak po otwarciu".
+ * Pusta wycena projektu bez wyceny: klient z wątku. Jedna definicja dla
+ * dokumentu (`blankDoc`) i dla `isBlankQuoteData`, żeby „nietknięta" znaczyło
+ * dokładnie „taka jak po otwarciu".
  *
- * `pricing` = cennik domyślny użytkownika: nowa wycena startuje od niego, a nie
- * od cennika projektu otwartego wcześniej (wczytanie wyceny podmienia cennik
- * kalkulatora na jej własny). Bez zapisanego domyślnego — klucza nie ma i
- * kalkulator zostaje przy bieżącym cenniku, jak dawniej.
+ * `pricing` = cennik domyślny użytkownika: nowa wycena startuje od niego. Bez
+ * zapisanego domyślnego klucza nie ma, a dokument bierze cennik fabryczny.
  */
 export function blankQuoteSnapshot(
   client: string,
@@ -75,16 +74,6 @@ export function clientAfterSave(project: Pick<Project, 'client'>, snapshot: Pick
   return project.client.trim() ? project.client : (snapshot.data.clientName ?? '').trim()
 }
 
-/**
- * Czy po zmianie klienta w nagłówku można wgrać pustą wycenę z nowym klientem
- * (tak jak przy otwarciu projektu). Tylko gdy nic by nie przepadło: projekt
- * nie ma zapisanej wyceny, w kalkulatorze nic nie zbudowano, a zakładki PDF
- * jeszcze nie otwierano (`pdfDraft` puste — jej teksty żyją tylko w szkicu).
- */
-export function canReprefillBlankQuote(project: Pick<Project, 'quote'>, snapshot: QuoteSnapshot): boolean {
-  return !project.quote && snapshot.pdfDraft == null && isBlankQuoteData(snapshot.data)
-}
-
 export type ProjectSavePlan =
   | {
       status: 'ready'
@@ -101,7 +90,7 @@ export type ProjectSavePlan =
 
 export function planProjectSave(params: {
   project: Project
-  /** Bieżący stan kalkulatora (`buildQuoteSnapshot()`). */
+  /** Bieżący dokument wyceny (`docToSnapshot`). */
   snapshot: QuoteSnapshot
   /** Jawna zgoda na zastąpienie finansów spoza kalkulatora. */
   replaceFinancials?: boolean
@@ -111,7 +100,8 @@ export function planProjectSave(params: {
   const updatedAt = now.toISOString()
   const client = clientAfterSave(project, snapshot)
 
-  if (!project.quote && isBlankQuoteData(snapshot.data)) {
+  // Szkic PDF to też praca: edytowany PDF zakłada wycenę jak każda zmiana.
+  if (!project.quote && isBlankQuoteData(snapshot.data) && snapshot.pdfDraft == null) {
     return { status: 'ready', source: 'kept', project: { ...project, client, updatedAt } }
   }
 

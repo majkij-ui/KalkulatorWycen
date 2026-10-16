@@ -53,89 +53,6 @@ function formatDate(dateKey: string): string {
   return y && m && d ? `${d}.${m}.${y}` : dateKey
 }
 
-/**
- * Baner migracji — pokazywany tylko, gdy są wyceny z bibliotek („Moje wyceny" w
- * hubie i w starej aplikacji), których nie ma w projektach. Mówi, o które
- * chodzi, i pozwala je pominąć: kopia zapisana z projektu przed poprawką z
- * 16.10 (np. „Morris Lloyd - Wisła Październik") nie powinna zostać duplikatem.
- */
-function MigrationBanner() {
-  const { pendingQuoteList, runMigration, skipPendingQuotes } = useProjectHub()
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-
-  const count = pendingQuoteList.length
-  if (count === 0 && !message) return null
-
-  const handleMigrate = async () => {
-    setBusy(true)
-    const result = await runMigration()
-    setBusy(false)
-    if (result.status === 'migrated') {
-      setMessage(
-        `Przeniesiono ${result.migratedCount} ${plural(result.migratedCount, 'wycenę', 'wyceny', 'wycen')}. Kopia zapasowa: ${result.backupLocation}`
-      )
-    } else if (result.status === 'aborted-no-backup') {
-      setMessage('Nie udało się zapisać kopii zapasowej — migracja przerwana, dane nietknięte.')
-    } else {
-      setMessage('Nie było nic do przeniesienia.')
-    }
-  }
-
-  const skipAll = () => {
-    skipPendingQuotes(pendingQuoteList.map((q) => q.id))
-    setMessage(`Pominięto. ${count === 1 ? 'Ta wycena nie wróci' : 'Te wyceny nie wrócą'} na ten baner; zostaje w „Moje wyceny".`)
-  }
-
-  return (
-    <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-      {message ? (
-        <p className="text-sm text-amber-200/90">{message}</p>
-      ) : (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-amber-200">
-              {count === 1
-                ? 'Jedna zapisana wycena nie ma projektu'
-                : `${count} ${plural(count, 'zapisana wycena nie ma', 'zapisane wyceny nie mają', 'zapisanych wycen nie ma')} projektu`}
-            </p>
-            <ul className="mt-1.5 space-y-0.5 text-xs text-amber-100/90">
-              {pendingQuoteList.slice(0, 5).map((q) => (
-                <li key={q.id} className="flex items-center gap-2">
-                  <span className="truncate">„{q.name}"</span>
-                  {q.updatedAt && <span className="shrink-0 text-amber-200/50">{formatDate(q.updatedAt.slice(0, 10))}</span>}
-                  <button
-                    type="button"
-                    onClick={() => skipPendingQuotes([q.id])}
-                    className="shrink-0 rounded px-1 text-amber-200/70 underline-offset-2 outline-none hover:text-amber-100 hover:underline focus-visible:ring-1 focus-visible:ring-amber-200/60"
-                  >
-                    Pomiń
-                  </button>
-                </li>
-              ))}
-              {count > 5 && <li className="text-amber-200/60">…i {count - 5} więcej</li>}
-            </ul>
-            <p className="mt-1.5 text-xs text-amber-200/70">
-              „Przenieś" zrobi z nich nowe projekty (wyceny). Jeśli to kopia z „Moje wyceny" czegoś, co już
-              jest projektem, kliknij „Pomiń". Biblioteka zostaje nietknięta, a przed zapisem powstaje kopia
-              zapasowa.
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <Button variant="outline" onClick={skipAll} disabled={busy} className="border-amber-200/20 bg-transparent">
-              {count === 1 ? 'Pomiń' : 'Pomiń wszystkie'}
-            </Button>
-            <Button onClick={handleMigrate} disabled={busy} className="gap-2">
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              Przenieś do projektów
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function ProjectRow({
   project,
   onOpen,
@@ -378,7 +295,6 @@ export function ProjectList() {
         </p>
       </header>
 
-      <MigrationBanner />
 
       {deleted && <DeletedBanner key={deleted.project.id} deleted={deleted} onClose={() => setDeleted(null)} />}
 

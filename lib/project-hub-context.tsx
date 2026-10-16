@@ -1,46 +1,34 @@
 'use client'
 
 /**
- * Kontekst „Project Hub" — warstwa projektów nad istniejącym kalkulatorem.
+ * Kontekst „Project Hub" — projekty i ich dokumenty wyceny.
  *
- * Siedzi WEWNĄTRZ `QuoteProvider`, bo cała integracja sprowadza się do dwóch
- * mostków do kalkulatora:
- *   otwarcie projektu → `loadQuoteSnapshot(project.quote)`
- *   zapis projektu    → `buildQuoteSnapshot()` + policzone finanse
- *
- * Dzięki temu kalkulator nie wie o istnieniu projektów i nie wymaga zmian.
+ * Od Q1 nie ma jednego kalkulatora, do którego projekt się wgrywa: każdy
+ * projekt ma własny dokument wyceny w magazynie `quoteDocs`
+ * (`quote-documents.ts`), który sam zapisuje go do projektu. Hub zapisuje
+ * czekające zmiany przy przejściu do innego projektu, przy zamknięciu
+ * projektu, gdy okno traci fokus i przed zamknięciem okna. `QuoteProvider`
+ * (pod spodem) daje zakładkom wycenę otwartego projektu.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuote } from './quote-context'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   createProject,
   deleteProject as deleteProjectRecord,
   listAllProjects,
+  listProjects,
   patchProjects,
   replaceAllProjects,
   restoreProject as restoreProjectRecord,
   upsertProject,
 } from './project-library'
-import { listImportableQuotes } from './legacy-app'
-import { migrateQuotesToProjects, readSkippedQuoteIds, skipQuoteIds, type MigrationResult } from './project-migration'
-import { pendingQuotes } from './project-migration-core'
 import { backfillMissingFinancials } from './quote-financials'
 import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
-import { blankQuoteSnapshot, canReprefillBlankQuote, planProjectSave, type ProjectSavePlan } from './project-save'
+import { createQuoteDocumentStore, type QuoteDocState, type QuoteDocumentStore } from './quote-documents'
+import { isTauriRuntime } from './storage'
 import { applyClientChoice, type ClientChoice } from './clients'
 import { parseListPrefs, type ProjectListPrefs } from './project-list'
-
-/**
- * Wynik „Zapisz". `needs-confirmation` — projekt bez wyceny ma finanse spoza
- * kalkulatora (np. retro-import), a zapis wyceny by je zastąpił. Nic nie
- * zapisano; po zgodzie użytkownika ponów z `replaceFinancials: true`.
- */
-export type SaveActiveProjectResult =
-  | { status: 'saved' }
-  | { status: 'no-project' }
-  | Extract<ProjectSavePlan, { status: 'needs-confirmation' }>
 
 interface ProjectHubValue {
   projects: Project[]
@@ -58,13 +46,13 @@ interface ProjectHubValue {
   activeProject: Project | null
   isLoading: boolean
 
-  /** Otwiera projekt w kalkulatorze (wgrywa jego migawkę wyceny). */
+  /** Otwiera projekt (jego wycena to jego własny dokument). Czekające zmiany poprzedniego zapisują się od razu. */
   openProject: (id: string) => Promise<void>
-  /** Wraca do listy bez zapisywania. */
+  /** Wraca do listy; czekające zmiany wyceny zapisują się od razu. */
   closeProject: () => void
   /**
-   * Nowy, PUSTY projekt (bez wyceny), od razu otwarty w czystym kalkulatorze i
-   * z czystym szkicem PDF. Nic nie przechodzi z poprzednio otwartego projektu.
+   * Nowy, PUSTY projekt (bez wyceny), od razu otwarty z pustą wyceną i moim
+   * domyślnym cennikiem. Nic nie przechodzi z poprzednio otwartego projektu.
    */
   createBlankProject: (name: string) => Promise<Project | null>
   /** Zakłada projekt bez wyceny (np. z zapytania w kalendarzu albo leada). Nie otwiera go. */
@@ -75,8 +63,8 @@ interface ProjectHubValue {
     leadSource?: string
     contact?: Project['contact']
   }) => Promise<Project | null>
-  /** Zapisuje stan kalkulatora do otwartego projektu (wraz z finansami). */
-  saveActiveProject: (options?: { replaceFinancials?: boolean }) => Promise<SaveActiveProjectResult>
+  /** Dokumenty wycen projektów — same zapisują się do projektów (`quote-documents.ts`). */
+  quoteDocs: QuoteDocumentStore
   updateActiveProject: (patch: Partial<Project>) => Promise<void>
   /** Zmiana pól dowolnego projektu (nie dotyka wyceny w kalkulatorze). */
   updateProject: (id: string, patch: Partial<Project>) => Promise<void>
@@ -84,8 +72,8 @@ interface ProjectHubValue {
   updateProjects: (patches: { id: string; patch: Partial<Project> }[]) => Promise<void>
   /**
    * Klient otwartego projektu (nagłówek). Kopiuje kontakt z ostatniego projektu
-   * tego klienta, gdy bieżący go nie ma (`clients.ts`), a pustą wycenę wgrywa
-   * na nowo z nowym klientem, jeśli nic by przy tym nie przepadło.
+   * tego klienta, gdy bieżący go nie ma (`clients.ts`). Pusta wycena projektu
+   * bez wyceny bierze klienta z projektu, więc idzie za zmianą sama.
    */
   changeActiveClient: (name: string) => Promise<ClientChoice | null>
   setStatus: (id: string, status: ProjectStatus) => Promise<void>
@@ -95,14 +83,10 @@ interface ProjectHubValue {
    */
   removeProject: (id: string, deletedAt?: string) => Promise<Project | null>
   restoreProject: (id: string) => Promise<void>
-
-  /** Ile starych wycen czeka na przeniesienie (0 = nic do zrobienia). */
-  pendingQuoteCount: number
-  /** Te wyceny z nazwami — baner mówi, o które chodzi. */
-  pendingQuoteList: { id: string; name: string; updatedAt: string }[]
-  runMigration: () => Promise<MigrationResult>
-  /** „Pomiń": te wyceny nie wracają na baner (np. kopia czegoś, co już jest projektem). */
-  skipPendingQuotes: (ids: string[]) => void
+  /** Wczytuje projekty z pliku od nowa (np. po imporcie ze starej aplikacji). */
+  reloadProjects: () => Promise<void>
+  /** Najświeższa lista projektów (także zaraz po zapisie, przed nowym renderem). */
+  latestProjects: () => Project[]
 
   /** Projekty bez policzonych finansów (np. świeżo zmigrowane). */
   missingFinancialsCount: number
@@ -113,6 +97,8 @@ interface ProjectHubValue {
 const ProjectHubContext = createContext<ProjectHubValue | null>(null)
 
 const HIDE_LOST_KEY = 'nonoise-projects-hide-lost'
+/** Zamknięcie okna czeka na zapis wycen najwyżej tyle — potem okno i tak się zamyka. */
+const CLOSE_FLUSH_TIMEOUT_MS = 3000
 const LIST_PREFS_KEY = 'nonoise-projects-list-v1'
 
 function readListPrefs(): ProjectListPrefs {
@@ -133,8 +119,6 @@ function readHideLost(): boolean {
 }
 
 export function ProjectHubProvider({ children }: { children: React.ReactNode }) {
-  const { buildQuoteSnapshot, loadQuoteSnapshot } = useQuote()
-
   const [projects, setProjectsState] = useState<Project[]>([])
   // Najświeższa lista także dla zapisów odpalonych z opóźnieniem (autozapis
   // notatek) — inaczej zapis na starej kopii projektu cofnąłby nowszą zmianę.
@@ -173,33 +157,30 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     }
   }, [])
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
+  const activeIdRef = useRef<string | null>(null)
+  activeIdRef.current = activeProjectId
   const [isLoading, setIsLoading] = useState(true)
-  const [pendingQuoteList, setPendingQuoteList] = useState<{ id: string; name: string; updatedAt: string }[]>([])
-  const pendingQuoteCount = pendingQuoteList.length
 
-  // Pierwsze wczytanie + sprawdzenie, czy są stare wyceny do przeniesienia.
-  // Migracji NIE uruchamiamy automatycznie — to ruch na realnych danych
-  // użytkownika, więc decyzja należy do niego (banner w liście projektów).
+  // Pierwsze wczytanie. Starej aplikacji nie sprawdzamy przy starcie — import
+  // jest przyciskiem w Ustawieniach (decyzja M.J. 2026-10-16).
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [loaded, quotes] = await Promise.all([listAllProjects(), listImportableQuotes()])
+      const loaded = await listAllProjects()
       if (cancelled) return
       setProjects(loaded.filter((p) => !p.deletedAt))
-      // Usunięte też się liczą: usunięta wycena nie jest „do przeniesienia".
-      // Kopie zapisane z projektu i pominięte też nie (`pendingQuotes`).
-      setPendingQuoteList(
-        pendingQuotes(quotes, loaded, readSkippedQuoteIds()).map((q) => ({
-          id: q.id,
-          name: q.name,
-          updatedAt: q.updatedAt,
-        }))
-      )
       setIsLoading(false)
     })()
     return () => {
       cancelled = true
     }
+  }, [setProjects])
+
+  const latestProjects = useCallback(() => projectsRef.current, [])
+
+  const reloadProjects = useCallback(async () => {
+    writeSeqRef.current += 1
+    setProjects(await listProjects())
   }, [setProjects])
 
   /** Zapis jednego projektu: od razu na ekranie, potem do pliku. */
@@ -230,36 +211,91 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [projects, activeProjectId]
   )
 
+  // Dokumenty wycen: zapis idzie łatą na najświeższą wersję projektu, więc nie
+  // cofa zmian zrobionych w międzyczasie w nagłówku, Realizacji czy Notatkach.
+  const patchProjectRef = useRef(patchProject)
+  patchProjectRef.current = patchProject
+  const [quoteDocs] = useState(() =>
+    createQuoteDocumentStore({
+      getProject: (id) => projectsRef.current.find((p) => p.id === id) ?? null,
+      defaultPricing: getSavedUserDefault,
+      write: async (id, patch) => {
+        await patchProjectRef.current(id, patch)
+      },
+    })
+  )
+
+  // Okno traci fokus, chowa się albo zamyka — czekające zmiany idą do pliku od razu.
+  useEffect(() => {
+    const flushAll = () => void quoteDocs.flushAll()
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushAll()
+    }
+    window.addEventListener('blur', flushAll)
+    window.addEventListener('pagehide', flushAll)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    // Desktop: zamknięcie okna czeka na zapis (najwyżej kilka sekund), potem okno się zamyka.
+    let unlisten: (() => void) | null = null
+    let disposed = false
+    if (isTauriRuntime()) {
+      void import('@tauri-apps/api/window')
+        .then(({ getCurrentWindow }) =>
+          getCurrentWindow().onCloseRequested(async () => {
+            await Promise.race([
+              quoteDocs.flushAll().catch(() => undefined),
+              new Promise((resolve) => setTimeout(resolve, CLOSE_FLUSH_TIMEOUT_MS)),
+            ])
+          })
+        )
+        .then((stop) => {
+          if (disposed) stop()
+          else unlisten = stop
+        })
+        .catch((err) => console.error('Zapis wycen przy zamknięciu okna niedostępny:', err))
+    }
+
+    return () => {
+      disposed = true
+      unlisten?.()
+      window.removeEventListener('blur', flushAll)
+      window.removeEventListener('pagehide', flushAll)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [quoteDocs])
+
+  /** Wyjście z projektu: jego czekające zmiany zapisują się od razu, bez czekania na opóźnienie. */
+  const leaveActive = useCallback(() => {
+    const current = activeIdRef.current
+    if (current) void quoteDocs.flush(current)
+  }, [quoteDocs])
+
   const openProject = useCallback(
     async (id: string) => {
-      const project = projects.find((p) => p.id === id)
-      if (!project) return
-      // Projekt bez wyceny: czysty kalkulator z klientem z wątku, żeby
-      // wycena „podjęła wątek" zamiast zostawić dane poprzedniego projektu.
-      loadQuoteSnapshot((project.quote ?? blankQuoteSnapshot(project.client, getSavedUserDefault())) as never)
+      if (!projectsRef.current.some((p) => p.id === id)) return
+      if (activeIdRef.current !== id) leaveActive()
       setActiveProjectId(id)
     },
-    [projects, loadQuoteSnapshot]
+    [leaveActive]
   )
 
   const closeProject = useCallback(() => {
+    leaveActive()
     setActiveProjectId(null)
-  }, [])
+  }, [leaveActive])
 
-  // Dawniej „Nowy projekt" zapisywał BIEŻĄCY stan kalkulatora — a po otwarciu
-  // innego projektu był to tamten projekt (z klientem i szkicem PDF). Teraz
-  // nowy projekt zawsze startuje od zera; wycenę buduje się i zapisuje „Zapisz".
+  // Nowy projekt zawsze startuje od pustej wyceny — nic z poprzednio otwartego.
   const createBlankProject = useCallback(
     async (name: string) => {
       const trimmed = name.trim()
       if (!trimmed) return null
       const project = createProject({ name: trimmed, existing: projectsRef.current })
       setProjects(await upsertProject(project))
-      loadQuoteSnapshot(blankQuoteSnapshot('', getSavedUserDefault()) as never)
+      leaveActive()
       setActiveProjectId(project.id)
       return project
     },
-    [loadQuoteSnapshot, setProjects]
+    [leaveActive, setProjects]
   )
 
   const createProjectWithoutQuote = useCallback<ProjectHubValue['createProjectWithoutQuote']>(
@@ -280,24 +316,6 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [setProjects]
   )
 
-  const saveActiveProject = useCallback(
-    async (options: { replaceFinancials?: boolean } = {}): Promise<SaveActiveProjectResult> => {
-      const project = projectsRef.current.find((p) => p.id === activeProjectId)
-      if (!project) return { status: 'no-project' }
-      // Projekt bez wyceny otwiera się w pustym kalkulatorze — ślepy zapis
-      // wyzerowałby jego finanse z importu. Decyzja i testy: `project-save.ts`.
-      const plan = planProjectSave({
-        project,
-        snapshot: buildQuoteSnapshot(),
-        replaceFinancials: options.replaceFinancials,
-      })
-      if (plan.status === 'needs-confirmation') return plan
-      await writeProject(plan.project)
-      return { status: 'saved' }
-    },
-    [activeProjectId, buildQuoteSnapshot, writeProject]
-  )
-
   const updateActiveProject = useCallback(
     async (patch: Partial<Project>) => {
       if (activeProjectId) await patchProject(activeProjectId, patch)
@@ -311,13 +329,10 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       if (!project) return null
       const choice = applyClientChoice(project, name, projectsRef.current)
       if (!choice) return null
-      // Przed zapisem: decyzja dotyczy kalkulatora z chwili zmiany.
-      const reprefill = canReprefillBlankQuote(project, buildQuoteSnapshot())
       await patchProject(project.id, choice.patch)
-      if (reprefill) loadQuoteSnapshot(blankQuoteSnapshot(choice.patch.client, getSavedUserDefault()) as never)
       return choice
     },
-    [activeProjectId, buildQuoteSnapshot, loadQuoteSnapshot, patchProject]
+    [activeProjectId, patchProject]
   )
 
   const setStatus = useCallback(
@@ -351,14 +366,17 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
 
   const removeProject = useCallback(
     async (id: string, deletedAt: string = new Date().toISOString()) => {
+      // Czekające zmiany wyceny najpierw do pliku — „Cofnij" przywraca projekt z nimi.
+      await quoteDocs.flush(id)
       const project = projectsRef.current.find((p) => p.id === id)
       if (!project) return null
-      if (activeProjectId === id) setActiveProjectId(null)
+      if (activeIdRef.current === id) setActiveProjectId(null)
       writeSeqRef.current += 1
       setProjects(await deleteProjectRecord(id, deletedAt))
+      quoteDocs.forget(id)
       return { ...project, deletedAt }
     },
-    [activeProjectId, setProjects]
+    [quoteDocs, setProjects]
   )
 
   const restoreProject = useCallback(
@@ -368,20 +386,6 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     },
     [setProjects]
   )
-
-  const runMigration = useCallback(async () => {
-    const result = await migrateQuotesToProjects()
-    setProjects((await listAllProjects()).filter((p) => !p.deletedAt))
-    if (result.status === 'migrated' || result.status === 'skipped-already-done') {
-      setPendingQuoteList([])
-    }
-    return result
-  }, [setProjects])
-
-  const skipPendingQuotes = useCallback((ids: string[]) => {
-    const skipped = skipQuoteIds(ids)
-    setPendingQuoteList((list) => list.filter((q) => !skipped.has(q.id)))
-  }, [])
 
   /** Projekt bez wyceny nie ma czego liczyć — nie jest „brakującym" wynikiem. */
   const missingFinancialsCount = useMemo(
@@ -418,7 +422,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     closeProject,
     createBlankProject,
     createProjectWithoutQuote,
-    saveActiveProject,
+    quoteDocs,
     updateActiveProject,
     updateProject,
     updateProjects,
@@ -426,10 +430,8 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     setStatus,
     removeProject,
     restoreProject,
-    pendingQuoteCount,
-    pendingQuoteList,
-    runMigration,
-    skipPendingQuotes,
+    reloadProjects,
+    latestProjects,
     missingFinancialsCount,
     backfillFinancials,
   }
@@ -441,6 +443,13 @@ export function useProjectHub(): ProjectHubValue {
   const ctx = useContext(ProjectHubContext)
   if (!ctx) throw new Error('useProjectHub musi być użyty wewnątrz ProjectHubProvider')
   return ctx
+}
+
+/** Stan zapisu wyceny projektu (nagłówek: „Zapisano", pytanie o import, „Cofnij zmiany z tej sesji"). */
+export function useQuoteDocState(projectId: string | null): QuoteDocState | null {
+  const { quoteDocs } = useProjectHub()
+  useSyncExternalStore(quoteDocs.subscribe, quoteDocs.version, quoteDocs.version)
+  return projectId ? quoteDocs.state(projectId) : null
 }
 
 /** Dzisiejsza data jako `YYYY-MM-DD` — do pól formularza. */
