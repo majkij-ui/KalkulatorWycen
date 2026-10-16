@@ -1,0 +1,28 @@
+{
+  "note": "S2: dwie grupy klientów z notatek M.J. (13.10), zatwierdzone 16.10.",
+  "upsert": {
+    "client-groups.json": [
+      {
+        "id": "cg-cionet-de-group",
+        "name": "CIONET + DE Group",
+        "members": [
+          "cionet",
+          "de group sp. z o.o."
+        ],
+        "createdAt": "2026-10-16T13:00:00.000Z",
+        "updatedAt": "2026-10-16T13:00:00.000Z"
+      },
+      {
+        "id": "cg-phh-phn-interferie",
+        "name": "PHH + PHN + Interferie",
+        "members": [
+          "interferie s.a.",
+          "polski holding hotelowy sp. z o.o.",
+          "phn property management sp. z o.o."
+        ],
+        "createdAt": "2026-10-16T13:00:00.000Z",
+        "updatedAt": "2026-10-16T13:00:00.000Z"
+      }
+    ]
+  }
+}
