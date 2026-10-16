@@ -575,4 +575,133 @@ no console errors besides the missing Vercel analytics script. The hub data fold
 
 ## 8. Q1 as built
 
-*(not built yet — Q1 writes here)*
+*(2026-10-16, branch `claude/quote-as-project-document-c51b97`, on top of `v3/project-hub` `03c6aa0`)*
+
+**Step 0 (own commit).** Deleted `components/pdf/quote-pdf-document.tsx` (the only type error, unused) and
+`components/ui/sidebar.tsx` (unused); `typescript.ignoreBuildErrors: false`. `next build` type-checks again and passes.
+
+**Audit (shown to M.J. first).** The calculator was one global `QuoteProvider` (data, margin, price list, templates, a
+library state, a PDF-draft bridge), autosaved to `settings.json` / `nonoise-app-state-v1`, with the price list in the
+global `quote-gen-pricing-config` (overwritten by every loaded quote) and the PDF draft in the global
+`nonoise-pdf-draft`. `openProject`, `createBlankProject` and `changeActiveClient` replaced that state; the sidebar
+„Projekty" closed the project; „Zapisz" (project header) and „Zapisz wycenę" / „Moje wyceny" (sticky header) saved to
+two different places. Real data (read-only): `settings.json` held exactly the Morris & Lloyd project's quote (nothing
+unsaved lost by dropping it); in the hub's `quotes.json` the S-AI copy equals the S-AI project, but **the Morris Lloyd
+copy is a „wariant 2 dni" PDF** (postprodukcja 5,500 vs 6,600, sprzęt 1,200 vs 600, ekipa „2 dni" vs „1 dzień";
+calculator data identical except the name) — effectively variant B for Q2. All 9 quotes of the old QuoteGen are
+already projects. M.J. has a saved default price list and no templates.
+
+**Decided with M.J. (2026-10-16):** the model below with every case in the table; templates retired; the old-QuoteGen
+import stays as a button in Ustawienia (reads only the old app's file); JSON export and import stay as actions of the
+project's quote.
+
+**Model.** Each project's quote is its own document `{ data, pricingConfig, marginMultiplier, pdfDraft }` stored in
+`Project.quote` (the same QuoteSnapshot v2 shape as before; unknown snapshot fields pass through). An in-memory store
+in the hub (`lib/quote-documents.ts`, pure, injectable timers and writer) holds the documents being edited:
+- `Project.quote` is the source of truth; a document without pending changes always mirrors it (a change from outside,
+  e.g. „Scal osoby", gives a new document and a new `epoch`); pending changes win until saved;
+- saves itself ~0.6 s after the last change, immediately when you open another project, close the project, leave the
+  Projekty section, when the window loses focus / hides, and before the desktop window closes (`onCloseRequested`,
+  waits at most 3 s); each save recomputes `financials` (`planProjectSave`, unchanged rules) and patches only
+  `quote`, `financials`, `client` on the latest project;
+- „silent" changes (automatic PDF-draft fixes) do not trigger a save; they ride along with the next real change;
+- `useQuote()` keeps its surface (minus library, templates, `loadQuoteSnapshot`, `isCalculating`) bound to the open
+  project's document, so the 700-line tabs did not change; without an open project it shows an empty quote with the
+  default price list and ignores edits.
+
+**Data.** No schema change. New only inside the draft: `pdfDraft.uwagiManualText` (the hand-typed „Uwagi", lost on
+leaving the tab before Q1). Nothing writes `settings.json`, `nonoise-app-state-v1`, `nonoise-pdf-draft`,
+`quote-gen-pricing-config` or the hub's `quotes.json` any more; the files and keys stay where they are, untouched.
+`src-tauri/capabilities/default.json` gains `core:window:allow-destroy` (the close listener holds the close until the
+save finishes, then destroys the window).
+
+**Real-life cases, as built** (tests in `quote-documents.test.ts` unless noted):
+
+| Case | Behaviour |
+|---|---|
+| Edit A → Kalendarz → back to A | saved on its own; sidebar „Projekty" from another screen returns to A on the same tab and calculator sub-tab (remembered per project until the app closes); a second click shows the list |
+| Edit A → open B, edit → back to A | A is saved when B opens; each project has its own data, price list, margin and PDF (test „brak przecieków", „A → B → A") |
+| Quit mid-edit → reopen | saved on close / hide / blur; reopens from `projects.json` (test „restart", web path; verified in the export by reloading inside the 0.6 s window) |
+| „Nowy projekt" | empty quote, my saved default price list (factory without one), margin 0 %; nothing written until the first real edit |
+| Lead without a quote | empty quote with the project's client, follows a client change in the header; the first real edit (also a hand edit in the PDF) creates the quote (`project-save.test.ts`) |
+| Retro project with imported financials | the first real edit asks „Ten projekt ma finanse z importu (X zł). Zastąpić je wyceną z kalkulatora (Y zł)?" — „Zastąp" saves; „Cofnij zmiany" drops the edits; until answered the edits stay in memory, nothing is written |
+| EUR quote | currency, rate, NBP day are part of the document; financials in zł as in S3 (golden tests unchanged) |
+| PDF edits | stored in the project's `pdfDraft`; a PDF never edited follows the calculator and stores nothing; viewing writes nothing |
+| Two projects, different price lists | each quote keeps its own; price edits (inline or „Edytuj stawki") change only the open quote; „Zapisz stawki jako domyślne" sets new quotes and „Wyczyść" |
+| ↺ „Wyzeruj" / ⌫ „Wyczyść" | this project only, two clicks; ⌫ also resets the price list to my default; client name, project name and PDF draft stay; „Cofnij zmiany z tej sesji" restores the quote and financials from when the project was first opened this session (two clicks; also undoes accidental edits now that saving is automatic) |
+| Realizacja plan | reads the live document; edits save on their own; the „zmieniony — kliknij Zapisz" chip is gone |
+| Ekipa „Scal osoby" | saves pending quotes first, then patches the latest projects; quotes waiting for the import question are retargeted in memory (and back on „Cofnij") |
+| Old quote | loads through `resolveSnapshot` exactly like `computeSnapshotFinancials`; re-saved it computes identically (test with an old-app v2 snapshot, a snapshot without price list, an EUR quote, an unknown field) |
+| JSON export / import | Ustawienia wyceny: „Eksportuj wycenę do pliku" (same snapshot shape), „Wczytaj wycenę z pliku do tego projektu" (replaces this quote; undo = „Cofnij zmiany z tej sesji"; a non-quote file changes nothing) |
+| Templates | retired (none were saved) |
+| `npm run data` while the hub is closed | no global state overrides it on start; documents come from `projects.json` |
+| Save fails (disk) | header „Wycena niezapisana · Spróbuj ponownie"; edits stay in memory and the next change retries |
+
+**Screens.** Project header: „Zapisz" replaced by „✓ Zapisano / Zapisywanie… / Wycena czeka na decyzję / Wycena
+niezapisana", „Cofnij zmiany z tej sesji" and the import question. Sticky header: „Moje wyceny", „Zapisz wycenę" and
+„Wersja robocza" removed; the pill shows the project's name; both resets need a second click. Projekty: migration banner
+removed. Ustawienia: explanation plus „Stara aplikacja QuoteGen" — „Sprawdź starą aplikację" lists old-app quotes that
+are not projects yet („Pomiń" per quote or all, „Przenieś do projektów", backup first); in the browser the web library
+key stands in for the old app. Price-list dialog: „Przywróć domyślne" only fills the form (applied by its „Zapisz").
+
+**Code.** New: `lib/quote-documents.ts`, `components/settings-section.tsx`. Rewritten: `lib/quote-context.tsx` (inside the
+hub now: `ProjectHubProvider` → `QuoteProvider` → equipment, events, crew, inbox), `lib/project-hub-context.tsx`
+(`quoteDocs`, flushes, `latestProjects`, `reloadProjects`, `useQuoteDocState`), PDF tab (draft from/to the document,
+`docEpoch` remount), project and sticky headers, settings sheet, `quote-library.ts` (types and read-only libraries).
+Deleted: `quote-library-sheet.tsx`, `calculating-overlay.tsx`, `persisted-state.ts`, the settings/template types and
+`storage.ts` settings functions, `getPricingConfig` / `savePricingConfig` / `resetPricingToDefault`,
+`canReprefillBlankQuote`, `isPlanUnsaved`, `mergeQuoteSources`. Pure modules (quote-calc, quote-financials, pdf-draft,
+quote-currency, quote-crew, quote-gear) untouched; golden tests pass unchanged.
+
+**Tests:** 585 (568 before): `quote-documents.test.ts` (18), `project-save.test.ts` +1 (PDF draft counts as work);
+removed with their code: `canReprefillBlankQuote`, `mergeQuoteSources`; the plan test no longer checks „unsaved". 23
+deliberate mutations of the store and save rules, 23 caught (two survived at first — `forget`, a „kept" save left
+dirty — and got assertions).
+
+**Real data (read-only script, `projects.json` hash and mtime unchanged):** all 11 saved quotes loaded and re-saved
+through the store give identical financials (sumaNetto, costs, tax, profit, margin) and equal the stored ones; all 13
+quote-less projects with imported financials ask before anything is written; all 11 quote-less leads get a quote on
+the first real edit.
+
+**Verified** on the production export (`npm run build`, „export" launch config) with seeded localStorage (restored
+afterwards): two quoted projects with different price lists (PLN, margin +10 %; EUR at 4.30), a lead, a retro project,
+and stale old global keys. Checked: A edited → Kalendarz → „Projekty" back on A's tab and sub-tab; PDF edits in A
+(Termin, „Uwagi") not visible in B, back in A after B was edited; reload inside the debounce window kept the edit; a
+restart brings back the PDF and margin; viewing a PDF writes nothing; lead and „Nowy projekt" start with the default
+price list and write nothing; retro question, „Cofnij zmiany", „Zastąp", „Cofnij zmiany z tej sesji" (2,000 zł back);
+„Wyczyść" + undo restores 8,250 zł; a plan edit in Realizacja saves and recomputes financials; the Ustawienia import
+(one skipped, one imported, backup key); old global keys never written; no console errors besides the missing Vercel
+analytics script.
+
+**Desktop-only checks for the main session** (Tauri app, real data):
+1. Close the window (red button / Cmd+W) right after an edit: the window closes (needs `core:window:allow-destroy`) and
+   the edit is in `projects.json` after restart. If the window refuses to close, the permission is missing.
+2. Cmd+Q right after typing (within ~0.6 s): macOS quit may skip the close listener; check whether the last edit
+   survives (blur usually saves first). If not, a Rust `ExitRequested` hook is the follow-up.
+3. Restart persistence on real projects: open Morris & Lloyd, change a PDF text, switch to S-AI, quit, reopen — both
+   as left; Finance and the project list show recomputed numbers.
+4. „Pobierz PDF" from a project's PDF tab: native dialog, file written, content of THAT project (and the draft
+   restored after a restart).
+5. Ustawienia → „Sprawdź starą aplikację" reads `com.michal.quotegen/quotes.json` (expect „Wszystkie wyceny ze starej
+   aplikacji są już projektami."); the hub's own `quotes.json` (S-AI, Morris Lloyd „wariant 2 dni") is not offered.
+6. JSON export (native save dialog) and „Wczytaj wycenę z pliku" in the app window.
+7. Retro project (e.g. „YoPro"): one edit → question → „Cofnij zmiany"; nothing changes in Finance.
+
+**For Q2 (variants A/B/C):**
+- Keep `Project.quote` as the **chosen** variant: every reader (financials, Realizacja plan, money loop, clients,
+  reports, gear and crew stats, `npm run data`) keeps working unchanged. Put the other variants in an additive
+  `Project.quoteVariants?: { id, label, snapshot, createdAt, updatedAt, deletedAt? }[]` and name the chosen one with
+  e.g. `Project.quoteLabel?`; choosing B swaps snapshots and recomputes `financials` (variants never count money).
+- The store is keyed by a document id (today the project id = the chosen variant). Give each variant its own key
+  (e.g. `${projectId}#${variantId}`) and a writer that patches only `quoteVariants[i]` (no financials); the chosen
+  variant keeps today's writer. `origin` / „Cofnij zmiany z tej sesji" is per document.
+- `pdfDraft` lives in each variant's snapshot (each variant prints its own PDF). The Morris Lloyd „wariant 2 dni"
+  copy in the hub's `quotes.json` can become variant B of „Morris & Lloyd — rolki, październik (Wisła)" with a
+  one-off `npm run data` patch.
+- The PDF tab remounts on `docEpoch`; switching variant should bump it (or key the calculator by document id).
+
+**Known limits / next:**
+- A retro edit waiting for the import question lives only in memory: quitting before answering loses it (by design:
+  nothing replaces imported financials without a yes).
+- „Cofnij zmiany z tej sesji" goes back to the first open in this app session, not to an arbitrary earlier version.
+- `components/quote-pdf-document.tsx` (react-pdf, unused, no type error) is still in the tree.
