@@ -713,6 +713,123 @@ analytics script.
 - „Cofnij zmiany z tej sesji" goes back to the first open in this app session, not to an arbitrary earlier version.
 - `components/quote-pdf-document.tsx` (react-pdf, unused, no type error) is still in the tree.
 
+## 9. Q2 as built
+
+*(2026-10-16, branch `claude/quote-variants-abc-d13a9b`, on top of `v3/project-hub` `b469106`)*
+
+**Why:** M.J. often sends a client 2–3 versions of an offer (a cheap one, an expensive anchor, a middle option) and
+rebuilt the quote and PDF each time. Now each project has variants A, B, C…, each a full quote with its own price
+list, margin, currency and PDF.
+
+**Decided with M.J. (2026-10-16):** the model and every case in the table below; one combined PDF with all variants
+side by side comes **later**; Morris & Lloyd's variants are named **A** (today's quote) and **B** („wariant 2 dni").
+M.J. also wants the PDF total to become the final number that counts (financials, Realizacja profit, Finance), with
+a warning that the calculator is out of date. That is a money rule of its own and goes to a **separate session**
+after Q2 (proposal below under „Next").
+
+**Data (additive, passthrough, no version bump).**
+- `Project.quote` stays the variant **chosen for money**. Every reader is unchanged: financials, Realizacja plan,
+  money loop, Finance, clients, gear and crew stats, `npm run data`.
+- `Project.quoteVariants?: { id, label, snapshot, createdAt, updatedAt, deletedAt? }[]` holds the other variants
+  (`lenientArray` + passthrough; a broken snapshot reads as an empty quote instead of dropping the variant). Variants
+  never count money.
+- `Project.quoteLabel?` names the chosen variant (empty = „A"); `Project.quoteVariantId?` is its permanent id (empty =
+  `main`), so a variant keeps its identity when it is swapped in and out.
+- Pure rules in `lib/quote-variants.ts`: list / add / rename / delete / restore, `chooseVariantPlan` (swap and
+  financials), `asksWhichVariant`, `variantFigures` (comparison), `quoteSentEvent`, crew retargeting for „Scal osoby".
+
+**Store.** `quote-documents.ts` keys documents by id: the project id is the chosen variant (Q1 writer, financials,
+import question); `projectId#variantId` is another variant, whose writer (`writeVariant`) patches only its own
+`quoteVariants` entry on the latest project — no financials, no import question. New: `flushProject(projectId)`;
+`forget(projectId)` also drops that project's variant documents, `forget('p#v')` only that one. „Cofnij zmiany z tej
+sesji" works per document. `QuoteDocScope` (in `quote-context.tsx`) binds the calculator to the viewed variant's
+document; `QuoteProvider` itself still serves the chosen variant, so Realizacja and Ekipa never read a variant you are
+only looking at.
+
+**Real-life cases, as built** (tests in `quote-variants.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| Old project, no variants | Looks as today; the only addition is a small „+ Wariant" above the calculator tabs. File name, data, Realizacja unchanged; the schema adds no fields. |
+| „+ Wariant" | „Kopia wariantu X" (full copy of the viewed variant incl. price list, margin, currency, PDF and unsaved edits) or „Pusta wycena" (my default price list). Next free letter (deleted ones count, so „Cofnij" never gives two „B"); opens at once and is written immediately. The first time, the chosen one is named „A". |
+| Create B from A, edit B | Only B's entry is written; A, its PDF and financials untouched; a third variant untouched too (test „no leak"). |
+| Switch A ↔ B | Pills „A · ✓B · C" (✓ = chosen); the calculator sub-tab stays; the PDF tab remounts per document (`key = docId:epoch`). The viewed variant is remembered per project until the app closes; after a restart the project opens on the chosen one. |
+| Header | „Zapisano" / „Cofnij zmiany z tej sesji (wariant B)" talk about the viewed variant on the Wycena tab, about the chosen one elsewhere. |
+| Rename | Double-click the pill or „Zmień nazwę" (free text; the field selects the old name). |
+| Delete B | Soft delete (`deletedAt`), „Usunięto wariant B · Cofnij". With only the chosen one left the screen looks as today. |
+| Delete the chosen one | Not allowed: „Najpierw wybierz inny wariant do rozliczeń" (also guarded in the pure rule). |
+| Choose B, project in „Wycena" / „Nieprzyjęta" | Immediately: B → `quote`, A → variants (in B's place), financials recomputed from B; notice with „Cofnij" (chooses A back, financials equal to the cent). |
+| Choose B, project „W realizacji" / „Zrealizowany" | Asks first: „Rozliczać wariant B? Finanse projektu: 11 725 zł → Y zł." |
+| Status set to „W realizacji" / „Zrealizowany" with 2+ variants | From the header or the calendar's status suggestion (`requestStatus`): dialog „Który wariant przyjął klient?" with each variant's netto and PDF netto; the answer chooses that variant and sets the status; „Anuluj" changes nothing. Moving won → done does not ask again. |
+| Retro project with imported financials | Editing A still asks the Q1 question; creating or editing B never asks (counts nothing). Choosing B asks „Ten projekt ma finanse z importu (X zł). Zastąpić je wariantem B (Y zł)?". Choosing is refused while A's edits wait for the import answer (they live only in memory and a swap would lose them). |
+| EUR in one variant | Each variant has its own currency and rate; comparison shows netto in its currency plus „≈ w złotych"; choosing an EUR variant gives financials in zł (S3 rules, unchanged). |
+| „Porównaj warianty" | Calculator netto, PDF netto (when hand-edited), shooting days, crew person-days, gear in the price (detailed mode), plan profit and margin. Live from the documents (unsaved edits included), never stored. |
+| PDF per variant | Each variant's own `pdfDraft`; with 2+ variants the file name ends in „ (wariant B)". |
+| „Wycena wysłana" | After „Pobierz PDF" (Tauri: after the file is written; web: after the print dialog) the PDF tab offers „Zapisz »Wycena wysłana« na osi projektu (wariant B · 13 500 zł netto)". Saving creates `quote_sent` with `amountNetto` = PDF total in zł (EUR × the draft's rate) and `data.quoteVersion` = the label (omitted for single-quote projects). Never automatic. |
+| „Scal osoby" | Also retargets crew lines in variant snapshots (incl. deleted variants), in the same write; „Cofnij" restores only lines still pointing at the kept person. |
+| Project deleted | Its variant documents are dropped from memory with it. |
+| Restart | Variants, labels, PDFs and EUR come back from `projects.json` (test through the web storage path). |
+
+**Real data (read-only).** In the hub's `quotes.json`, „Morris Lloyd - Wisła Październik" has exactly the same
+calculator data as „Morris & Lloyd — rolki, październik (Wisła)" (11,725 zł); only the hand-edited PDF differs
+(sprzęt 1,200 vs 600, postprodukcja 5,500 vs 6,600; PDF 13,500 vs 14,000). One-off patch
+`imports/2026-10-16-q2-morris-variant.json` (`update … ifMissing`): adds it as variant „B" (id `qv-morris-wisla-2dni`,
+original timestamps, `migratedFromQuoteId`) and names the current quote „A". Dry-run against the real folder: „1
+zmienione"; `projects.json` hash and mtime unchanged, no backup written. Applied to a scratch copy: the other 35
+projects byte-identical, Morris gains only `quoteVariants` + `quoteLabel`, the variant re-saves through the store
+unchanged, a second run is „bez zmian". **The main session applies it** (hub closed):
+`npm run data -- apply imports/2026-10-16-q2-morris-variant.json`.
+
+**Code.** New: `lib/quote-variants.ts`, `components/projects/quote-variants-bar.tsx` (bar, comparison),
+`components/projects/variant-status-question.tsx`. Changed: `project-types.ts` (schema), `quote-documents.ts`
+(variant documents, `flushProject`, `forget`), `project-hub-context.tsx` (`writeVariant`, `addVariant`,
+`renameVariant`, `deleteVariant`, `restoreVariant`, `chooseVariant`, `requestStatus` / `statusQuestion`; leaving a
+project flushes all its documents), `quote-context.tsx` (`QuoteDocScope`, `docId`, `variantLabel`),
+`quote-calculator.tsx`, `app-shell.tsx`, `project-header.tsx`, `event-notice.tsx`, `podglad-pdf.tsx`,
+`crew-section.tsx`. Pure modules (quote-calc, quote-financials, pdf-draft, quote-currency, quote-crew, quote-gear)
+untouched; golden tests pass unchanged. Finance, equipment files and settings / backups untouched.
+
+**Tests:** 605 (585 before): `quote-variants.test.ts` (20): rules, schema round trip, crew merge, store (no leak
+between variants, import question only for the chosen one, choose with pending edits in both, choose blocked by a
+pending import answer, per-document undo, forget, `flushProject`), restart. 27 deliberate mutations of the store and
+the rules, 27 caught (three survived at first — deleting the chosen variant on inconsistent data, „Cofnij" of a merge
+after a later edit, a variant save touching its siblings — and got assertions).
+
+**Verified** on the production export (`npm run build`, „export" launch config) with seeded localStorage (the real
+Morris project with the patch applied, a quote with an EUR variant, a retro project, an old project; restored
+afterwards to the single key it had): status → „W realizacji" asked „Który wariant przyjął klient?" (A 11,725 / PDF
+14,000, B 11,725 / PDF 13,500) and choosing B swapped the quotes; A ↔ B with the PDF tab open showed each variant's own
+PDF; „Pobierz PDF" (print stubbed) named the file „… (wariant A)" and wrote nothing; „Wycena wysłana" saved
+`{ amountNetto: 14000, quoteVersion: "A" }`; an edit in A left B and the financials alone; choosing A asked
+„11 725 zł → 12 325 zł", „Cofnij" restored 11,725; „+ Wariant" copy, rename, delete + „Cofnij"; reload kept everything
+and opened on the chosen one; Realizacja showed the chosen 11,725 while another variant was viewed; EUR variant chosen
+without a question in a „Wycena" project (financials 7,852 zł); old project shows only „+ Wariant"; retro project:
+blank B kept 2,000 zł, choosing asked the import question, „Anuluj" changed nothing; phone width wraps. No console
+errors besides the missing Vercel analytics script.
+
+**Desktop-only checks for the main session** (Tauri app, real data, after applying the patch):
+1. Morris & Lloyd → Wycena: pills „✓A · B"; B's PDF says „wariant 2 dni", 13,500 zł; A's says „wariant C", 14,000 zł.
+2. „Pobierz PDF" on B: the native dialog proposes „… (wariant B).pdf"; after saving, the „Wycena wysłana" offer
+   appears; „Zapisz" puts it on the timeline with version B.
+3. Edit B, close the window right away (red button): after restart B has the edit, A and Finance unchanged.
+4. Morris is „W realizacji": „Wybierz do rozliczeń" on B asks with amounts; „Cofnij" returns to A (Finance back to
+   11,725).
+5. A project in „Wycena" with variants → calendar event „Zlecenie potwierdzone" → „Ustaw" opens the variant question.
+6. Ekipa „Scal osoby" on someone used in a variant: the variant's crew line follows; „Cofnij" restores it.
+
+**Known limits / next:**
+- **Next session — „PDF total is the final price"** (asked by M.J.): proposed precedence hand-typed „Kwota przelewu"
+  > PDF total (hand-edited prices) > calculator, reusing `profitTransferAmount` plus a `profitTransferFromPdf` marker
+  so hand-typed transfers on done projects (S-AI 80,440 vs PDF 67,800; JHJ 25,780 vs 21,800; M&L Broker 16,200 vs
+  13,180) are never overwritten; a sticky-header warning when the calculator disagrees; existing projects only via a
+  button (Morris 11,725 → 14,000, UAM 8,238 → 8,630). Needs its own case table and M.J.'s confirmation.
+- One PDF with all variants side by side: later (M.J.).
+- Choosing a variant starts a fresh „Cofnij zmiany z tej sesji" point for the project's documents (all are saved
+  first); the swap itself is undone with its own „Cofnij".
+- The variant shown in Wycena is remembered only until the app closes.
+- `quote_sent` amounts for EUR use the PDF draft's rate at the moment of saving.
+- Gear and crew statistics read only the chosen variant (by design: variants never count).
+
 ## 10. Z1 as built *(2026-10-16, branch `claude/z1-zaplecze-equipment-fed32c`)*
 
 „Zaplecze i drobiazgi" (§3.5): gear that never goes on set (laptop, magic arm, SD cards, cables) is tracked as a

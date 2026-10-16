@@ -32,6 +32,10 @@ import { buildQuoteBreakdown, computeQuoteTotals, quoteViews } from '@/lib/quote
 import { formatMoney, formatRate, switchQuoteCurrency } from '@/lib/quote-currency'
 import type { TermsMoney } from '@/lib/pdf-texts-config'
 import { QuoteCurrencyControl } from '@/components/quote-currency-control'
+import { useEvents } from '@/lib/events-context'
+import { createEventId } from '@/lib/event-types'
+import { toDateKey } from '@/lib/project-types'
+import { pdfVariantSuffix, quoteSentEvent } from '@/lib/quote-variants'
 
 const container = {
   hidden: { opacity: 0 },
@@ -176,7 +180,10 @@ export function PodgladPdfTab() {
     pdfDraft,
     setPdfDraft,
     syncFieldsSilently,
+    projectId,
+    variantLabel,
   } = useQuote()
+  const { save: saveEvent } = useEvents()
 
   const issueDate = useMemo(() => new Date(), [])
   const validUntilDate = useMemo(() => addDays(issueDate, 30), [issueDate])
@@ -487,7 +494,27 @@ export function PodgladPdfTab() {
   const getDynamicDocumentTitle = (): string => {
     const client = localPdfState.clientName?.trim() ? localPdfState.clientName.trim() : 'Klienta'
     const project = localPdfState.projectName?.trim() ? localPdfState.projectName.trim() : 'Projektu'
-    return `Wycena Wideo | NonoiseMedia dla ${client} | ${project}`
+    // Projekt z kilkoma wariantami: każdy plik mówi, który to wariant.
+    return `Wycena Wideo | NonoiseMedia dla ${client} | ${project}${pdfVariantSuffix(variantLabel)}`
+  }
+
+  // „Wycena wysłana" proponowana po pobraniu PDF (Q2) — nigdy zapisywana sama.
+  const [sentOffer, setSentOffer] = useState<'offer' | 'saved' | null>(null)
+  const saveQuoteSent = async () => {
+    if (!projectId) return
+    await saveEvent(
+      quoteSentEvent({
+        id: createEventId(),
+        projectId,
+        date: toDateKey(new Date()),
+        pdfNetto: totalNetto,
+        pdfCurrency: localPdfState.currency,
+        pdfRate: localPdfState.exchangeRate,
+        variantLabel,
+        now: new Date(),
+      })
+    )
+    setSentOffer('saved')
   }
 
   const handleTauriExport = async () => {
@@ -584,6 +611,7 @@ export function PodgladPdfTab() {
         return
       }
       await writeFile(chosen, bytes)
+      setSentOffer('offer')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('Tauri PDF export failed:', err)
@@ -604,6 +632,7 @@ export function PodgladPdfTab() {
       document.title = getDynamicDocumentTitle()
     },
     onAfterPrint: () => {
+      setSentOffer('offer')
       if (typeof document === 'undefined') return
       if (originalDocumentTitleRef.current !== null) {
         document.title = originalDocumentTitleRef.current
@@ -1028,6 +1057,39 @@ export function PodgladPdfTab() {
               Wyczyść edytor
             </Button>
           </div>
+
+          {sentOffer && projectId && (
+            <div
+              className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300"
+              role="status"
+            >
+              {sentOffer === 'saved' ? (
+                <span className="min-w-0 flex-1 text-emerald-300/90">Zapisano „Wycena wysłana" na osi projektu.</span>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1">
+                    Wysłana do klienta? Zapisz „Wycena wysłana" na osi projektu (
+                    {variantLabel ? `wariant ${variantLabel} · ` : ''}
+                    {formatMoney(totalNetto, localPdfState.currency, { decimals: 0 })} netto).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void saveQuoteSent()}
+                    className="font-semibold text-primary outline-none hover:underline focus-visible:underline"
+                  >
+                    Zapisz
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setSentOffer(null)}
+                className="font-semibold text-zinc-500 outline-none hover:text-zinc-200 focus-visible:underline"
+              >
+                {sentOffer === 'saved' ? 'Zamknij' : 'Nie teraz'}
+              </button>
+            </div>
+          )}
 
           {/* Visible PDF export error + print-dialog fallback */}
           {exportError && (

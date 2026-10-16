@@ -33,7 +33,7 @@ export function EventNotice({
   className?: string
 }) {
   const { restore } = useEvents()
-  const { setStatus } = useProjectHub()
+  const { requestStatus } = useProjectHub()
   return (
     <div
       className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300 ${className}`}
@@ -61,7 +61,8 @@ export function EventNotice({
           <button
             type="button"
             onClick={async () => {
-              await setStatus(notice.projectId, notice.to)
+              // Projekt z wariantami najpierw zapyta, który przyjął klient.
+              await requestStatus(notice.projectId, notice.to)
               onDone()
             }}
             className="font-semibold text-primary outline-none hover:underline focus-visible:underline"

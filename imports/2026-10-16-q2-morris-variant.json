@@ -1,0 +1,370 @@
+{
+  "note": "Q2: kopia „Morris Lloyd - Wisła Październik” (wariant 2 dni) z quotes.json huba jako wariant B projektu „Morris & Lloyd — rolki, październik (Wisła)”; obecna wycena projektu zostaje wybrana do rozliczeń jako „A”. Finanse bez zmian.",
+  "update": {
+    "projects.json": [
+      {
+        "id": "p-1791701130203-g6ygqav",
+        "set": {
+          "quoteLabel": "A",
+          "quoteVariants": [
+            {
+              "id": "qv-morris-wisla-2dni",
+              "label": "B",
+              "snapshot": {
+                "version": 2,
+                "savedAt": "2026-10-14T08:49:14.328Z",
+                "data": {
+                  "clientName": "Morris & Lloyd Broker",
+                  "projectName": "Rolki Szklarska Poręba Jesień - wariant 2 dni",
+                  "isDetailedPrepro": false,
+                  "scenariusz": "brak",
+                  "dniDokumentacji": 1.5,
+                  "wizjaLokalna": false,
+                  "kierownikProdukcji": false,
+                  "isDetailedProdukcja": true,
+                  "dniZdjeciowe": 0,
+                  "wielkoscEkipy": 1,
+                  "crudeRezOpSurcharge": false,
+                  "crudeDroneSurcharge": false,
+                  "klasaSprzetu": "standard",
+                  "detailedShootingDays": [
+                    {
+                      "id": "day-1791901502310-1epfz8m",
+                      "rezOp": 0,
+                      "asystent": 0,
+                      "gafer": 0,
+                      "dzwiekowiec": 0,
+                      "mua": 0,
+                      "aktor": 0,
+                      "model": 0,
+                      "statysta": 0,
+                      "kameraSony": 0,
+                      "kameraRed": 0,
+                      "obiektywy": "brak",
+                      "stabilizacja": "brak",
+                      "podglad": "brak",
+                      "swiatlo": "brak",
+                      "dron": "brak",
+                      "dayAdjustment": 0,
+                      "crewNames": {},
+                      "crew": [
+                        {
+                          "id": "qc-1791901530077-t20s7b6",
+                          "roleId": "rezOp",
+                          "roleName": "ReżOp",
+                          "group": "ekipa",
+                          "clientRate": 1500,
+                          "costRate": 1500,
+                          "qty": 1,
+                          "personId": "cm-1791885527221-zgvplyg",
+                          "personName": "Łukasz"
+                        },
+                        {
+                          "id": "qc-1791902350707-xewnkxr",
+                          "roleId": "rezOp",
+                          "roleName": "ReżOp",
+                          "group": "ekipa",
+                          "clientRate": 1500,
+                          "costRate": 1500,
+                          "qty": 1
+                        }
+                      ],
+                      "gear": [
+                        {
+                          "itemId": "eq-sony-a7s-iii",
+                          "name": "Sony A7S III",
+                          "rate": 200,
+                          "qty": 1
+                        },
+                        {
+                          "itemId": "eq-red-komodo-x",
+                          "name": "RED Komodo X pakiet",
+                          "rate": 400,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-sigma-28-45mm-f-1-8",
+                          "name": "Sigma 28-45mm f/1.8",
+                          "rate": 150,
+                          "qty": 1
+                        },
+                        {
+                          "itemId": "eq-1791704779911-owrf4sy",
+                          "name": "Sony 85mm f/1.8",
+                          "rate": 70,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                          "name": "Sony FE 28-135mm f/4 PZ",
+                          "rate": 150,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-16-35mm-komodo-ef-rf",
+                          "name": "16-35mm f/1.8 EF",
+                          "rate": 100,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-viltrox-6-inch",
+                          "name": "Viltrox 6-inch",
+                          "rate": 70,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-1791704595221-j7edokn",
+                          "name": "Amaran Halo 600X",
+                          "rate": 170,
+                          "qty": 2
+                        },
+                        {
+                          "itemId": "eq-amaran-200x",
+                          "name": "Amaran 200x",
+                          "rate": 170,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-amaran-60x",
+                          "name": "Amaran 60x",
+                          "rate": 70,
+                          "qty": 2,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-nanlite-tubes",
+                          "name": "NanLite Pavotube 15C set 2x",
+                          "rate": 100,
+                          "qty": 1
+                        },
+                        {
+                          "itemId": "eq-1791704722166-gqk26tb",
+                          "name": "Dron DJI Air 3",
+                          "rate": 200,
+                          "qty": 1
+                        },
+                        {
+                          "itemId": "eq-1791902256392-6b83qxl",
+                          "name": "DJI Ronin RS3 Pro",
+                          "rate": 175,
+                          "qty": 1
+                        },
+                        {
+                          "itemId": "eq-1791902090783-pift4ku",
+                          "name": "Sachtler FlowTech",
+                          "rate": 75,
+                          "qty": 1,
+                          "gratis": true
+                        },
+                        {
+                          "itemId": "eq-1791901788868-nvmo4bk",
+                          "name": "Rode Wireless GO II",
+                          "rate": 80,
+                          "qty": 1
+                        }
+                      ]
+                    }
+                  ],
+                  "isDetailedPostpro": true,
+                  "crudeEditUnit": "dni",
+                  "crudeEditCount": 0,
+                  "detailedDeliverables": [
+                    {
+                      "id": "del-1791902545251-zfmsjrb",
+                      "format": "Format: do 30sek shorts/reel",
+                      "ilosc": 10,
+                      "korekcjaBarwna": "brak",
+                      "animacje": "brak",
+                      "muzyka": "brak",
+                      "soundDesign": "brak",
+                      "masterDzwieku": "brak",
+                      "lektor": "brak"
+                    }
+                  ],
+                  "dniMontazu": 0,
+                  "korekcjaBarwna": false,
+                  "animacje": "brak",
+                  "kosztDojazduKm": 1000,
+                  "lektor": false,
+                  "licencjaMuzyczna": "stock",
+                  "copyrightType": "licencja",
+                  "actorRightsTransferAmount": 0,
+                  "liczbaAktorow": 0,
+                  "includeRevisionsInfo": true,
+                  "includedRevisions": 2,
+                  "extraRevisionPrice": 200,
+                  "includeOvertimeInfo": true,
+                  "standardDayHours": 10,
+                  "overtimeHourlyRate": 150,
+                  "opcjeDodatkowe": "",
+                  "includeCatering": false,
+                  "cateringRate": 100,
+                  "cateringOverride": false,
+                  "cateringCustomDays": 1,
+                  "includeLodging": false,
+                  "lodgingRate": 300,
+                  "lodgingOverride": false,
+                  "lodgingCustomDays": 1,
+                  "profitOverrides": {},
+                  "profitCustomItems": [],
+                  "profitTaxRatePercent": 8.5,
+                  "profitTransferAmount": null,
+                  "profitFuelPricePerLiter": 8,
+                  "profitFuelConsumption": 8.5,
+                  "gearDiscountPercent": 0,
+                  "gearValueInPdf": false,
+                  "crewPeopleInPdf": false
+                },
+                "pricingConfig": {
+                  "preprodukcja": {
+                    "dzienDokumentacji": 1200,
+                    "scenariuszPodstawowy": 1800,
+                    "scenariuszRozbudowany": 3500,
+                    "wizjaLokalna": 800,
+                    "kierownikProdukcji": 1500
+                  },
+                  "produkcja": {
+                    "stawkaOperatoraSzybkaWycena": 1200,
+                    "doplataRezOpSzybkaWycena": 500,
+                    "doplataDronSzybkaWycena": 300,
+                    "pakietSprzetowyMinimalistyczny": 300,
+                    "pakietSprzetowyStandard": 400,
+                    "pakietSprzetowyKinowy": 1500,
+                    "rezOp": 1500,
+                    "asystentOperator": 1500,
+                    "gafer": 1600,
+                    "dzwiekowiec": 1500,
+                    "mua": 800,
+                    "aktor": 2500,
+                    "model": 1500,
+                    "statystaEpizodysta": 1000,
+                    "kameraSonyMirrorless": 300,
+                    "kameraRedKomodoX": 600,
+                    "obiektywyStandard": 100,
+                    "obiektywyRental": 1500,
+                    "stabilizacjaStandard": 100,
+                    "stabilizacjaRental": 800,
+                    "podgladStandard": 0,
+                    "podgladRental": 600,
+                    "swiatloStandard": 400,
+                    "swiatloRental": 600,
+                    "dronDji": 300,
+                    "dronFpv": 1500
+                  },
+                  "postprodukcja": {
+                    "montazZaDzien": 1200,
+                    "montazZaGodzine": 200,
+                    "Format: do 30sek shorts/reel": 500,
+                    "Format: Reportaż 1-3min": 2500,
+                    "korekcjaBarwnaPodstawowa": 500,
+                    "korekcjaBarwnaZaawansowana": 1200,
+                    "animacje2d": 1000,
+                    "animacjeAi": 1500,
+                    "muzykaCopyfree": 300,
+                    "muzykaKompozytor": 3000,
+                    "soundDesignProsty": 500,
+                    "soundDesignZlozony": 1500,
+                    "masterDzwiekuPodstawowy": 400,
+                    "masterDzwiekuZlozony": 1000,
+                    "lektorAi": 250,
+                    "lektorStudio": 1000,
+                    "Format: 10min YouTube": 1850
+                  },
+                  "dodatkowe": {
+                    "kosztDojazduKm": 2,
+                    "pelnePrzekazaniePrawProcent": 0
+                  }
+                },
+                "marginMultiplier": 1,
+                "pdfDraft": {
+                  "clientName": "Morris & Lloyd Broker",
+                  "projectName": "Rolki Szklarska Poręba Jesień - wariant 2 dni",
+                  "issueDateIso": "13.10.2026",
+                  "validUntilIso": "12.11.2026",
+                  "terminZdjec": "22-23.10",
+                  "showVat": true,
+                  "pdfLanguage": "pl",
+                  "currency": "PLN",
+                  "exchangeRate": 1,
+                  "rows": {
+                    "preprodukcja": {
+                      "key": "preprodukcja",
+                      "title": "Preprodukcja",
+                      "opis": "Adaptacja 10 scenariuszy: 1000 zł \nAnaliza scenariuszy, dopracowanie dialogów oraz konsultacje\nkreatywne. \n\nEwentualny koszt rekwizytów po stronie klienta lub do ustalenia.",
+                      "cenaNetto": 1000
+                    },
+                    "ekipa": {
+                      "key": "ekipa",
+                      "title": "Ekipa filmowa",
+                      "opis": "2 dzni zdjęciowe: Producent/Reżyser + Asystent",
+                      "cenaNetto": 4800
+                    },
+                    "obsada": {
+                      "key": "obsada",
+                      "title": "Obsada",
+                      "opis": "-",
+                      "cenaNetto": 0
+                    },
+                    "sprzet": {
+                      "key": "sprzet",
+                      "title": "Sprzęt filmowy",
+                      "opis": "Kamera Sony, obiektywy, stabilizacja, mikroporty, dron, oświetlenie",
+                      "cenaNetto": 1200
+                    },
+                    "logistyka": {
+                      "key": "logistyka",
+                      "title": "Logistyka",
+                      "opis": "Dojazd: 1000 km\nNoclegi i wyżywienie - po stronie klienta",
+                      "cenaNetto": 1000
+                    },
+                    "postprodukcja": {
+                      "key": "postprodukcja",
+                      "title": "Postprodukcja",
+                      "opis": "Kompleksowa postprodukcja premium: montaż, korekcja koloru, udźwiękowienie, muzyka (stock), grafiki/napisy, animacje Al - 550zł/rolka",
+                      "cenaNetto": 5500
+                    },
+                    "inne": {
+                      "key": "inne",
+                      "title": "Inne koszty",
+                      "opis": "-",
+                      "cenaNetto": 0
+                    }
+                  },
+                  "materialyKoncowe": "10x 9x16 30s Reels z rozbudowanymi grafikami, animacjami CTA, wykorzystaniem efektów AI, 2 rundami poprawek",
+                  "opcjeDodatkowe": "",
+                  "portfolioRows": [
+                    {
+                      "url": "",
+                      "description": ""
+                    },
+                    {
+                      "url": "",
+                      "description": ""
+                    }
+                  ],
+                  "termsAndConditions": [
+                    "Cena obejmuje realizację filmu oraz udzielenie niewyłącznej licencji na jego wykorzystanie w Internecie na kanałach własnych Zamawiającego oraz do użytku wewnętrznego, bez ograniczeń terytorialnych, na czas nieoznaczony, z zastrzeżeniem że w przypadku wykorzystania wizerunku aktorów lub materiałów licencjonowanych, okres licencji może zostać ograniczony zgodnie z warunkami udzielonych zgód i licencji.",
+                    "1 dzień zdjęciowy obejmuje maksymalnie 10 godzin pracy na planie. Praca powyżej tego czasu rozliczana jest jako nadgodziny w kwocie 150 zł netto za członka ekipy, liczone za każdą rozpoczętą godzinę.",
+                    "Cena obejmuje do 2 rund poprawek montażowych. Kolejne zmiany podlegają dodatkowej wycenie w kwocie 200 zł netto za rundę.",
+                    "Podane kwoty są kwotami netto. Do kwot należy doliczyć VAT zgodnie z obowiązującymi przepisami."
+                  ],
+                  "followsQuote": true
+                }
+              },
+              "createdAt": "2026-10-13T14:29:08.231Z",
+              "updatedAt": "2026-10-14T08:49:14.328Z",
+              "migratedFromQuoteId": "q-1791901748231-ejkjv62"
+            }
+          ]
+        },
+        "ifMissing": true
+      }
+    ]
+  }
+}
