@@ -198,6 +198,7 @@ export function QuoteVariantsBar({
               <input
                 key={v.id}
                 autoFocus
+                onFocus={(e) => e.currentTarget.select()}
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.target.value)}
                 onBlur={() => void commitRename()}
