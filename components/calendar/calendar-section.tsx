@@ -57,7 +57,7 @@ function writeStorage(kind: 'session' | 'local', key: string, value: string): vo
 export function CalendarSection({ onOpenProject }: { onOpenProject: (id: string) => void }) {
   const today = toDateKey(new Date())
   const { events } = useEvents()
-  const { items } = useEquipment()
+  const { allItems: items } = useEquipment()
   const { projects } = useProjectHub()
 
   // Widok wraca po przejściu do innego ekranu (do zamknięcia aplikacji), warstwy na stałe.

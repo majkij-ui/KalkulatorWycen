@@ -90,7 +90,7 @@ export function EventForm({
   const id = useId()
   const { save, remove } = useEvents()
   const { projects, createProjectWithoutQuote } = useProjectHub()
-  const { items, addItem, updateItem } = useEquipment()
+  const { allItems: items, addItem, updateItem } = useEquipment()
 
   const editing = target.mode === 'edit' ? target.entry : null
   const gearItem = useMemo(() => {

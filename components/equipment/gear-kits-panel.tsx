@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { Layers, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
+import { isOnSet } from '@/lib/gear-backstage'
 import { useCrew } from '@/lib/crew-context'
 import type { GearKit } from '@/lib/project-types'
 import { Button } from '@/components/ui/button'
@@ -38,18 +39,20 @@ export function GearKitsPanel() {
 }
 
 function KitRow({ kit }: { kit: GearKit }) {
-  const { items, updateKit, removeKit } = useEquipment()
+  const { allItems, updateKit, removeKit } = useEquipment()
   const { roles, people } = useCrew()
   const [name, setName] = useState(kit.name)
   const [confirm, setConfirm] = useState(false)
-  const byId = new Map(items.map((item) => [item.id, item]))
+  const byId = new Map(allItems.map((item) => [item.id, item]))
   const parts = kit.lines.map((line) => {
     const item = byId.get(line.itemId)
+    // Pozycja przeniesiona do zaplecza nie jedzie na plan: zestaw jej nie dodaje i nie wycenia.
+    const backstage = !!item && !isOnSet(item)
     return {
       key: line.itemId,
-      label: `${line.qty > 1 ? `${line.qty}× ` : ''}${item?.name ?? 'usunięty z katalogu'}`,
-      value: item ? item.rentalDayRate * line.qty : 0,
-      missing: !item || !!item.retiredAt,
+      label: `${line.qty > 1 ? `${line.qty}× ` : ''}${item?.name ?? 'usunięty z katalogu'}${backstage ? ' (zaplecze)' : ''}`,
+      value: item && !backstage ? item.rentalDayRate * line.qty : 0,
+      missing: !item || !!item.retiredAt || backstage,
     }
   })
   const value = parts.reduce((sum, part) => sum + part.value, 0)

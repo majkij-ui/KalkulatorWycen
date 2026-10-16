@@ -8,18 +8,27 @@
  * Użycie sprzętu W projekcie zapisujemy przez `updateActiveProject`.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import {
   createEquipmentItem,
   deleteEquipment,
   listEquipment,
   upsertEquipment,
 } from './equipment-catalog'
+import { isOnSet } from './gear-backstage'
 import { createGearKit, deleteGearKit, listGearKits, updateGearKits, upsertGearKit } from './gear-kits'
 import type { EquipmentItem, GearKit } from './project-types'
 
 interface EquipmentContextValue {
+  /**
+   * Sprzęt NA PLAN: to z niego korzystają listy wyboru (wycena, zestawy,
+   * Realizacja, listy pakowania, karta dnia) i statystyki. Zaplecze i
+   * drobiazgi (`onSet === false`) są odfiltrowane tutaj, przy źródle, żeby
+   * żaden nowy odbiorca nie musiał o tym pamiętać.
+   */
   items: EquipmentItem[]
+  /** Cały katalog: na plan + zaplecze. Dla ekranu Sprzęt i kalendarza zakupów. */
+  allItems: EquipmentItem[]
   isLoading: boolean
   addItem: (params: {
     name: string
@@ -30,6 +39,8 @@ interface EquipmentContextValue {
     /** `YYYY-MM-DD` — zakup pokazuje się wtedy w kalendarzu. */
     purchaseDate?: string
     notes?: string
+    /** `false` = zaplecze i drobiazgi (nie jedzie na plan). */
+    onSet?: boolean
   }) => Promise<EquipmentItem | null>
   updateItem: (item: EquipmentItem) => Promise<void>
   removeItem: (id: string) => Promise<void>
@@ -51,7 +62,8 @@ interface EquipmentContextValue {
 const EquipmentContext = createContext<EquipmentContextValue | null>(null)
 
 export function EquipmentProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<EquipmentItem[]>([])
+  const [allItems, setItems] = useState<EquipmentItem[]>([])
+  const items = useMemo(() => allItems.filter(isOnSet), [allItems])
   const [kits, setKits] = useState<GearKit[]>([])
 
   useEffect(() => {
@@ -115,7 +127,7 @@ export function EquipmentProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <EquipmentContext.Provider
-      value={{ items, isLoading, addItem, updateItem, removeItem, kits, addKit, updateKit, updateKits, removeKit }}
+      value={{ items, allItems, isLoading, addItem, updateItem, removeItem, kits, addKit, updateKit, updateKits, removeKit }}
     >
       {children}
     </EquipmentContext.Provider>

@@ -46,6 +46,8 @@ export function createEquipmentItem(params: {
   quantity?: number
   purchaseDate?: string
   notes?: string
+  /** `false` = zaplecze i drobiazgi; domyślnie na plan (pole nie jest zapisywane). */
+  onSet?: boolean
 }): EquipmentItem {
   const item: EquipmentItem = {
     id: createEquipmentId(),
@@ -57,6 +59,7 @@ export function createEquipmentItem(params: {
     notes: params.notes ?? '',
   }
   if (params.quantity && params.quantity > 1) item.quantity = Math.floor(params.quantity)
+  if (params.onSet === false) item.onSet = false
   return item
 }
 
