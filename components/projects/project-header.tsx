@@ -21,6 +21,7 @@ import { clientDirectory, clientKey } from '@/lib/clients'
 import { leadsFromEvents } from '@/lib/marketing-leads'
 import { LEAD_QUALITY_LABELS } from '@/lib/marketing-types'
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, countsTowardRevenue, leadSourceLabel } from '@/lib/project-types'
+import { hasAlternatives, listVariants } from '@/lib/quote-variants'
 import { ProjectStatusPicker } from './project-status-badge'
 import { PaidToggle } from './paid-toggle'
 import { ClientCombobox } from './client-combobox'
@@ -46,11 +47,24 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; 
   )
 }
 
-export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) => void } = {}) {
-  const { activeProject, projects, closeProject, quoteDocs, updateActiveProject, changeActiveClient, setStatus } =
+export function ProjectHeader({
+  onOpenClient,
+  docId: requestedDocId,
+}: {
+  onOpenClient?: (key: string) => void
+  /** Dokument wyceny, o którym mówi stan zapisu i „Cofnij zmiany z tej sesji" (brak = wybrany wariant). */
+  docId?: string
+} = {}) {
+  const { activeProject, projects, closeProject, quoteDocs, updateActiveProject, changeActiveClient, requestStatus } =
     useProjectHub()
   const { events } = useEvents()
-  const quoteState = useQuoteDocState(activeProject?.id ?? null)
+  const docId = activeProject ? requestedDocId ?? activeProject.id : null
+  const quoteState = useQuoteDocState(docId)
+  // Przy kilku wariantach przycisk mówi, który cofa.
+  const docLabel =
+    activeProject && docId && hasAlternatives(activeProject)
+      ? listVariants(activeProject).find((v) => v.docId === docId)?.label ?? null
+      : null
   const [nameDraft, setNameDraft] = useState(activeProject?.name ?? '')
   const [contactNotice, setContactNotice] = useState<string | null>(null)
   // „Cofnij zmiany z tej sesji" — drugie kliknięcie w ciągu 3 s potwierdza.
@@ -96,8 +110,7 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
     return () => clearTimeout(timer)
   }, [contactNotice])
 
-  if (!activeProject) return null
-  const projectId = activeProject.id
+  if (!activeProject || !docId) return null
 
   const handleRestore = () => {
     if (!confirmRestore) {
@@ -105,7 +118,7 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
       return
     }
     setConfirmRestore(false)
-    void quoteDocs.restoreSession(projectId).then(() => setRestoredNotice(true))
+    void quoteDocs.restoreSession(docId).then(() => setRestoredNotice(true))
   }
 
   const commitName = () => {
@@ -145,7 +158,7 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
             {quoteState && (
               <QuoteSaveStatus
                 status={quoteState.status}
-                onRetry={() => void quoteDocs.flush(projectId)}
+                onRetry={() => void quoteDocs.flush(docId)}
               />
             )}
             {quoteState?.changedThisSession && quoteState.status !== 'needs-confirmation' && (
@@ -158,12 +171,14 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
                 }`}
               >
                 <Undo2 className="size-3.5" />
-                {confirmRestore ? 'Kliknij ponownie, aby cofnąć' : 'Cofnij zmiany z tej sesji'}
+                {confirmRestore
+                  ? 'Kliknij ponownie, aby cofnąć'
+                  : `Cofnij zmiany z tej sesji${docLabel ? ` (wariant ${docLabel})` : ''}`}
               </button>
             )}
             <ProjectStatusPicker
               status={activeProject.status}
-              onChange={(status) => setStatus(activeProject.id, status)}
+              onChange={(status) => void requestStatus(activeProject.id, status)}
             />
           </div>
         </div>
@@ -293,11 +308,11 @@ export function ProjectHeader({ onOpenClient }: { onOpenClient?: (key: string) =
               size="sm"
               variant="destructive"
               className="h-7 px-2 text-xs"
-              onClick={() => void quoteDocs.confirmReplace(projectId)}
+              onClick={() => void quoteDocs.confirmReplace(docId)}
             >
               Zastąp
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => quoteDocs.discard(projectId)}>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => quoteDocs.discard(docId)}>
               Cofnij zmiany
             </Button>
           </div>

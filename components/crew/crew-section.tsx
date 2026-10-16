@@ -20,6 +20,8 @@ import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import type { QuoteDoc } from '@/lib/quote-documents'
+import { restoreVariantCrew, retargetVariantCrew, type VariantCrewRef } from '@/lib/quote-variants'
+import type { Project } from '@/lib/project-types'
 import type { QuoteCrewLine } from '@/lib/quote-types'
 import {
   crewMergeKitUpdates,
@@ -62,6 +64,16 @@ type SheetState =
   | null
 
 /** Pozycje ekipy przepięte w wycenie czekającej w pamięci — do „Cofnij". */
+/** Łaty tych samych projektów z dwóch źródeł — jeden wpis na projekt (jeden zapis). */
+function mergePatchLists(
+  a: { id: string; patch: Partial<Project> }[],
+  b: { id: string; patch: Partial<Project> }[]
+): { id: string; patch: Partial<Project> }[] {
+  const byId = new Map<string, Partial<Project>>()
+  for (const { id, patch } of [...a, ...b]) byId.set(id, { ...byId.get(id), ...patch })
+  return [...byId.entries()].map(([id, patch]) => ({ id, patch }))
+}
+
 interface PendingQuoteRefs {
   id: string
   refs: CalculatorCrewRef[]
@@ -72,7 +84,7 @@ interface Notice {
   /** Usunięta osoba — „Cofnij" ją przywraca. */
   undoId?: string
   /** Scalenie — „Cofnij" przywraca karty i odwołania. */
-  merge?: { plan: CrewMergePlan; pending: PendingQuoteRefs[] }
+  merge?: { plan: CrewMergePlan; pending: PendingQuoteRefs[]; variants: { projectId: string; refs: VariantCrewRef[] }[] }
 }
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -195,7 +207,15 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
    */
   const runMerge = async (plan: CrewMergePlan) => {
     await quoteDocs.flushAll()
-    await updateProjects(crewMergePatches(latestProjects(), plan))
+    // Warianty wycen (Q2) też wskazują osobę, która zostaje — jednym zapisem z resztą projektów.
+    const variantRefs: { projectId: string; refs: VariantCrewRef[] }[] = []
+    const variantPatches = latestProjects().flatMap((project) => {
+      const result = retargetVariantCrew(project, plan.sourceIds, plan.targetId)
+      if (!result) return []
+      variantRefs.push({ projectId: project.id, refs: result.refs })
+      return [{ id: project.id, patch: result.patch }]
+    })
+    await updateProjects(mergePatchLists(crewMergePatches(latestProjects(), plan), variantPatches))
     await updateKits(crewMergeKitUpdates(kits, plan))
     const pending: PendingQuoteRefs[] = []
     editPendingQuotes((days, id) => {
@@ -208,13 +228,19 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
     const total = plan.sources.length + 1
     setNotice({
       message: `Scalono ${total} ${plural(total, 'kartę', 'karty', 'kart')} w „${plan.merged.name}" (${plan.refs.length} ${plural(plan.refs.length, 'odwołanie', 'odwołania', 'odwołań')} w projektach, ${plan.kits.length} ${plural(plan.kits.length, 'zestaw', 'zestawy', 'zestawów')}).`,
-      merge: { plan, pending },
+      merge: { plan, pending, variants: variantRefs },
     })
   }
 
-  const undoMerge = async ({ plan, pending }: NonNullable<Notice['merge']>) => {
+  const undoMerge = async ({ plan, pending, variants }: NonNullable<Notice['merge']>) => {
     await quoteDocs.flushAll()
-    await updateProjects(crewUnmergePatches(latestProjects(), plan))
+    const variantRefs = new Map(variants.map(({ projectId, refs }) => [projectId, refs]))
+    const variantPatches = latestProjects().flatMap((project) => {
+      const refs = variantRefs.get(project.id)
+      const patch = refs ? restoreVariantCrew(project, refs, plan.targetId) : null
+      return patch ? [{ id: project.id, patch }] : []
+    })
+    await updateProjects(mergePatchLists(crewUnmergePatches(latestProjects(), plan), variantPatches))
     await updateKits(crewUnmergeKitUpdates(kits, plan))
     const refsById = new Map(pending.map(({ id, refs }) => [id, refs]))
     editPendingQuotes((days, id) => restoreQuoteDays(days, refsById.get(id) ?? [], plan.targetId))

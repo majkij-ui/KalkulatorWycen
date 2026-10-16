@@ -37,6 +37,8 @@ import { ProjectHeader } from '@/components/projects/project-header'
 import { ProjectTimeline } from '@/components/projects/project-timeline'
 import { ProjectNotes } from '@/components/projects/project-notes'
 import { defaultProjectTab, type Project, type ProjectTab } from '@/lib/project-types'
+import { listVariants } from '@/lib/quote-variants'
+import { VariantStatusQuestion } from '@/components/projects/variant-status-question'
 import { EquipmentSection } from '@/components/equipment/equipment-section'
 import { ProjectRealization } from '@/components/realization/project-realization'
 import { FinanceSection } from '@/components/finance/finance-section'
@@ -138,6 +140,8 @@ const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calcul
 interface ProjectViewMemory {
   tab?: ProjectTab
   calculatorTab?: CalculatorTab
+  /** Oglądany wariant wyceny (Q2); po restarcie projekt otwiera się na wybranym. */
+  variantId?: string
 }
 
 /**
@@ -162,10 +166,21 @@ function ProjectView({
     memory.tab = next
     setTabState(next)
   }
+  const [variantId, setVariantIdState] = useState(memory.variantId)
+  const selectVariant = (next: string) => {
+    memory.variantId = next
+    setVariantIdState(next)
+  }
+  // Usunięty albo nieznany wariant → wybrany do rozliczeń.
+  const variants = listVariants(project)
+  const viewed = variants.find((v) => v.id === variantId) ?? variants.find((v) => v.chosen)!
+  // Nagłówek (stan zapisu, „Cofnij zmiany z tej sesji") mówi o tym, co widać: w Wycenie
+  // o oglądanym wariancie, gdzie indziej o wybranym (Realizacja liczy z niego).
+  const headerDocId = tab === 'wycena' ? viewed.docId : project.id
 
   return (
     <>
-      <ProjectHeader onOpenClient={onOpenClient} />
+      <ProjectHeader onOpenClient={onOpenClient} docId={headerDocId} />
       <div className="border-b border-white/5 bg-black/20">
         <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist" aria-label="Zakładki projektu">
           {PROJECT_TAB_ITEMS.map(({ value, label, icon: Icon }) => {
@@ -203,6 +218,10 @@ function ProjectView({
           onTabChange={(next) => {
             memory.calculatorTab = next
           }}
+          project={project}
+          docId={viewed.docId}
+          variantId={viewed.id}
+          onSelectVariant={selectVariant}
         />
       )}
       {tab === 'sprzet' && <ProjectRealization />}
@@ -296,6 +315,8 @@ function ShellContent() {
 
         {section === 'ustawienia' && <SettingsSection />}
       </div>
+
+      <VariantStatusQuestion />
     </div>
   )
 }
