@@ -1,41 +1,118 @@
 'use client'
 
 /**
- * Karty dni realizacji: data i miejsce z kalendarza, sprzęt dnia (skrót —
- * zaznacza się go w siatce niżej), ekipa i koszty tego dnia.
+ * Karty dni realizacji (R2, B3): data i miejsce z kalendarza, ekipa i sprzęt
+ * dnia — wprost z dnia wyceny (dzień N → N-ty dzień zdjęciowy), z
+ * zaznaczeniem „było" i „Zewnętrzny | Moja praca". Mój sprzęt z katalogu to
+ * „mój sprzęt" bez kwoty (zaznacza się go w siatce niżej); sprzęt z
+ * wypożyczalni to koszt zewnętrzny.
  */
 
 import { useState } from 'react'
 import { ClipboardList, Plus, Trash2, Users } from 'lucide-react'
-import { costAmount, costsOfDay, isCrew, type CrewSuggestion, type NewCost } from '@/lib/project-costs'
+import { costAmount, isCrew, isOwnWork, type CrewSuggestion, type NewCost } from '@/lib/project-costs'
 import type { DayInfo } from '@/lib/realization-days'
 import type { GearDay, ProjectCost } from '@/lib/project-types'
 import { itemLabel } from '@/lib/pl-plural'
 import { KindChip, mono, pln } from '@/components/calendar/calendar-bits'
 import type { DayRemoval } from '@/components/equipment/project-equipment'
-import { CostRow, CrewRow } from './cost-rows'
+import { CostRow, CrewRow, type LineMechanics } from './cost-rows'
 import { DayCalendar, type DayCalendarActions } from './day-calendar'
 
 const smallButton =
   'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-zinc-400 outline-none hover:bg-white/5 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-white/60'
 
+/** Koszty zewnętrzne i moja praca z wierszy (zaznaczonych). */
+export function lineTotals(lines: ProjectCost[]): { external: number; own: number } {
+  return lines.reduce(
+    (acc, c) => {
+      if (c.skipped) return acc
+      if (isOwnWork(c)) acc.own += costAmount(c)
+      else acc.external += costAmount(c)
+      return acc
+    },
+    { external: 0, own: 0 }
+  )
+}
+
+export function TotalsText({ lines, label }: { lines: ProjectCost[]; label: string }) {
+  const { external, own } = lineTotals(lines)
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-sm font-semibold tabular-nums text-amber-300/90" style={mono}>
+        {external > 0 ? pln(external) : '—'}
+      </div>
+      {own > 0 && (
+        <div className="text-[11px] tabular-nums text-sky-300/80" style={mono}>
+          moja praca {pln(own)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export interface LineHandlers {
+  outsiders: CrewSuggestion[]
+  roleListId: string
+  mechanics: (cost: ProjectCost) => LineMechanics
+  onChangeCost: (cost: ProjectCost, patch: Partial<ProjectCost>) => void
+  onRemoveCost: (cost: ProjectCost) => void
+}
+
+/** Wiersze ekipy i kosztów jednej grupy (dzień albo dzień wyceny bez odpowiednika). */
+export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: LineHandlers }) {
+  const crew = lines.filter(isCrew)
+  const rentals = lines.filter((c) => !isCrew(c) && c.category === 'wynajem')
+  const other = lines.filter((c) => !isCrew(c) && c.category !== 'wynajem')
+  return (
+    <>
+      {crew.length > 0 && (
+        <div className="space-y-1.5">
+          {crew.map((cost) => (
+            <CrewRow
+              key={cost.id}
+              cost={cost}
+              outsiders={handlers.outsiders}
+              roleListId={handlers.roleListId}
+              mechanics={handlers.mechanics(cost)}
+              onChange={(patch) => handlers.onChangeCost(cost, patch)}
+              onRemove={() => handlers.onRemoveCost(cost)}
+            />
+          ))}
+        </div>
+      )}
+      {[...rentals, ...other].length > 0 && (
+        <div className="mt-1.5 space-y-1.5">
+          {[...rentals, ...other].map((cost) => (
+            <CostRow
+              key={cost.id}
+              cost={cost}
+              withCrewCategory={false}
+              mechanics={handlers.mechanics(cost)}
+              onChange={(patch) => handlers.onChangeCost(cost, patch)}
+              onRemove={() => handlers.onRemoveCost(cost)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 export interface DayCardsProps {
   days: GearDay[]
   info: Map<string, DayInfo>
-  costs: ProjectCost[]
+  /** Wiersze każdego dnia (`layoutRealization`). */
+  lines: Map<string, ProjectCost[]>
   /** Odpracował sprzęt w dniu (z podsumowania siatki). */
   rentByDay: Map<string, number>
-  /** Imiona z innych projektów spoza bazy Ekipa (lista wyboru osoby). */
-  outsiders: CrewSuggestion[]
-  /** `datalist` z nazwami ról. */
-  roleListId: string
+  handlers: LineHandlers
   dayLabel: (day: GearDay, index: number) => string
   calendar: DayCalendarActions
   dayRemoval: (day: GearDay) => DayRemoval
   onRemoveDay: (day: GearDay) => void
   onAddCost: (dayId: string, init: NewCost) => void
-  onChangeCost: (id: string, patch: Partial<ProjectCost>) => void
-  onRemoveCost: (cost: ProjectCost) => void
   onCopyCrew: (dayId: string) => void
   /** Call sheet dnia (T5b): liczba wpisów harmonogramu, `null` = jeszcze go nie ma. */
   callSheetOf: (day: GearDay) => { entries: number } | null
@@ -67,17 +144,14 @@ function DayCard({
   index,
   days,
   info,
-  costs,
+  lines,
   rentByDay,
-  outsiders,
-  roleListId,
+  handlers,
   dayLabel,
   calendar,
   dayRemoval,
   onRemoveDay,
   onAddCost,
-  onChangeCost,
-  onRemoveCost,
   onCopyCrew,
   callSheetOf,
   callSheetsReady,
@@ -85,10 +159,8 @@ function DayCard({
 }: DayCardsProps & { day: GearDay; index: number }) {
   const [confirm, setConfirm] = useState(false)
   const dayInfo = info.get(day.id)
-  const dayCosts = costsOfDay(costs, day.id)
-  const crew = dayCosts.filter(isCrew)
-  const other = dayCosts.filter((c) => !isCrew(c))
-  const total = dayCosts.reduce((sum, c) => sum + costAmount(c), 0)
+  const dayLines = lines.get(day.id) ?? []
+  const crew = dayLines.filter(isCrew)
   const rent = rentByDay.get(day.id) ?? 0
   const removal: DayRemoval = days.length > 1 ? dayRemoval(day) : { ok: false, reason: '' }
   const inCalendar = dayInfo?.link === 'calendar'
@@ -128,12 +200,7 @@ function DayCard({
               <span className="rounded bg-black/30 px-1 text-[10px] tabular-nums text-orange-200/90">{callSheet.entries}</span>
             )}
           </button>
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wide text-zinc-500">Koszty dnia</div>
-            <div className="text-sm font-semibold tabular-nums text-amber-300/90" style={mono}>
-              {total > 0 ? pln(total) : '—'}
-            </div>
-          </div>
+          <TotalsText lines={dayLines} label="Koszty dnia" />
           {removal.ok &&
             (confirm ? (
               <button
@@ -163,27 +230,17 @@ function DayCard({
         <p className="mt-1 text-right text-[11px] text-zinc-500">{removal.confirm}</p>
       )}
 
-      <p className="mt-2 text-[11px] text-zinc-500">
-        Sprzęt:{' '}
-        {day.lines.length > 0
-          ? `${day.lines.length} ${itemLabel(day.lines.length)}${rent > 0 ? ` · odpracował ${pln(rent)}` : ''}`
-          : 'nic nie zaznaczono (siatka niżej)'}
-      </p>
-
-      <section className="mt-3" aria-label="Ekipa">
-        <h5 className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Ekipa</h5>
-        <div className="space-y-1.5">
-          {crew.map((cost) => (
-            <CrewRow
-              key={cost.id}
-              cost={cost}
-              outsiders={outsiders}
-              roleListId={roleListId}
-              onChange={(patch) => onChangeCost(cost.id, patch)}
-              onRemove={() => onRemoveCost(cost)}
-            />
-          ))}
-        </div>
+      <section className="mt-3" aria-label="Ekipa i sprzęt">
+        <h5 className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Ekipa i sprzęt</h5>
+        <DayLines lines={dayLines} handlers={handlers} />
+        <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs text-zinc-400">
+          <span className="font-semibold text-zinc-300">Mój sprzęt</span>
+          <span className="text-zinc-500">
+            {day.lines.length > 0
+              ? `${day.lines.length} ${itemLabel(day.lines.length)} z katalogu${rent > 0 ? ` · odpracował ${pln(rent)}` : ''} — bez kwoty (siatka niżej)`
+              : 'nic nie zaznaczono (siatka niżej)'}
+          </span>
+        </p>
         <div className="mt-1 flex flex-wrap gap-1">
           <button
             type="button"
@@ -192,6 +249,14 @@ function DayCard({
           >
             <Plus className="size-3.5" />
             Osoba
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddCost(day.id, { category: 'wynajem', label: '', quantity: 1, unitCost: 0 })}
+            className={smallButton}
+          >
+            <Plus className="size-3.5" />
+            Koszt dnia (wynajem…)
           </button>
           {crew.length > 0 && days.length > 1 && (
             <button
@@ -205,29 +270,6 @@ function DayCard({
             </button>
           )}
         </div>
-      </section>
-
-      <section className="mt-3" aria-label="Koszty dnia">
-        <h5 className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Inne koszty dnia</h5>
-        <div className="space-y-1.5">
-          {other.map((cost) => (
-            <CostRow
-              key={cost.id}
-              cost={cost}
-              withCrewCategory={false}
-              onChange={(patch) => onChangeCost(cost.id, patch)}
-              onRemove={() => onRemoveCost(cost)}
-            />
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => onAddCost(day.id, { category: 'catering', label: '', quantity: 1, unitCost: 0 })}
-          className={`${smallButton} -ml-1.5 mt-1`}
-        >
-          <Plus className="size-3.5" />
-          Koszt (catering, wynajem, dojazd…)
-        </button>
       </section>
     </article>
   )

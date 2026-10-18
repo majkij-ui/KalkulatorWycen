@@ -1,23 +1,27 @@
 'use client'
 
 /**
- * Zakładka „Realizacja" projektu (T5a, plan §4): dni zdjęciowe i
- * przygotowań, na każdy dzień sprzęt (siatka G3), ekipa i inne koszty
- * rzeczywiste, a na dole plan z wyceny — dawna zakładka Profit kalkulatora.
+ * Zakładka „Realizacja" projektu (T5a; po R2 — plan §13.1 B, D1): na górze
+ * „Koszty projektu" (to, co nie należy do dnia), pod nimi dni zdjęciowe i
+ * przygotowań z ekipą i sprzętem dnia, siatka sprzętu (G3), lista pakowania i
+ * call sheet bez zmian. Wynik projektu (zysk, marże) jest w zakładce Finanse.
+ *
+ * Koszty: jedna lista `Project.costs`, zasady w `lib/realization-costs.ts`.
+ * Dopóki nic nie zapisano, zakładka pokazuje plan z wyceny na żywo (szkic);
+ * pierwsza zmiana zapisuje cały szkic jako wiersze, a potem tę zmianę.
  *
  * Datę dnia trzyma kalendarz (wariant A, decyzja M.J. 2026-10-09): dzień z
  * datą to wydarzenie `shoot_day` / `prep_day`, a sprzęt, ekipa i koszty wiszą
- * na dniu zapisanym w projekcie (`realization-days.ts`). Koszty rzeczywiste
- * nie zmieniają Finansów (to T6).
+ * na dniu zapisanym w projekcie (`realization-days.ts`).
  *
  * Zapis jak w siatce G3: lokalna kopia dni i kosztów + zapis z krótkim
  * opóźnieniem. `updateProject` łata najświeższą wersję projektu, ale wartości
  * bierze z tego, co mu podamy — bez lokalnej kopii szybkie klikanie gubiłoby
- * zmiany. Plan (Profit) jest częścią wyceny projektu i zapisuje się sam (Q1).
+ * zmiany.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ClipboardCopy, PackagePlus, Plus } from 'lucide-react'
+import { PackagePlus, Plus } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { projectMoney } from '@/lib/money-loop'
@@ -35,20 +39,37 @@ import type { TimelineEvent } from '@/lib/event-types'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
 import { gearFromQuote } from '@/lib/gear-usage'
 import { kitCrewDayCosts, kitCrewFromDayCosts, type KitCrewEntry } from '@/lib/quote-crew'
+import { isBlankQuoteData } from '@/lib/project-save'
 import {
   addCost,
   copyCrewToDays,
   costsOfDay,
   crewSuggestions,
   isCrew,
+  isOwnWork,
+  liveCosts,
   personKey,
-  projectLevelCosts,
   restoreCosts,
   softDeleteCost,
   softDeleteDayCosts,
-  updateCost,
   type NewCost,
 } from '@/lib/project-costs'
+import {
+  addPlanRow,
+  applyPatch,
+  applyQuoteChanges,
+  draftCosts,
+  editPatch,
+  isDraftId,
+  layoutRealization,
+  missingFromQuote,
+  quoteChanges,
+  quotePlanRows,
+  realizationMode,
+  restartFromQuote,
+  startFromQuote,
+  type PlanRow,
+} from '@/lib/realization-costs'
 import {
   gearDaysForSave,
   linkDayToEvent,
@@ -58,12 +79,6 @@ import {
   softDeleteDay,
   REALIZATION_KIND_LABELS,
 } from '@/lib/realization-days'
-import {
-  actualFigures,
-  crewCostsFromPlan,
-  plannedCrew,
-  projectPlan,
-} from '@/lib/realization-plan'
 import {
   costCategoryLabel,
   countsTowardRevenue,
@@ -80,12 +95,11 @@ import { EventNotice, noticeAfterSave, type EventNoticeState } from '@/component
 import { GearGrid, type DayRemoval } from '@/components/equipment/project-equipment'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CallSheetPlanner } from '@/components/planner/call-sheet-planner'
-import { CostRow, CrewRoleDatalist } from './cost-rows'
+import { CostRow, CrewRoleDatalist, type LineMechanics } from './cost-rows'
 import { DayCalendar, formatDayLong, type DayCalendarActions } from './day-calendar'
-import { DayCards } from './day-cards'
+import { DayCards, DayLines, TotalsText, type LineHandlers } from './day-cards'
 import { NewDayButton, type NewDay } from './new-day'
-import { PlanSection } from './plan-section'
-import { RealizationSummary } from './realization-summary'
+import { MissingFromQuote, QuoteChangesBanner, RestartFromQuote } from './realization-notices'
 
 const SAVE_DELAY_MS = 250
 
@@ -126,8 +140,10 @@ function RealizationView({ project }: { project: Project }) {
   // zapiszą się dopiero przy pierwszej zmianie.
   const [stored, setStored] = useState<GearDay[] | null>(project.gearDays ?? null)
   const [costs, setCosts] = useState<ProjectCost[]>(project.costs ?? [])
+  const [startedAt, setStartedAt] = useState<string | undefined>(project.costsFromQuoteAt)
   const storedRef = useRef(stored)
   const costsRef = useRef(costs)
+  const startedRef = useRef(startedAt)
 
   const { days, info, suggestion } = useMemo(
     () => resolveRealizationDays({ ...project, gearDays: stored ?? undefined }, allEvents),
@@ -140,19 +156,20 @@ function RealizationView({ project }: { project: Project }) {
   useEffect(() => {
     saveRef.current = updateProject
   }, [updateProject])
-  const pendingRef = useRef<{ gearDays?: GearDay[]; costs?: ProjectCost[] }>({})
+  const pendingRef = useRef<{ gearDays?: GearDay[]; costs?: ProjectCost[]; costsFromQuoteAt?: string | null }>({})
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const flush = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = null
-    const { gearDays, costs: nextCosts } = pendingRef.current
+    const { gearDays, costs: nextCosts, costsFromQuoteAt } = pendingRef.current
     pendingRef.current = {}
-    if (!gearDays && !nextCosts) return
+    if (!gearDays && !nextCosts && costsFromQuoteAt === undefined) return
     void saveRef.current(project.id, {
       // Stary kształt (`equipment`) czyścimy: od pierwszego zapisu liczą się dni.
       ...(gearDays ? { gearDays, equipment: [] } : {}),
       ...(nextCosts ? { costs: nextCosts } : {}),
+      ...(costsFromQuoteAt !== undefined ? { costsFromQuoteAt: costsFromQuoteAt ?? undefined } : {}),
     })
   }, [project.id])
 
@@ -186,6 +203,16 @@ function RealizationView({ project }: { project: Project }) {
     [schedule]
   )
 
+  const commitStarted = useCallback(
+    (next: string | undefined) => {
+      startedRef.current = next
+      setStartedAt(next)
+      pendingRef.current.costsFromQuoteAt = next ?? null
+      schedule()
+    },
+    [schedule]
+  )
+
   /** Koszt przypięty do dnia z kalendarza (jeszcze niezapisanego) najpierw zapisuje dni. */
   const ensureDaysSaved = () => {
     const unsaved = days.some((d) => {
@@ -193,6 +220,45 @@ function RealizationView({ project }: { project: Project }) {
       return !i?.saved || i.pendingLink
     })
     if (unsaved) commitDays(days)
+  }
+
+  // ── Plan z wyceny (szkic) ──────────────────────────────────────────────────
+
+  // Wycena TEGO projektu (wybrany wariant, z niezapisanymi jeszcze zmianami).
+  const live = useMemo(() => ({ data, pricingConfig, marginMultiplier }), [data, pricingConfig, marginMultiplier])
+  const hasQuote = !!project.quote || !isBlankQuoteData(data)
+  const plan = useMemo(() => (hasQuote ? quotePlanRows(live) : { rows: [] as PlanRow[], quoteDayIds: [] as string[] }), [hasQuote, live])
+  const shootDayIds = useMemo(
+    () => days.filter((d) => (info.get(d.id)?.kind ?? 'shoot_day') === 'shoot_day').map((d) => d.id),
+    [days, info]
+  )
+  const mode = realizationMode({ costs, costsFromQuoteAt: startedAt })
+  const shown = useMemo(() => (mode === 'draft' ? draftCosts(plan.rows, shootDayIds) : costs), [mode, plan.rows, shootDayIds, costs])
+  const layout = useMemo(
+    () => layoutRealization(shown, days.map((d) => d.id), plan.quoteDayIds),
+    [shown, days, plan.quoteDayIds]
+  )
+
+  /**
+   * Pierwsza zmiana w szkicu (decyzja Q2, wariant A): cały szkic zapisuje się
+   * jako wiersze. Zwraca wiersze po starcie i mapę planKey → id.
+   */
+  const ensureStarted = (): { list: ProjectCost[]; ids: Map<string, string> } => {
+    const current = costsRef.current
+    if (realizationMode({ costs: current, costsFromQuoteAt: startedRef.current }) !== 'draft' || plan.rows.length === 0) {
+      return { list: current, ids: new Map() }
+    }
+    ensureDaysSaved()
+    const result = startFromQuote(current, plan.rows, shootDayIds)
+    commitStarted(result.startedAt)
+    commitCosts(result.costs)
+    return { list: result.costs, ids: result.ids }
+  }
+
+  /** Id zapisanego wiersza (szkic → wiersz po starcie). */
+  const targetOf = (cost: ProjectCost): { list: ProjectCost[]; id: string | undefined } => {
+    const { list, ids } = ensureStarted()
+    return { list, id: isDraftId(cost.id) ? ids.get(cost.planKey ?? '') : cost.id }
   }
 
   // ── Komunikaty ─────────────────────────────────────────────────────────────
@@ -316,17 +382,43 @@ function RealizationView({ project }: { project: Project }) {
 
   const addDayCost = (dayId: string, init: NewCost) => {
     ensureDaysSaved()
-    commitCosts(addCost(costsRef.current, { ...init, dayId }))
+    const { list } = ensureStarted()
+    commitCosts(addCost(list, { ...init, dayId }))
   }
-  const changeCost = (id: string, patch: Partial<ProjectCost>) => commitCosts(updateCost(costsRef.current, id, patch))
+  const addProjectCost = () => {
+    const { list } = ensureStarted()
+    commitCosts(addCost(list, { category: 'inne', label: '', quantity: 1, unitCost: 0 }))
+  }
+  /** Zmiana wiersza (także pierwsza w szkicu); wiersz z planu dostaje znacznik „zmieniony ręcznie". */
+  const changeCost = (cost: ProjectCost, patch: Partial<ProjectCost>) => {
+    const { list, id } = targetOf(cost)
+    if (!id) return
+    commitCosts(list.map((c) => (c.id === id ? applyPatch(c, editPatch(c, patch)) : c)))
+  }
   const removeCost = (cost: ProjectCost) => {
+    const { list, id } = targetOf(cost)
+    if (!id) return
     const deletedAt = new Date().toISOString()
-    commitCosts(softDeleteCost(costsRef.current, cost.id, deletedAt))
+    commitCosts(softDeleteCost(list, id, deletedAt))
     setNotice({
       message: `Usunięto ${describeCost(cost)}.`,
       undo: () => commitCosts(restoreCosts(costsRef.current, deletedAt)),
     })
   }
+  /** Wiersze dnia wyceny bez odpowiednika → wybrany dzień Realizacji (bez znacznika „zmieniony"). */
+  const moveToDay = (lines: ProjectCost[], dayId: string) => {
+    ensureDaysSaved()
+    const { list, ids } = ensureStarted()
+    const targets = new Set(lines.map((c) => (isDraftId(c.id) ? ids.get(c.planKey ?? '') : c.id)).filter(Boolean))
+    commitCosts(list.map((c) => (targets.has(c.id) ? { ...c, dayId } : c)))
+  }
+
+  const mechanics = (cost: ProjectCost): LineMechanics => ({
+    counted: !cost.skipped,
+    own: isOwnWork(cost),
+    onTick: (counted) => changeCost(cost, { skipped: counted ? undefined : true }),
+    onWork: (own) => changeCost(cost, { ownWork: own ? true : undefined }),
+  })
 
   /** Dopisane pozycje da się cofnąć jednym kliknięciem (miękko usuwamy dokładnie je). */
   const undoAdded = (ids: Set<string>) => () => {
@@ -335,17 +427,18 @@ function RealizationView({ project }: { project: Project }) {
   }
 
   // Zestawy z ekipą (T9b): ekipa zestawu → wiersze kosztów dnia; ekipa dnia → zestaw.
-  const kitCrewOfDay = (day: GearDay) => kitCrewFromDayCosts(costsOfDay(costsRef.current, day.id), crewRoles)
+  const kitCrewOfDay = (day: GearDay) => kitCrewFromDayCosts(costsOfDay(shown, day.id), crewRoles)
 
   const applyKitCrew = (day: GearDay, crew: KitCrewEntry[]) => {
     ensureDaysSaved()
-    const rows = kitCrewDayCosts(crew, day.id, costsOfDay(costsRef.current, day.id), crewRoles, crewPeople)
+    const { list } = ensureStarted()
+    const rows = kitCrewDayCosts(crew, day.id, costsOfDay(list, day.id), crewRoles, crewPeople)
     if (rows.length === 0) {
       setNotice({ message: 'Ekipa z zestawu jest już w tym dniu.' })
       return
     }
-    const before = new Set(costsRef.current.map((c) => c.id))
-    const next = rows.reduce((list, row) => addCost(list, row), costsRef.current)
+    const before = new Set(list.map((c) => c.id))
+    const next = rows.reduce((acc, row) => addCost(acc, row), list)
     commitCosts(next)
     setNotice({
       message: `Dopisano z zestawu ${rows.length} ${plural(rows.length, 'osobę', 'osoby', 'osób')} do ekipy dnia.`,
@@ -355,8 +448,9 @@ function RealizationView({ project }: { project: Project }) {
 
   const copyCrew = (dayId: string) => {
     ensureDaysSaved()
-    const before = new Set(costsRef.current.map((c) => c.id))
-    const { costs: next, added } = copyCrewToDays(costsRef.current, dayId, days.map((d) => d.id))
+    const { list } = ensureStarted()
+    const before = new Set(list.map((c) => c.id))
+    const { costs: next, added } = copyCrewToDays(list, dayId, days.map((d) => d.id))
     if (added === 0) {
       setNotice({ message: 'Wszystkie dni mają już te osoby.' })
       return
@@ -368,34 +462,58 @@ function RealizationView({ project }: { project: Project }) {
     })
   }
 
-  // Wycena TEGO projektu (jego dokument, z niezapisanymi jeszcze zmianami).
-  const live = useMemo(() => ({ data, pricingConfig, marginMultiplier }), [data, pricingConfig, marginMultiplier])
-  const planCrew = useMemo(() => plannedCrew(live), [live])
+  // ── Zmiany wyceny i koszty sprzed R2 ───────────────────────────────────────
 
-  const copyCrewFromPlan = () => {
+  const changes = useMemo(
+    () => (mode === 'quote' && hasQuote ? quoteChanges(costs, plan.rows, shootDayIds) : null),
+    [mode, hasQuote, costs, plan.rows, shootDayIds]
+  )
+  const applyChanges = () => {
+    if (!changes) return
     ensureDaysSaved()
-    const result = crewCostsFromPlan(
-      planCrew,
-      days.map((d) => ({ id: d.id, kind: info.get(d.id)?.kind ?? 'shoot_day' })),
-      costsRef.current
-    )
-    const notes: string[] = []
-    if (result.keptDays) notes.push(`${result.keptDays} ${plural(result.keptDays, 'dzień miał', 'dni miały', 'dni miało')} już ekipę`)
-    if (result.missingDays) {
-      notes.push(
-        `${result.missingDays} ${plural(result.missingDays, 'dzień', 'dni', 'dni')} z wyceny nie ma odpowiednika — dodaj dni zdjęciowe`
-      )
-    }
-    const tail = notes.length ? ` (${notes.join('; ')})` : ''
-    if (result.added === 0) {
-      setNotice({ message: `Nic nie dopisano${tail}.` })
-      return
-    }
-    const before = new Set(costsRef.current.map((c) => c.id))
-    commitCosts(result.costs)
+    const before = costsRef.current
+    commitCosts(applyQuoteChanges(before, changes.changes, shootDayIds))
+    setNotice({ message: 'Uwzględniono zmiany wyceny w wierszach, których nie zmieniano ręcznie.', undo: () => commitCosts(before) })
+  }
+
+  const missing = useMemo(
+    () => (mode === 'legacy' && hasQuote ? missingFromQuote(costs, plan.rows, shootDayIds) : null),
+    [mode, hasQuote, costs, plan.rows, shootDayIds]
+  )
+  const addMissing = (rows: PlanRow[], as: 'plan' | 'own' | 'cost') => {
+    ensureDaysSaved()
+    const before = costsRef.current
+    const next = rows.reduce((acc, row) => {
+      const counted = as === 'plan' ? row : { ...row, skipped: undefined, ownWork: as === 'own' ? (true as const) : undefined }
+      return addPlanRow(acc, counted, shootDayIds)
+    }, before)
+    commitCosts(next)
     setNotice({
-      message: `Dopisano z planu ${result.added} ${plural(result.added, 'osobę', 'osoby', 'osób')}${tail}. Uzupełnij imiona i stawki.`,
-      undo: undoAdded(new Set(result.costs.filter((c) => !before.has(c.id)).map((c) => c.id))),
+      message: `Dodano z wyceny ${rows.length} ${plural(rows.length, 'pozycję', 'pozycje', 'pozycji')}.`,
+      undo: () => commitCosts(before),
+    })
+  }
+
+  const today = toDateKey(new Date())
+  const financeCosts = useMemo(() => projectMoney({ ...project, costs }, allEvents, today).costs, [project, costs, allEvents, today])
+  const restartPreview = useMemo(() => {
+    if (mode !== 'legacy' || !hasQuote) return null
+    const next = restartFromQuote(costs, plan.rows, shootDayIds)
+    return projectMoney({ ...project, costs: next.costs }, allEvents, today).costs
+  }, [mode, hasQuote, costs, plan.rows, shootDayIds, project, allEvents, today])
+  const restart = () => {
+    ensureDaysSaved()
+    const before = costsRef.current
+    const startedBefore = startedRef.current
+    const result = restartFromQuote(before, plan.rows, shootDayIds)
+    commitCosts(result.costs)
+    commitStarted(result.startedAt)
+    setNotice({
+      message: 'Realizacja zaczyna się od wyceny; wcześniej wpisane koszty są usunięte (da się cofnąć).',
+      undo: () => {
+        commitCosts(before)
+        commitStarted(startedBefore)
+      },
     })
   }
 
@@ -429,19 +547,6 @@ function RealizationView({ project }: { project: Project }) {
       undo: () => commitDays(before),
     })
   }
-
-  // ── Liczby ─────────────────────────────────────────────────────────────────
-
-  const plan = useMemo(() => projectPlan(project, live), [project, live])
-  // Przychód rzeczywisty tą samą regułą co Finanse (T6): faktury, gdy są pełne,
-  // inaczej plan z kalkulatora plus sprzedaż dodatkowa.
-  const money = useMemo(
-    () => projectMoney({ ...project, costs }, allEvents, toDateKey(new Date())),
-    [project, costs, allEvents]
-  )
-  const fromInvoices = money.revenueBasis === 'invoices' && money.revenue !== null
-  const actualRevenue = fromInvoices ? money.revenue! : plan.revenue + money.extrasTotal
-  const actual = useMemo(() => actualFigures(plan, costs, actualRevenue), [plan, costs, actualRevenue])
 
   const gear = useMemo(() => summarizeProjectGear({ ...project, gearDays: days }, items), [project, days, items])
   const rentByDay = useMemo(() => new Map(gear.perDay.map((d) => [d.dayId, d.rentValue])), [gear])
@@ -483,9 +588,16 @@ function RealizationView({ project }: { project: Project }) {
     setNotice({ message: `Dodano „${member.name}" do Ekipy — kontakt i stawkę uzupełnisz w sekcji Ekipa.` })
   }
 
-  const projectCosts = projectLevelCosts(costs, days.map((d) => d.id))
+  const handlers: LineHandlers = {
+    outsiders: suggestions,
+    roleListId: crewListListId(crewListId),
+    mechanics,
+    onChangeCost: changeCost,
+    onRemoveCost: removeCost,
+  }
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
   const newDayButton = <NewDayButton onAdd={addDay} />
+  const enteredCount = liveCosts(costs).length
 
   const eventSheet = (
     <Sheet open={!!editingEvent} onOpenChange={(open) => !open && setEditingEvent(null)}>
@@ -554,12 +666,19 @@ function RealizationView({ project }: { project: Project }) {
           Realizacja
         </h2>
         <p className="max-w-2xl text-xs text-zinc-500">
-          Dni zdjęciowe i przygotowań (daty z kalendarza), sprzęt, ekipa i koszty, które naprawdę były — obok planu
-          z wyceny. {!countsTowardRevenue(project.status) && 'To jeszcze wycena: realizację wpisuje się zwykle po akceptacji.'}
+          Koszty, ekipa i sprzęt, które naprawdę były — zaczynają się od wyceny. Zaznaczone = było; „Moja praca" nie jest
+          kosztem. Zysk i marże są w zakładce Finanse.{' '}
+          {!countsTowardRevenue(project.status) && 'To jeszcze wycena: realizację wpisuje się zwykle po akceptacji.'}
         </p>
+        {mode === 'draft' && plan.rows.length > 0 && (
+          <p className="max-w-2xl text-xs text-amber-200/70">
+            Pozycje z wyceny — jeszcze niezapisane. Pierwsza zmiana (zaznaczenie, kwota, osoba, nowy wiersz) zapisze je jako
+            Realizację; do tego czasu Finanse liczą plan.
+          </p>
+        )}
       </header>
 
-      {(notice || eventNotice) && (
+      {(notice || eventNotice || changes || missing) && (
         <div className="space-y-2">
           {notice && (
             <div
@@ -591,10 +710,59 @@ function RealizationView({ project }: { project: Project }) {
             </div>
           )}
           {eventNotice && <EventNotice notice={eventNotice} onDone={() => setEventNotice(null)} />}
+          {changes && <QuoteChangesBanner projectId={project.id} changes={changes} onApply={applyChanges} />}
+          {missing && <MissingFromQuote projectId={project.id} missing={missing} onAdd={addMissing} />}
         </div>
       )}
 
-      <RealizationSummary plan={plan} actual={actual} fromInvoices={fromInvoices} />
+      <section aria-label="Koszty projektu" className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-bold text-white" style={archivo}>
+              Koszty projektu
+            </h3>
+            <p className="text-xs text-zinc-500">
+              To, co nie należy do jednego dnia: preprodukcja, dojazd, nocleg, catering, postprodukcja, sprzęt kupiony na ten projekt.
+            </p>
+          </div>
+          <TotalsText lines={layout.project} label="Razem" />
+        </div>
+        <div className="space-y-1.5">
+          {layout.project.map((cost) => (
+            <div key={cost.id}>
+              <CostRow
+                cost={cost}
+                withCrewCategory
+                mechanics={mechanics(cost)}
+                onChange={(patch) => changeCost(cost, patch)}
+                onRemove={() => removeCost(cost)}
+              />
+              {cost.dayId && !days.some((d) => d.id === cost.dayId) && (
+                <p className="mt-0.5 text-[11px] text-amber-200/70">Dzień tego kosztu już nie istnieje — liczy się do projektu.</p>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={addProjectCost}
+            className="-ml-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+          >
+            <Plus className="size-3.5" />
+            Koszt projektu
+          </button>
+          {mode === 'legacy' && hasQuote && (
+            <RestartFromQuote
+              before={financeCosts}
+              after={restartPreview}
+              enteredCount={enteredCount}
+              planCount={plan.rows.length}
+              onConfirm={restart}
+            />
+          )}
+        </div>
+      </section>
 
       <section aria-label="Dni realizacji" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -604,23 +772,7 @@ function RealizationView({ project }: { project: Project }) {
               {days.length} {plural(days.length, 'dzień', 'dni', 'dni')}
             </span>
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={copyCrewFromPlan}
-              disabled={planCrew.length === 0 || days.length === 0}
-              title={
-                planCrew.length === 0
-                  ? 'Plan nie ma płatnej ekipy (albo projekt nie ma wyceny)'
-                  : 'Role i stawki z planu trafiają do dni zdjęciowych, które nie mają jeszcze ekipy'
-              }
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-2.5 text-xs font-medium text-zinc-300 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <ClipboardCopy className="size-3.5" />
-              Przepisz ekipę z planu
-            </button>
-            {newDayButton}
-          </div>
+          {newDayButton}
         </div>
         {outsideNames.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">
@@ -640,20 +792,56 @@ function RealizationView({ project }: { project: Project }) {
             <span className="text-zinc-600">— kliknij, żeby dodać do bazy</span>
           </div>
         )}
+        {layout.unassigned.map((group) => (
+          <article
+            key={String(group.quoteDay)}
+            className="rounded-xl border border-dashed border-white/10 bg-zinc-900/30 p-4"
+            aria-label={group.quoteDay === null ? 'Ekipa z szybkiej wyceny' : `Dzień ${group.quoteDay + 1} z wyceny`}
+          >
+            <header className="mb-2 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-white">
+                  {group.quoteDay === null ? 'Ekipa z szybkiej wyceny — wszystkie dni' : `Dzień ${group.quoteDay + 1} z wyceny`}
+                </h4>
+                <p className="text-[11px] text-zinc-500">
+                  {group.quoteDay === null
+                    ? 'Szybka wycena nie dzieli ekipy na dni. Rozpisz ją na dni, jeśli chcesz (i odznacz tę pozycję).'
+                    : 'W Realizacji nie ma takiego dnia zdjęciowego — koszty liczą się do projektu.'}
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                {days.length > 0 && (
+                  <select
+                    value=""
+                    aria-label="Przenieś do dnia"
+                    onChange={(e) => e.target.value && moveToDay(group.costs, e.target.value)}
+                    className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-300"
+                  >
+                    <option value="">Przenieś do dnia…</option>
+                    {days.map((d, i) => (
+                      <option key={d.id} value={d.id}>
+                        {labelOf(d, i)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <TotalsText lines={group.costs} label="Koszty" />
+              </div>
+            </header>
+            <DayLines lines={group.costs} handlers={handlers} />
+          </article>
+        ))}
         <DayCards
           days={days}
           info={info}
-          costs={costs}
+          lines={layout.byDay}
           rentByDay={rentByDay}
-          outsiders={suggestions}
-          roleListId={crewListListId(crewListId)}
+          handlers={handlers}
           dayLabel={labelOf}
           calendar={calendarActions}
           dayRemoval={dayRemoval}
           onRemoveDay={(day) => void removeDay(day)}
           onAddCost={addDayCost}
-          onChangeCost={changeCost}
-          onRemoveCost={removeCost}
           onCopyCrew={copyCrew}
           callSheetOf={callSheetOf}
           callSheetsReady={!callSheets.isLoading}
@@ -694,40 +882,6 @@ function RealizationView({ project }: { project: Project }) {
           </button>
         }
       />
-
-      <section aria-label="Koszty całego projektu" className="space-y-2">
-        <h3 className="text-base font-bold text-white" style={archivo}>
-          Koszty całego projektu
-        </h3>
-        <p className="text-xs text-zinc-500">
-          To, co nie należy do jednego dnia: sprzęt kupiony pod projekt, dojazd za całość, montażysta, muzyka.
-        </p>
-        <div className="space-y-1.5">
-          {projectCosts.map((cost) => (
-            <div key={cost.id}>
-              <CostRow
-                cost={cost}
-                withCrewCategory
-                onChange={(patch) => changeCost(cost.id, patch)}
-                onRemove={() => removeCost(cost)}
-              />
-              {cost.dayId && (
-                <p className="mt-0.5 text-[11px] text-amber-200/70">Dzień tego kosztu już nie istnieje — liczy się do projektu.</p>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => commitCosts(addCost(costsRef.current, { category: 'sprzet', label: '', quantity: 1, unitCost: 0 }))}
-          className="-ml-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
-        >
-          <Plus className="size-3.5" />
-          Koszt projektu
-        </button>
-      </section>
-
-      <PlanSection plan={plan} defaultOpen={!countsTowardRevenue(project.status)} />
 
       {eventSheet}
     </div>
