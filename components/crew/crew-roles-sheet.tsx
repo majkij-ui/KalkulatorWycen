@@ -5,7 +5,7 @@
  * przywrócenie. Wbudowane role, których nie edytowano, biorą nazwę i stawkę
  * z cennika domyślnego („z cennika"; Ustawienia → „Zapisz stawki jako
  * domyślne") — pierwsza zmiana zapisuje je do pliku i od tej chwili mają
- * własne stawki (decyzja 7: stawkę dla klienta daje rola). W otwartej wycenie
+ * własne stawki (cena miejsca do obsadzenia; osoba w wycenie wnosi swoją stawkę — R1). W otwartej wycenie
  * wbudowane role liczą się z jej własnego cennika (`quoteRoles`).
  */
 
@@ -151,8 +151,9 @@ export function CrewRolesSheet() {
         <div className="text-[11px] uppercase tracking-widest text-zinc-500">Ekipa</div>
         <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Role</h2>
         <p className="mt-1 text-xs text-zinc-500">
-          Rola to to, za co płaci klient — stawka dla klienta pochodzi z roli. Ile płacę ja, wynika z osoby (jej
-          stawka); „mój koszt" roli przydaje się, gdy nie wiadomo jeszcze, kto pojedzie.
+          Stawki roli liczą się dla miejsca do obsadzenia: „klient" to cena dla klienta, „mój koszt" — ile zapłacę,
+          gdy nie wiadomo jeszcze, kto pojedzie. Gdy w wycenie wybierzesz osobę, obie kwoty biorą się z jej stawki w
+          roli (karta osoby), a każdą możesz potem zmienić w wierszu.
         </p>
       </header>
 

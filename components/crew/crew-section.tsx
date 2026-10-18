@@ -33,7 +33,7 @@ import {
   type CalculatorCrewRef,
   type CrewMergePlan,
 } from '@/lib/crew-merge'
-import { computeCrewStats, crewRanking, unknownCrewNames, type UnknownCrewName } from '@/lib/crew-stats'
+import { computeCrewStats, crewPaidThisYear, crewRanking, unknownCrewNames, type UnknownCrewName } from '@/lib/crew-stats'
 import { crewRoleByName, type CrewMember } from '@/lib/crew-types'
 import { personKey } from '@/lib/project-costs'
 import { dayLabel, plural } from '@/lib/pl-plural'
@@ -282,7 +282,8 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
     })
   }
 
-  const paidThisYear = [...stats.values()].reduce((sum, s) => sum + s.paidThisYear, 0)
+  // Bez „Ja" (R1): moja praca to nie wypłata.
+  const paidThisYear = crewPaidThisYear(people, stats)
   const daysThisYearPeople = ranking.length
   const top = ranking[0]
 
@@ -475,6 +476,11 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
                 <div className="min-w-[180px] flex-1">
                   <div className="truncate font-semibold text-zinc-100">
                     {member.name}
+                    {member.self && (
+                      <span className="ml-2 rounded bg-primary/20 px-1.5 py-px text-[10px] font-bold text-primary" title="To ja — moja praca, nie koszt zewnętrzny">
+                        Ja
+                      </span>
+                    )}
                     {member.retiredAt && (
                       <span className="ml-2 rounded bg-zinc-800 px-1.5 py-px text-[10px] font-normal text-zinc-400">
                         wycofany

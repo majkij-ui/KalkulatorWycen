@@ -15,11 +15,12 @@ import { InlinePrice } from '@/components/ui/inline-price'
 import { useQuote } from '@/lib/quote-context'
 import { DEFAULT_PRICING } from '@/lib/pricing-config'
 import type { CrewRoleKey, PakietSprzetu, ShootingDay, SprzetOpcja, DronOpcja } from '@/lib/quote-types'
-import { computeShootingDayNet } from '@/lib/quote-calc'
+import { computeShootingDayNet, lineMarginMultiplier } from '@/lib/quote-calc'
 import { dayGearFigures, hasLegacyGear } from '@/lib/quote-gear'
 import { DayGearSection, GearQuotePanel } from './produkcja-gear'
 import { CrewQuoteNotice, DayCrewSection } from './produkcja-crew'
-import { dayCrewFigures, hasLegacyCrew } from '@/lib/quote-crew'
+import { dayCrewFigures, defaultFirstDayCrew, hasLegacyCrew } from '@/lib/quote-crew'
+import { useCrew } from '@/lib/crew-context'
 
 const DP = DEFAULT_PRICING
 
@@ -224,11 +225,13 @@ function DayCard({
   // Live day subtotal displayed at the bottom of the card. Sprzęt z katalogu i
   // wypożyczalnia bez marży (lib/quote-gear.ts), tak jak w sumie wyceny.
   const gear = dayGearFigures(clientDay, data.gearDiscountPercent)
-  // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki.
+  // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki —
+  // w wycenie z marżą jako osobną pozycją (R1) bez marży.
   const crew = dayCrewFigures(clientDay)
+  const lineM = lineMarginMultiplier(data, marginMultiplier)
   const dayBaseNetto =
-    computeShootingDayNet(clientDay, clientPricing.produkcja) * marginMultiplier +
-    (crew.ekipa + crew.obsada) * marginMultiplier +
+    computeShootingDayNet(clientDay, clientPricing.produkcja) * lineM +
+    (crew.ekipa + crew.obsada) * lineM +
     gear.charged +
     gear.external
   const adj = day.dayAdjustment ?? 0
@@ -410,8 +413,11 @@ function DayCard({
 
 export function ProdukcjaTab() {
   const { data, updateField, addShootingDay, removeShootingDay, updateShootingDay, pricingConfig, clientPricing, updatePricingValue, formatCurrency } = useQuote()
+  const { quoteRoles, people } = useCrew()
   const pc = pricingConfig.produkcja
   const isDetailed = data.isDetailedProdukcja
+  // A2: dzień 1 od zera zaczyna się od „ReżOp · Ja" (bez „Ja" w Ekipie — miejsce ReżOp).
+  const addDay = () => addShootingDay(defaultFirstDayCrew(quoteRoles, people))
   const days = data.detailedShootingDays ?? []
   const dniZdjeciowe = Math.max(0, Math.min(14, Number(data.dniZdjeciowe) || 0))
   const crudeDaysTotal = dniZdjeciowe * clientPricing.produkcja.stawkaOperatoraSzybkaWycena
@@ -631,7 +637,7 @@ export function ProdukcjaTab() {
               checked={isDetailed}
               onCheckedChange={(v) => {
                 updateField('isDetailedProdukcja', v)
-                if (v && (data.detailedShootingDays ?? []).length === 0) addShootingDay()
+                if (v && (data.detailedShootingDays ?? []).length === 0) addDay()
               }}
               aria-label="Szczegółowa wycena produkcji"
             />
@@ -679,7 +685,7 @@ export function ProdukcjaTab() {
                   type="button"
                   variant="outline"
                   className="w-full border-white/10 bg-zinc-900/30 py-6 text-white hover:bg-white/10 backdrop-blur-xl"
-                  onClick={addShootingDay}
+                  onClick={addDay}
                 >
                   <Plus className="size-5 mr-2" />
                   Dodaj kolejny dzień zdjęciowy
