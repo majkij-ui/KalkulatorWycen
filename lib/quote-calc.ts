@@ -38,6 +38,35 @@ function applyMargin(value: number, marginMultiplier: number): number {
   return value * marginMultiplier
 }
 
+// ── Marża jako osobna pozycja (R1, A5) ───────────────────────────────────────
+//
+// Wycena z `marginAsLine` pokazuje pozycje po ich własnych cenach, a marżę z
+// nagłówka jako JEDNĄ dodatkową pozycję: (mnożnik − 1) × to, co mnożnik
+// rozciąga dziś (preprodukcja, postprodukcja, stare liczniki i pola sprzętu,
+// ekipa z bazy, szybka produkcja). Sprzęt z katalogu, wypożyczalnia, korekta
+// dnia, dojazd, catering, noclegi i honorarium aktorów są poza marżą — jak
+// dotąd. Suma wyceny jest ta sama co przy rozciąganiu (dopłata za przekazanie
+// praw liczy się od sumy z pozycją marży). Wycena bez flagi — jak dawniej.
+
+/** Kategoria fazy z pozycją marży (tylko w wycenie z `marginAsLine`, gdy mnożnik ≠ 1). */
+export const MARGIN_PHASE = 'Marża'
+export const MARGIN_LINE_LABEL = 'Koordynacja i produkcja'
+export const DISCOUNT_LINE_LABEL = 'Rabat'
+
+export function hasMarginLine(data: Pick<QuoteData, 'marginAsLine'>): boolean {
+  return data.marginAsLine === true
+}
+
+/** Mnożnik dla samych pozycji: 1, gdy marża idzie osobną pozycją (R1), inaczej mnożnik z nagłówka. */
+export function lineMarginMultiplier(data: Pick<QuoteData, 'marginAsLine'>, marginMultiplier: number): number {
+  return hasMarginLine(data) ? 1 : marginMultiplier
+}
+
+/** Kwota pozycji marży z faz kalkulatora (0, gdy jej nie ma). Ujemna = rabat. */
+export function marginLineAmount(phases: Pick<PhaseBreakdown, 'category' | 'phaseNetto'>[] | null | undefined): number {
+  return safeNum(phases?.find((p) => p.category === MARGIN_PHASE)?.phaseNetto, 0)
+}
+
 function getFormatPrice(post: PricingConfigShape['postprodukcja'], formatKey: string): number {
   const key = formatKey?.startsWith('Format: ') ? formatKey : null
   const price = key != null ? post[key] : undefined
@@ -101,6 +130,16 @@ export function getBreakdownWithPricing(
   const postItems: LineItemRow[] = []
   const dodatkoweItems: LineItemRow[] = []
 
+  // R1 (A5): pozycje bez marży, a różnica (rozciągnięte − własne) w jednej pozycji.
+  const lineM = lineMarginMultiplier(data, marginMultiplier)
+  let marginBase = 0
+  let marginStretched = 0
+  const margined = (value: number): number => {
+    marginBase += value
+    marginStretched += applyMargin(value, marginMultiplier)
+    return applyMargin(value, lineM)
+  }
+
   const pre = pricing.preprodukcja
   if (!data.isDetailedPrepro) {
     const q = safeNum(data.dniDokumentacji, 0, 0)
@@ -111,7 +150,7 @@ export function getBreakdownWithPricing(
       value,
       quantity: q,
       unitPriceNet: unitPrice,
-      lineNetto: applyMargin(unitPrice * q, marginMultiplier),
+      lineNetto: margined(unitPrice * q),
     })
   } else {
     const scenariuszNet = data.scenariusz === 'brak' ? 0 : data.scenariusz === 'podstawowy' ? pre.scenariuszPodstawowy : pre.scenariuszRozbudowany
@@ -120,7 +159,7 @@ export function getBreakdownWithPricing(
       value: data.scenariusz === 'brak' ? 'Brak' : data.scenariusz === 'podstawowy' ? 'Podstawowy' : 'Rozbudowany',
       quantity: 1,
       unitPriceNet: scenariuszNet,
-      lineNetto: applyMargin(scenariuszNet, marginMultiplier),
+      lineNetto: margined(scenariuszNet),
     })
     const wizjaNet = data.wizjaLokalna ? pre.wizjaLokalna : 0
     preItems.push({
@@ -128,7 +167,7 @@ export function getBreakdownWithPricing(
       value: data.wizjaLokalna ? 'Tak' : 'Nie',
       quantity: data.wizjaLokalna ? 1 : 0,
       unitPriceNet: pre.wizjaLokalna,
-      lineNetto: applyMargin(wizjaNet, marginMultiplier),
+      lineNetto: margined(wizjaNet),
     })
     const kierNet = data.kierownikProdukcji ? pre.kierownikProdukcji : 0
     preItems.push({
@@ -136,7 +175,7 @@ export function getBreakdownWithPricing(
       value: data.kierownikProdukcji ? 'Tak' : 'Nie',
       quantity: data.kierownikProdukcji ? 1 : 0,
       unitPriceNet: pre.kierownikProdukcji,
-      lineNetto: applyMargin(kierNet, marginMultiplier),
+      lineNetto: margined(kierNet),
     })
   }
 
@@ -150,7 +189,7 @@ export function getBreakdownWithPricing(
     const doplataRezOp = data.crudeRezOpSurcharge ? pro.doplataRezOpSzybkaWycena : 0
     const doplataDron = data.crudeDroneSurcharge ? pro.doplataDronSzybkaWycena : 0
     const dayRate = crew * stawkaOp + pakiet + doplataRezOp + doplataDron
-    const lineNetto = applyMargin(dayRate * days, marginMultiplier)
+    const lineNetto = margined(dayRate * days)
     const rezOpText = data.crudeRezOpSurcharge ? ' + Reż-Op' : ''
     const droneText = data.crudeDroneSurcharge ? ' + Dron' : ''
     const surchargeStr = rezOpText + droneText
@@ -169,8 +208,9 @@ export function getBreakdownWithPricing(
       const gear = dayGearFigures(day, data.gearDiscountPercent)
       // Ekipa z bazy (T9b): stawka roli × osoby, z marżą jak stare liczniki.
       const crew = dayCrewFigures(day)
-      const crewNetto = applyMargin(crew.ekipa, marginMultiplier) + applyMargin(crew.obsada, marginMultiplier)
-      const lineNetto = applyMargin(dayNet, marginMultiplier) + crewNetto + adjustment + gear.charged + gear.external
+      const crewEkipa = margined(crew.ekipa)
+      const crewNetto = crewEkipa + margined(crew.obsada)
+      const lineNetto = margined(dayNet) + crewNetto + adjustment + gear.charged + gear.external
       proItems.push({
         label: `Dzień zdjęciowy ${i + 1}`,
         value: 'Szczegółowa wycena',
@@ -194,7 +234,7 @@ export function getBreakdownWithPricing(
       value,
       quantity: q,
       unitPriceNet: unitPrice,
-      lineNetto: applyMargin(unitPrice * q, marginMultiplier),
+      lineNetto: margined(unitPrice * q),
     })
   } else {
     safeArray<Deliverable>(data.detailedDeliverables).forEach((del, i) => {
@@ -205,7 +245,7 @@ export function getBreakdownWithPricing(
         value: `${del.ilosc}× ${formatLabel}`,
         quantity: 1,
         unitPriceNet: net,
-        lineNetto: applyMargin(net, marginMultiplier),
+        lineNetto: margined(net),
       })
     })
   }
@@ -252,11 +292,28 @@ export function getBreakdownWithPricing(
     phaseNetto: items.reduce((s, i) => s + i.lineNetto, 0),
   })
 
+  // Pozycja marży (R1): tylko z flagą i gdy mnożnik coś zmienia. Liczy się do
+  // podstawy dopłaty za prawa, więc suma zostaje ta sama co przy rozciąganiu.
+  const marginAmount = marginStretched - marginBase
+  const marginItems: LineItemRow[] =
+    hasMarginLine(data) && marginAmount !== 0
+      ? [
+          {
+            label: marginAmount < 0 ? DISCOUNT_LINE_LABEL : MARGIN_LINE_LABEL,
+            value: `${Math.round((marginMultiplier - 1) * 100)}%`,
+            quantity: 1,
+            unitPriceNet: marginAmount,
+            lineNetto: marginAmount,
+          },
+        ]
+      : []
+
   const phasesWithoutCopyright: PhaseBreakdown[] = [
     toPhase('Preprodukcja', preItems),
     toPhase('Produkcja', proItems),
     toPhase('Postprodukcja', postItems),
     toPhase('Dodatkowe', [...dodatkoweItems]),
+    ...(marginItems.length ? [toPhase(MARGIN_PHASE, marginItems)] : []),
   ]
   const baseSubtotal = phasesWithoutCopyright.reduce((s, p) => s + p.phaseNetto, 0)
 
@@ -277,6 +334,7 @@ export function getBreakdownWithPricing(
     toPhase('Produkcja', proItems),
     toPhase('Postprodukcja', postItems),
     toPhase('Dodatkowe', dodatkoweItems),
+    ...(marginItems.length ? [toPhase(MARGIN_PHASE, marginItems)] : []),
   ]
 }
 
@@ -289,6 +347,9 @@ export function getBreakdownWithPricing(
  * The sum (ekipaNetto + castNetto + sprzetNetto) equals the legacy Produkcja phase
  * total, so calculator math, totals, and the breakdown summary remain unchanged.
  *
+ * R1: in a quote with `marginAsLine` the buckets carry no margin — the margin is
+ * its own PDF row (`MARGIN_PHASE`), so the buckets plus that row equal the phase.
+ *
  * In quick (non-detailed) mode there is no per-role split, so the entire crew
  * cost (`crew × stawkaOp + Reż-Op surcharge`) lands in `ekipaNetto` and `castNetto`
  * stays at 0 — the PDF Cast row notes the user is in quick mode.
@@ -299,6 +360,8 @@ export function getProductionEkipaCastSprzetNetto(
   pricing: PricingConfigShape
 ): { ekipaNetto: number; castNetto: number; sprzetNetto: number } {
   const pro = pricing.produkcja
+  // R1 (A5): w wycenie z marżą jako pozycją wiersze PDF bez marży (marża to osobny wiersz).
+  const lineM = lineMarginMultiplier(data, marginMultiplier)
 
   // Per-actor flat copyright transfer fee (applies in both quick & detailed
   // modes once user chooses "przekazanie" + fills the fields). Pass-through:
@@ -332,9 +395,9 @@ export function getProductionEkipaCastSprzetNetto(
     const sprzetBaseDayNetto = pakiet + doplataDron
 
     return {
-      ekipaNetto: applyMargin(ekipaBaseDayNetto * days, marginMultiplier),
+      ekipaNetto: applyMargin(ekipaBaseDayNetto * days, lineM),
       castNetto: actorRightsBucket,
-      sprzetNetto: applyMargin(sprzetBaseDayNetto * days, marginMultiplier),
+      sprzetNetto: applyMargin(sprzetBaseDayNetto * days, lineM),
     }
   }
 
@@ -374,14 +437,14 @@ export function getProductionEkipaCastSprzetNetto(
     if (day.dron === 'dji') equipmentNetto += pro.dronDji
     if (day.dron === 'fpv') equipmentNetto += pro.dronFpv
 
-    ekipaNetto += applyMargin(crewNetto, marginMultiplier)
-    castNetto += applyMargin(castDayNetto, marginMultiplier)
-    sprzetNetto += applyMargin(equipmentNetto, marginMultiplier)
+    ekipaNetto += applyMargin(crewNetto, lineM)
+    castNetto += applyMargin(castDayNetto, lineM)
+    sprzetNetto += applyMargin(equipmentNetto, lineM)
     const gear = dayGearFigures(day, data.gearDiscountPercent)
     sprzetNetto += gear.charged + gear.external
     const crew = dayCrewFigures(day)
-    ekipaNetto += applyMargin(crew.ekipa, marginMultiplier)
-    castNetto += applyMargin(crew.obsada, marginMultiplier)
+    ekipaNetto += applyMargin(crew.ekipa, lineM)
+    castNetto += applyMargin(crew.obsada, lineM)
     ekipaNetto += safeNum(day.dayAdjustment, 0)
   })
 

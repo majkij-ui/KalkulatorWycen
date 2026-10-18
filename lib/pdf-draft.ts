@@ -9,10 +9,10 @@
  */
 
 import { addDays, format } from 'date-fns'
-import { getProductionEkipaCastSprzetNetto, type LineItemRow, type PhaseBreakdown } from './quote-calc'
+import { getProductionEkipaCastSprzetNetto, hasMarginLine, marginLineAmount, type LineItemRow, type PhaseBreakdown } from './quote-calc'
 import { pdfGearSentences } from './quote-gear'
 import { pdfCrewSentences } from './quote-crew'
-import type { LocalPdfState, PdfRowKey, PortfolioRow, QuoteData } from './quote-types'
+import type { LocalPdfState, PdfAnyRowKey, PdfRowKey, PdfRowState, PortfolioRow, QuoteData } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { PDF_LABELS, type PdfLang } from './pdf-i18n'
 import { formatPdfAmount, pdfCurrencyUnit, type PdfCurrency } from './pdf-currency'
@@ -22,6 +22,26 @@ import { safeArray, safeNum } from './safe-numbers'
 export const DEFAULT_EXCHANGE_RATE = 4.3
 
 export const PDF_ROW_KEYS: PdfRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
+
+/**
+ * Wiersze szkicu w kolejności druku: siedem stałych, a na końcu wiersz marży
+ * (R1, A5), jeśli szkic go ma — tylko wyceny z `marginAsLine`. Stare szkice
+ * mają dokładnie te same wiersze co dawniej.
+ */
+export function pdfRowKeys(rows: Pick<LocalPdfState, 'rows'>['rows']): PdfAnyRowKey[] {
+  return rows.marza ? [...PDF_ROW_KEYS, 'marza'] : PDF_ROW_KEYS
+}
+
+/** Tytuł wiersza marży: „Koordynacja i produkcja", a przy kwocie ujemnej „Rabat". */
+export function pdfMarginRowTitle(amount: number, lang: PdfLang): string {
+  const L = PDF_LABELS[lang]
+  return safeNum(amount, 0) < 0 ? L.rowDiscount : L.rowMargin
+}
+
+/** Czy wiersz marży trafia na wydruk (jest i ma kwotę ≠ 0). */
+export function printsMarginRow(rows: Pick<LocalPdfState, 'rows'>['rows']): boolean {
+  return !!rows.marza && Math.round(safeNum(rows.marza.cenaNetto, 0)) !== 0
+}
 
 export function roundToUnit(n: number): number {
   const safe = safeNum(n, 0)
@@ -99,6 +119,22 @@ export function coerceLocalPdfDraft(raw: unknown, fallback: LocalPdfState, today
           : safeNum(candidateObj?.cenaNetto, base.cenaNetto, 0),
     }
   })
+
+  // Wiersz marży (R1): szkic bez niego (np. kopia starej wyceny poprawionej
+  // ręcznie) czyta go jako 0 — ceny wpisane ręcznie nigdy się nie zmieniają.
+  // Może być ujemny (rabat).
+  const rawMargin = (draftRows as Record<string, unknown>).marza
+  const marginObj = rawMargin && typeof rawMargin === 'object' ? (rawMargin as Record<string, unknown>) : null
+  delete nextRows.marza
+  if (fallback.rows.marza || marginObj) {
+    const base: PdfRowState = fallback.rows.marza ?? { key: 'marza', title: '', opis: '', cenaNetto: 0 }
+    nextRows.marza = {
+      key: 'marza',
+      title: coerceStr(marginObj?.title, base.title),
+      opis: coerceStr(marginObj?.opis, base.opis),
+      cenaNetto: marginObj ? safeNum(marginObj.cenaNetto, 0) : 0,
+    }
+  }
 
   const coercedLang: 'pl' | 'en' = r.pdfLanguage === 'en' ? 'en' : 'pl'
   const coercedCurrency: 'PLN' | 'EUR' = r.currency === 'EUR' ? 'EUR' : 'PLN'
@@ -297,8 +333,10 @@ export function buildInitialPdfState({
     .reduce((s, i) => s + safeNum(i.lineNetto, 0, 0), 0)
 
   const logistykaNetto = dojazd + catering + noclegi
+  // R1 (A5): marża jako osobny wiersz (wiersze wyżej są wtedy bez marży).
+  const marginNetto = marginLineAmount(breakdown)
 
-  const computedSum = preNetto + ekipaNetto + castNetto + sprzetNetto + logistykaNetto + postNetto + inneNetto
+  const computedSum = preNetto + ekipaNetto + castNetto + sprzetNetto + logistykaNetto + postNetto + inneNetto + marginNetto
   const delta = safeNum(sumaNetto, 0, 0) - computedSum
 
   // Od S3 kwoty kalkulatora są już w walucie wyceny (EUR w wycenie w euro).
@@ -372,6 +410,16 @@ export function buildInitialPdfState({
         cenaNetto: toCurrency(inneNetto + delta),
         opis: getOpisInitial({ key: 'inne', data, lang }),
       },
+      ...(hasMarginLine(data)
+        ? {
+            marza: {
+              key: 'marza' as const,
+              title: pdfMarginRowTitle(marginNetto, lang),
+              cenaNetto: toCurrency(marginNetto),
+              opis: marginNetto < 0 ? L.opisDiscount : L.opisMargin,
+            },
+          }
+        : {}),
     },
 
     materialyKoncowe: '',
@@ -391,17 +439,18 @@ export function flipPdfCurrency(prev: LocalPdfState, nextCurrency: PdfCurrency):
   const rate = Number.isFinite(prev.exchangeRate) && prev.exchangeRate > 0 ? prev.exchangeRate : DEFAULT_EXCHANGE_RATE
   const factor = nextCurrency === 'EUR' ? 1 / rate : rate
   const nextRows = { ...prev.rows }
-  ;(Object.keys(nextRows) as PdfRowKey[]).forEach((key) => {
+  ;(Object.keys(nextRows) as PdfAnyRowKey[]).forEach((key) => {
     const r = nextRows[key]
     if (!r) return
-    nextRows[key] = { ...r, cenaNetto: roundToUnit(safeNum(r.cenaNetto, 0, 0) * factor) }
+    nextRows[key] = { ...r, cenaNetto: roundToUnit(safeNum(r.cenaNetto, 0, key === 'marza' ? undefined : 0) * factor) }
   })
   return { ...prev, currency: nextCurrency, rows: nextRows }
 }
 
-/** Suma netto wierszy szkicu (to, co drukuje PDF). */
+/** Suma netto wierszy szkicu (to, co drukuje PDF) — z wierszem marży, gdy jest (może być ujemny). */
 export function pdfRowsTotal(rows: LocalPdfState['rows']): number {
-  return PDF_ROW_KEYS.reduce((sum, key) => sum + safeNum(rows[key]?.cenaNetto, 0, 0), 0)
+  const base = PDF_ROW_KEYS.reduce((sum, key) => sum + safeNum(rows[key]?.cenaNetto, 0, 0), 0)
+  return rows?.marza ? base + safeNum(rows.marza.cenaNetto, 0) : base
 }
 
 /**
@@ -422,10 +471,11 @@ export function reconcilePdfCurrency(
   const safeRate = Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_EXCHANGE_RATE
   const convert = (value: number) => roundToUnit(after.currency === 'EUR' ? value / safeRate : value * safeRate)
   const rows = { ...draft.rows }
-  PDF_ROW_KEYS.forEach((key) => {
+  pdfRowKeys(draft.rows).forEach((key) => {
     const row = draft.rows[key]
-    const calcBefore = before.rows[key]
-    const calcAfter = after.rows[key]
+    if (!row) return
+    const calcBefore = before.rows[key] ?? { cenaNetto: 0, opis: '' }
+    const calcAfter = after.rows[key] ?? { cenaNetto: 0, opis: calcBefore.opis }
     const sameAsCalculator = Math.abs(safeNum(row.cenaNetto, 0) - safeNum(calcBefore.cenaNetto, 0)) < 0.5
     rows[key] = {
       ...row,

@@ -21,7 +21,7 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay, createDefaultDeliverable, type ShootingDay, type Deliverable } from './quote-types'
+import { QuoteData, defaultQuoteData, createDefaultShootingDay, cloneShootingDay, createDefaultDeliverable, type QuoteCrewLine, type ShootingDay, type Deliverable } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { saveAsUserDefault, getSavedUserDefault, getUserDefault, DEFAULT_FORMAT_KEY, USER_DEFAULT_PRICING_EVENT } from './pricing-config'
 import type { PdfTextsConfig } from './pdf-texts-config'
@@ -89,7 +89,11 @@ interface QuoteContextValue {
   setPricingConfig: (config: PricingConfigShape) => void
   updatePricingValue: (category: keyof PricingConfigShape, key: string, value: number) => void
   // Produkcja detailed: shooting days
-  addShootingDay: () => void
+  /**
+   * Kolejny dzień (kopia ostatniego). Gdy to dzień 1 od zera, dostaje
+   * `firstDayCrew` (A2: „ReżOp · Ja", `defaultFirstDayCrew`).
+   */
+  addShootingDay: (firstDayCrew?: QuoteCrewLine[]) => void
   removeShootingDay: (id: string) => void
   updateShootingDay: <K extends keyof ShootingDay>(id: string, field: K, value: ShootingDay[K]) => void
   // Postprodukcja detailed: deliverables
@@ -149,7 +153,8 @@ const QuoteContext = createContext<QuoteContextValue | null>(null)
 function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): QuoteDoc {
   return {
     ...doc,
-    data: { ...defaultQuoteData, clientName: doc.data.clientName, projectName: doc.data.projectName },
+    // Wycena od zera to nowa wycena: marża jako osobna pozycja (R1, A5).
+    data: { ...defaultQuoteData, clientName: doc.data.clientName, projectName: doc.data.projectName, marginAsLine: true },
     pricingConfig,
     marginMultiplier: 1,
   }
@@ -288,11 +293,13 @@ export function QuoteDocScope({ docId: requestedDocId, children }: { docId: stri
     })
   }, [edit])
 
-  const addShootingDay = useCallback(() => {
+  const addShootingDay = useCallback((firstDayCrew?: QuoteCrewLine[]) => {
     editData(prev => {
       const days = prev.detailedShootingDays ?? []
       const lastDay = days[days.length - 1]
-      const nextDay = lastDay ? cloneShootingDay(lastDay) : createDefaultShootingDay()
+      const nextDay = lastDay
+        ? cloneShootingDay(lastDay)
+        : { ...createDefaultShootingDay(), ...(firstDayCrew?.length ? { crew: firstDayCrew } : {}) }
       return {
         ...prev,
         detailedShootingDays: [...days, nextDay],

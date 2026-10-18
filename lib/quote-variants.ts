@@ -131,6 +131,17 @@ type VariantPatch = Partial<Pick<Project, 'quoteVariants' | 'quoteLabel' | 'quot
  * „+ Wariant": nowy wariant z podaną migawką (kopia bieżącego albo pusta).
  * Pierwszy raz wybrany dostaje nazwę „A" zapisaną w projekcie.
  */
+/**
+ * Nowy wariant (kopia albo pusta wycena) pokazuje marżę jako osobną pozycję
+ * (R1, A5; M.J. 2026-10-18). Suma się nie zmienia; szkic PDF kopii zostaje
+ * dokładnie taki, jak był (bez wiersza marży czyta się jako 0).
+ */
+export function withMarginLine(snapshot: QuoteSnapshot | null): QuoteSnapshot | null {
+  if (!snapshot || !snapshot.data || typeof snapshot.data !== 'object') return snapshot
+  if ((snapshot.data as { marginAsLine?: unknown }).marginAsLine === true) return snapshot
+  return { ...snapshot, data: { ...snapshot.data, marginAsLine: true } }
+}
+
 export function addVariantPatch(
   project: VariantProject,
   params: { id: string; snapshot: QuoteSnapshot | null; label?: string; now: Date }
@@ -139,7 +150,7 @@ export function addVariantPatch(
   const variant: QuoteVariant = {
     id: params.id,
     label: params.label?.trim() || nextVariantLabel(allLabels(project)),
-    snapshot: params.snapshot,
+    snapshot: withMarginLine(params.snapshot),
     createdAt: at,
     updatedAt: at,
   }

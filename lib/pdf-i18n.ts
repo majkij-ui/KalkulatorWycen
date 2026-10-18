@@ -48,6 +48,13 @@ interface PdfLabelSet {
   rowLogistyka: string
   rowPostprodukcja: string
   rowInne: string
+  /** R1: wiersz marży (kwota > 0) — „Koordynacja i produkcja". */
+  rowMargin: string
+  /** R1: ten sam wiersz z kwotą ujemną — „Rabat". */
+  rowDiscount: string
+  /** R1: domyślne opisy wiersza marży / rabatu (do edycji w PDF). */
+  opisMargin: string
+  opisDiscount: string
 
   // Fallbacks
   emptyDash: string
@@ -147,6 +154,10 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     rowLogistyka: 'Logistyka',
     rowPostprodukcja: 'Postprodukcja',
     rowInne: 'Inne koszty',
+    rowMargin: 'Koordynacja i produkcja',
+    rowDiscount: 'Rabat',
+    opisMargin: 'Koordynacja projektu i produkcji: przygotowanie, kontakt, nadzór nad ekipą i harmonogramem.',
+    opisDiscount: 'Rabat od wyceny.',
 
     emptyDash: '—',
     tbd: 'Do ustalenia',
@@ -235,6 +246,10 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     rowLogistyka: 'Logistics',
     rowPostprodukcja: 'Post-production',
     rowInne: 'Other costs',
+    rowMargin: 'Production & coordination',
+    rowDiscount: 'Discount',
+    opisMargin: 'Project and production coordination: planning, communication, crew and schedule supervision.',
+    opisDiscount: 'Discount on the estimate.',
 
     emptyDash: '—',
     tbd: 'TBD',

@@ -2,10 +2,10 @@
  * Ekipa (T9a, plan §6d): role i ludzie — słownik firmy obok katalogu sprzętu.
  *
  *  - ROLA (`crew-roles.json`) to to, za co płaci klient: „Gafer", „Montażysta".
- *    Stawka dla klienta pochodzi z roli (decyzja 7).
+ *    Stawka roli to cena dla klienta miejsca do obsadzenia; od R1 osoba wnosi swoją stawkę w roli do „Koszt" i „Klient" (A3).
  *  - OSOBA (`crew.json`) to to, komu płacę JA: imię, role, jej stawka, kontakt.
  *    Ekipa na planie i podwykonawcy (montaż, kolor) są na jednej liście,
- *    różnią się grupą roli (decyzja 8).
+ *    różnią się grupą roli (decyzja 8). Jedna osoba może być mną (`self`, R1).
  *
  * Osiem ról, które zna dziś kalkulator (`CrewRoleKey`), istnieje BEZ pliku:
  * nazwa i stawka z bieżącego cennika, tak jak w zakładce Profit. Odczyt nic
@@ -128,6 +128,11 @@ export const crewMemberSchema = z
     deletedAt: optionalText,
     /** „Scal osoby" (S2): duplikat usunięty przy scaleniu wskazuje osobę, która została. */
     mergedInto: optionalText,
+    /**
+     * R1 (A1): to ja (M.J.). Najwyżej jedna żywa osoba — zapis przez
+     * `withSelfRule`. Pracę „Ja" R2 liczy jako moją pracę, nie koszt zewnętrzny.
+     */
+    self: z.boolean().optional().catch(undefined),
     createdAt: z.string().catch(''),
     updatedAt: z.string().catch(''),
   })
@@ -282,6 +287,43 @@ export function crewMemberById(members: CrewMember[], id: string | null | undefi
   return current && !current.deletedAt ? current : null
 }
 
+// ── „Ja" (R1, A1) ────────────────────────────────────────────────────────────
+
+/**
+ * Osoba oznaczona jako ja: żywa (bez `deletedAt`) z `self: true`. Gdyby przez
+ * „Cofnij" albo ręczny import było ich kilka — najstarsza karta.
+ */
+export function selfCrewMember<M extends Pick<CrewMember, 'id' | 'self' | 'deletedAt' | 'createdAt'>>(
+  members: M[]
+): M | null {
+  return (
+    members
+      .filter((m) => m.self === true && !m.deletedAt)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0] ?? null
+  )
+}
+
+export function isSelfCrewMember(member: Pick<CrewMember, 'self'> | null | undefined): boolean {
+  return member?.self === true
+}
+
+/**
+ * Zapis karty z regułą „najwyżej jeden Ja": karta z `self` odbiera flagę
+ * wszystkim innym (pole znika, `updatedAt` = `now`). Karta bez `self` nie
+ * rusza nikogo. Nowa karta trafia na koniec listy.
+ */
+export function withSelfRule(all: CrewMember[], member: CrewMember, now: string): CrewMember[] {
+  const exists = all.some((m) => m.id === member.id)
+  const next = exists ? all.map((m) => (m.id === member.id ? member : m)) : [...all, member]
+  if (member.self !== true) return next
+  return next.map((m) => {
+    if (m.id === member.id || m.self !== true) return m
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { self, ...rest } = m
+    return { ...rest, updatedAt: now }
+  })
+}
+
 // ── Stawki w rolach (S2) ─────────────────────────────────────────────────────
 
 /** Własna stawka osoby w tej roli; `null` = brak (albo 0, czyli nieznana). */
@@ -359,6 +401,7 @@ export function createCrewMember(
     contact?: CrewContact
     city?: string
     notes?: string
+    self?: boolean
   },
   now: Date = new Date()
 ): CrewMember {
@@ -376,6 +419,7 @@ export function createCrewMember(
   if (roleRates.length > 0) member.roleRates = roleRates
   if (params.city?.trim()) member.city = params.city.trim()
   if (params.notes?.trim()) member.notes = params.notes.trim()
+  if (params.self === true) member.self = true
   return member
 }
 

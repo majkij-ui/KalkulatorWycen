@@ -89,17 +89,19 @@ test('stawka osoby w roli → jej stawka ogólna → koszt roli → stawka roli'
 
 // ── Wycena ───────────────────────────────────────────────────────────────────
 
-test('wycena: osoba w pozycji bierze swoją stawkę w tej roli; cena dla klienta bez zmian (decyzja 7)', () => {
+test('wycena: osoba w pozycji bierze swoją stawkę w tej roli — w „Koszt" i „Klient" (R1, A3)', () => {
   const op = createQuoteCrewLine(OPERATOR, LUKASZ)
   assert.equal(op.costRate, 1500)
   assert.equal(op.clientRate, 1500)
+  // Gafer bez własnej stawki: stawka ogólna osoby w obie kwoty (dawniej klient = rola 1 400).
   const gaffer = withCrewPerson(createQuoteCrewLine(GAFFER), LUKASZ, GAFFER)
   assert.equal(gaffer.costRate, 1200)
-  assert.equal(gaffer.clientRate, 1400)
+  assert.equal(gaffer.clientRate, 1200)
   // Rola usunięta z bazy: osoba i tak liczy się po `roleId` pozycji.
   assert.equal(withCrewPerson(createQuoteCrewLine(OPERATOR), LUKASZ, null).costRate, 1500)
-  // Zdjęcie osoby: koszt roli.
+  // Zdjęcie osoby: koszt i cena roli.
   assert.equal(withCrewPerson(op, null, OPERATOR).costRate, 1100)
+  assert.equal(withCrewPerson(op, null, OPERATOR).clientRate, 1500)
 })
 
 test('wycena: zmiana stawki w roli w bazie = pozycja nieaktualna; „zaktualizuj" bierze nową', () => {
