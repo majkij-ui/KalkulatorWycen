@@ -1,0 +1,76 @@
+{
+  "note": "R1: karta „Ja” (Michał, self) z Kosztem 1 500 zł w każdej swojej roli; nowe role „Reżyser” i „Asystent” (klient 1 500 zł); wbudowana „Asystent/Operator” → „Operator” (klient 1 500 zł, zamrożone z cennika domyślnego); stawki „Asystent” 1 000 zł Kamila i Łukasza przeniesione z Gafera do nowej roli Asystent. ReżOp bez zmian — dalej idzie za cennikiem. Wyceny i finanse bez zmian.",
+  "upsert": {
+    "crew-roles.json": [
+      {
+        "id": "cr-r1-rezyser",
+        "name": "Reżyser",
+        "clientRate": 1500,
+        "group": "ekipa",
+        "order": 5,
+        "updatedAt": "2026-10-18T20:00:00.000Z"
+      },
+      {
+        "id": "asystent",
+        "name": "Operator",
+        "clientRate": 1500,
+        "group": "ekipa",
+        "order": 20,
+        "updatedAt": "2026-10-18T20:00:00.000Z"
+      },
+      {
+        "id": "cr-r1-asystent",
+        "name": "Asystent",
+        "clientRate": 1500,
+        "group": "ekipa",
+        "order": 25,
+        "updatedAt": "2026-10-18T20:00:00.000Z"
+      }
+    ],
+    "crew.json": [
+      {
+        "id": "cm-r1-ja",
+        "name": "Michał",
+        "self": true,
+        "roleIds": ["cr-r1-rezyser", "rezOp", "asystent", "cr-r1-asystent"],
+        "roleRates": [
+          { "roleId": "cr-r1-rezyser", "rate": 1500 },
+          { "roleId": "rezOp", "rate": 1500 },
+          { "roleId": "asystent", "rate": 1500 },
+          { "roleId": "cr-r1-asystent", "rate": 1500 }
+        ],
+        "contact": {},
+        "createdAt": "2026-10-18T20:00:00.000Z",
+        "updatedAt": "2026-10-18T20:00:00.000Z"
+      }
+    ]
+  },
+  "update": {
+    "crew.json": [
+      {
+        "id": "cm-1792336814988-58htqfv",
+        "set": {
+          "roleIds": ["rezOp", "asystent", "cr-r1-asystent"],
+          "roleRates": [
+            { "roleId": "rezOp", "rate": 1500, "note": "DOP" },
+            { "roleId": "asystent", "rate": 1200, "note": "Op" },
+            { "roleId": "cr-r1-asystent", "rate": 1000, "note": "Asystent" }
+          ],
+          "updatedAt": "2026-10-18T20:00:00.000Z"
+        }
+      },
+      {
+        "id": "cm-1791885527221-zgvplyg",
+        "set": {
+          "roleIds": ["asystent", "rezOp", "cr-r1-asystent"],
+          "roleRates": [
+            { "roleId": "asystent", "rate": 1200, "note": "Operator bez sprzętu" },
+            { "roleId": "rezOp", "rate": 1500, "note": "Operator ze sprzętem" },
+            { "roleId": "cr-r1-asystent", "rate": 1000, "note": "Asystent/gaffer" }
+          ],
+          "updatedAt": "2026-10-18T20:00:00.000Z"
+        }
+      }
+    ]
+  }
+}

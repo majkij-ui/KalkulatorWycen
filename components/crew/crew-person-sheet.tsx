@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import { ArrowUpRight, Check, Copy, GitMerge, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCrew } from '@/lib/crew-context'
-import { crewContactText, crewRoleGroupLabel, normalizeRoleRates, type CrewMember, type CrewRole } from '@/lib/crew-types'
+import { crewContactText, crewRoleGroupLabel, normalizeRoleRates, selfCrewMember, type CrewMember, type CrewRole } from '@/lib/crew-types'
 import { crewCostRate } from '@/lib/quote-crew'
 import type { CrewMemberStats } from '@/lib/crew-stats'
 import { parseAmount } from '@/lib/event-draft'
@@ -37,6 +37,8 @@ interface Draft {
   email: string
   city: string
   notes: string
+  /** „To ja" (R1, A1). */
+  self: boolean
 }
 
 const amountText = (value: number | undefined) => (value ? String(value).replace('.', ',') : '')
@@ -56,6 +58,7 @@ function toDraft(member: CrewMember | null): Draft {
     email: member?.contact?.email ?? '',
     city: member?.city ?? '',
     notes: member?.notes ?? '',
+    self: member?.self === true,
   }
 }
 
@@ -242,7 +245,10 @@ export function CrewPersonSheet({
   /** „Scal z…": otwiera scalanie z tą osobą jako tą, która zostaje. */
   onMerge?: (member: CrewMember) => void
 }) {
-  const { activeRoles, roles, addPerson, savePerson, removePerson, addRole } = useCrew()
+  const { activeRoles, roles, people, addPerson, savePerson, removePerson, addRole } = useCrew()
+  // Kto jest teraz „Ja" (inna karta) — zaznaczenie tutaj przeniesie flagę.
+  const currentSelf = selfCrewMember(people)
+  const otherSelf = currentSelf && currentSelf.id !== member?.id ? currentSelf : null
   const [draft, setDraft] = useState<Draft>(() => toDraft(member))
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -282,6 +288,7 @@ export function CrewPersonSheet({
         },
         city: draft.city,
         notes: draft.notes,
+        self: draft.self,
       })
       onClose()
       return
@@ -295,6 +302,8 @@ export function CrewPersonSheet({
     setOptional(next.contact, 'email', draft.email.trim())
     setOptional(next, 'city', draft.city.trim())
     setOptional(next, 'notes', draft.notes.trim())
+    if (draft.self) next.self = true
+    else delete next.self
     await savePerson(next)
     setSaved(true)
   }
@@ -331,7 +340,12 @@ export function CrewPersonSheet({
         <div className="text-[11px] uppercase tracking-widest text-zinc-500">
           {member ? member.roleIds.map(roleName).join(' · ') || 'Ekipa' : 'Nowa osoba'}
         </div>
-        <h2 className="mt-1 text-xl font-bold tracking-tight text-white">{member ? member.name : 'Dodaj osobę'}</h2>
+        <h2 className="mt-1 text-xl font-bold tracking-tight text-white">
+          {member ? member.name : 'Dodaj osobę'}
+          {member?.self && (
+            <span className="ml-2 align-middle rounded bg-primary/20 px-1.5 py-px text-[11px] font-bold text-primary">Ja</span>
+          )}
+        </h2>
         {member?.retiredAt && (
           <div className="mt-1 text-xs text-amber-300/80">Nie współpracujemy od {formatDate(member.retiredAt)}</div>
         )}
@@ -349,8 +363,12 @@ export function CrewPersonSheet({
             value={stats.avgDayRate === null ? '—' : pln(stats.avgDayRate)}
             sub={stats.avgDayRate === null ? 'brak dni pracy' : 'za dzień, z wierszy ekipy'}
           />
-          <Stat label={`Wypłacone w ${new Date().getFullYear()}`} value={pln(stats.paidThisYear)} />
-          <Stat label="Wypłacone razem" value={pln(stats.paidTotal)} />
+          {/* „Ja" (R1): to nie wypłaty, tylko wartość mojej pracy (po „Koszcie" wierszy). */}
+          <Stat
+            label={`${member.self ? 'Wartość mojej pracy' : 'Wypłacone'} w ${new Date().getFullYear()}`}
+            value={pln(stats.paidThisYear)}
+          />
+          <Stat label={member.self ? 'Wartość mojej pracy razem' : 'Wypłacone razem'} value={pln(stats.paidTotal)} />
           {stats.roles.length > 0 && (
             <div className="col-span-2 rounded-lg border border-white/5 bg-zinc-900/40 px-3 py-2">
               <div className="mb-1 text-[11px] text-zinc-500">W rolach</div>
@@ -378,6 +396,22 @@ export function CrewPersonSheet({
         <label className={label}>
           Imię i nazwisko
           <Input value={draft.name} onChange={(e) => set({ name: e.target.value })} className={field} autoFocus={!member} />
+        </label>
+        <label className="flex items-start gap-2 rounded-lg border border-white/5 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300">
+          <input
+            type="checkbox"
+            checked={draft.self}
+            onChange={(e) => set({ self: e.target.checked })}
+            className="mt-0.5 accent-emerald-500"
+            aria-label="To ja"
+          />
+          <span>
+            <span className="font-semibold">To ja</span>
+            <span className="block text-[11px] text-zinc-500">
+              Moja karta: stawki w rolach to wartość mojej pracy. Nowa wycena zaczyna dzień 1 od „ReżOp · Ja".
+              {otherSelf && draft.self && ` Teraz „Ja" to ${otherSelf.name} — zapis przeniesie oznaczenie tutaj.`}
+            </span>
+          </span>
         </label>
         <div>
           <div className={`${label} mb-1`}>Role</div>

@@ -71,9 +71,14 @@ export interface QuoteGearLine {
  * konkretna osoba. Nazwy i stawki ZAMROŻONE w chwili dodania, jak w
  * `QuoteGearLine`. Bez `personId` to miejsce do obsadzenia („operator").
  *
- * Decyzja 7: cenę dla klienta wyznacza ROLA (`clientRate`, potem marża z
+ * Decyzja 7 (T9b): cenę dla klienta wyznacza ROLA (`clientRate`, potem marża z
  * nagłówka); osoba zmienia tylko mój koszt (`costRate`: stawka osoby → koszt
  * roli → stawka dla klienta).
+ *
+ * R1 (plan po jeździe próbnej §13, A3) zastępuje decyzję 7 dla pozycji nowych i
+ * edytowanych: wybór osoby wpisuje JEJ stawkę w roli w obie kwoty („Koszt" i
+ * „Klient"), a każdą z nich można potem zmienić ręcznie. Pozycje sprzed R1 bez
+ * `clientFromPerson` liczą się i odświeżają jak dotąd.
  */
 export interface QuoteCrewLine {
   id: string
@@ -90,6 +95,15 @@ export interface QuoteCrewLine {
   costRate: number
   /** Ile osób w tej roli tego dnia. */
   qty: number
+  /**
+   * R1: „Klient" idzie za stawką osoby w roli (potem jej stawką ogólną, potem
+   * stawką roli). Brak = pozycja sprzed R1: „Klient" idzie za rolą (decyzja 7).
+   */
+  clientFromPerson?: boolean
+  /** R1: „Klient" wpisany ręcznie — „zaktualizuj stawki" go nie rusza. */
+  clientEdited?: boolean
+  /** R1: „Koszt" wpisany ręcznie — „zaktualizuj stawki" go nie rusza. */
+  costEdited?: boolean
 }
 
 /**
@@ -317,6 +331,13 @@ export interface QuoteData {
   gearValueInPdf: boolean
   /** T9b: czy opisy ekipy i obsady w PDF podają imiona (domyślnie tylko role). */
   crewPeopleInPdf: boolean
+  /**
+   * R1 (A5): marża z nagłówka jako JEDNA osobna pozycja („Koordynacja i
+   * produkcja"; ujemna = „Rabat"), a pozycje pokazują własne ceny. Suma ta sama
+   * co przy rozciąganiu. Brak = wycena sprzed R1: marża rozciąga ceny pozycji,
+   * jak dotąd (PDF też). Nowe wyceny i warianty dostają `true`.
+   */
+  marginAsLine?: boolean
 
   // Waluta wyceny (S3, decyzja E) — zasady w `quote-currency.ts`
   /** Waluta cen w kalkulatorze i w PDF. Brak = PLN (każda starsza wycena). */
@@ -543,8 +564,16 @@ export function getBreakdown(data: QuoteData): LegacyBreakdownPhase[] {
 
 export type PdfRowKey = 'preprodukcja' | 'ekipa' | 'obsada' | 'sprzet' | 'logistyka' | 'postprodukcja' | 'inne'
 
+/**
+ * R1 (A5): wiersz marży („Koordynacja i produkcja" / „Rabat"). Jest tylko w
+ * szkicach wycen z `marginAsLine`; stare szkice go nie mają i drukują się jak
+ * dawniej. Drukuje się, gdy kwota ≠ 0.
+ */
+export type PdfMarginRowKey = 'marza'
+export type PdfAnyRowKey = PdfRowKey | PdfMarginRowKey
+
 export interface PdfRowState {
-  key: PdfRowKey
+  key: PdfAnyRowKey
   title: string
   opis: string
   cenaNetto: number
@@ -579,7 +608,7 @@ export interface LocalPdfState {
   /** True for drafts built since S3, whose currency follows the quote. */
   followsQuote?: boolean
 
-  rows: Record<PdfRowKey, PdfRowState>
+  rows: Record<PdfRowKey, PdfRowState> & { marza?: PdfRowState }
 
   materialyKoncowe: string
   opcjeDodatkowe: string

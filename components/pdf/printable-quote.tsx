@@ -1,10 +1,11 @@
 'use client'
 
 import React from 'react'
-import type { LocalPdfState, PdfRowKey } from '@/lib/quote-types'
+import type { LocalPdfState, PdfAnyRowKey, PdfRowKey } from '@/lib/quote-types'
 import { useQuote } from '@/lib/quote-context'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
 import { formatPdfAmount } from '@/lib/pdf-currency'
+import { pdfMarginRowTitle, printsMarginRow } from '@/lib/pdf-draft'
 
 const VAT_RATE = 0.23
 
@@ -34,9 +35,11 @@ function Eyebrow({ children, rule = false }: { children: React.ReactNode; rule?:
 
 const ROW_ORDER: PdfRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne']
 
-function rowTitleForLang(key: PdfRowKey, lang: PdfLang): string {
+function rowTitleForLang(key: PdfAnyRowKey, lang: PdfLang, amount = 0): string {
   const L = PDF_LABELS[lang]
   switch (key) {
+    case 'marza':
+      return pdfMarginRowTitle(amount, lang)
     case 'preprodukcja':
       return L.rowPreprodukcja
     case 'ekipa':
@@ -62,7 +65,9 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
 
   const fmt = (amount: number) => formatPdfAmount(amount, currency ?? 'PLN', lang)
 
-  const totalNetto = ROW_ORDER.reduce((sum, key) => sum + (localPdfState.rows[key]?.cenaNetto ?? 0), 0)
+  // Wiersz marży (R1, „Koordynacja i produkcja" / „Rabat") na końcu — tylko gdy szkic go ma i kwota ≠ 0.
+  const printedRows: PdfAnyRowKey[] = printsMarginRow(localPdfState.rows) ? [...ROW_ORDER, 'marza'] : ROW_ORDER
+  const totalNetto = printedRows.reduce((sum, key) => sum + (localPdfState.rows[key]?.cenaNetto ?? 0), 0)
   const totalVat = totalNetto * VAT_RATE
   const totalBrutto = totalNetto + totalVat
 
@@ -173,13 +178,13 @@ export function PrintableQuote({ localPdfState }: { localPdfState: LocalPdfState
             </thead>
 
             <tbody>
-              {ROW_ORDER.map((key) => {
+              {printedRows.map((key) => {
                 const row = localPdfState.rows[key]
                 const nettoValue = row?.cenaNetto ?? 0
                 return (
                   <tr key={key} data-pdf-break="after" className="break-inside-avoid">
                     <td className="border-t border-zinc-200 py-1.5 px-3 font-bold w-1/4 align-top">
-                      {rowTitleForLang(key, lang)}
+                      {rowTitleForLang(key, lang, nettoValue)}
                     </td>
                     <td className="border-t border-zinc-200 py-1.5 px-3 w-1/6 text-right align-top whitespace-nowrap">
                       <div className="text-[9.5pt] font-bold" style={mono}>{fmt(nettoValue)}</div>

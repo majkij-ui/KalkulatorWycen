@@ -28,12 +28,19 @@ import type { QuoteData } from './quote-types'
  *
  * `pricing` = cennik domyślny użytkownika: nowa wycena startuje od niego. Bez
  * zapisanego domyślnego klucza nie ma, a dokument bierze cennik fabryczny.
+ *
+ * R1 (A5): każda nowa wycena (nowy projekt, lead, „Pusta wycena") pokazuje
+ * marżę z nagłówka jako osobną pozycję (`marginAsLine`).
  */
 export function blankQuoteSnapshot(
   client: string,
   pricing?: PricingConfigShape | null
 ): { data: Partial<QuoteData>; marginMultiplier: number; pricingConfig?: PricingConfigShape } {
-  return { data: { clientName: client }, marginMultiplier: 1, ...(pricing ? { pricingConfig: pricing } : {}) }
+  return {
+    data: { clientName: client, marginAsLine: true },
+    marginMultiplier: 1,
+    ...(pricing ? { pricingConfig: pricing } : {}),
+  }
 }
 
 /** Głębokie porównanie danych JSON; klucz z `undefined` traktujemy jak brak klucza. */
@@ -59,8 +66,9 @@ function sameJson(a: unknown, b: unknown): boolean {
  * Marża i cennik też nie: bez pozycji w wycenie nie zmieniają żadnej kwoty.
  */
 export function isBlankQuoteData(data: Partial<QuoteData>): boolean {
-  const current = { ...mergeQuoteDataPartial(data), clientName: '' }
-  const blank = { ...mergeQuoteDataPartial(blankQuoteSnapshot('').data), clientName: '' }
+  // Sposób pokazania marży (R1) to nie budowanie wyceny — stara pusta wycena bez flagi też jest pusta.
+  const current = { ...mergeQuoteDataPartial(data), clientName: '', marginAsLine: undefined }
+  const blank = { ...mergeQuoteDataPartial(blankQuoteSnapshot('').data), clientName: '', marginAsLine: undefined }
   return sameJson(current, blank)
 }
 

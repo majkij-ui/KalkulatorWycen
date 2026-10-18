@@ -24,6 +24,7 @@ import {
   createCrewRole,
   liveCrewMembers,
   resolveCrewRoles,
+  withSelfRule,
   type CrewMember,
   type CrewRole,
 } from './crew-types'
@@ -124,15 +125,22 @@ export function CrewProvider({ children }: { children: React.ReactNode }) {
     [roles]
   )
 
+  // „Ja" (R1): karta z `self` odbiera flagę innym w tym samym zapisie (najwyżej jeden Ja).
   const addPerson = useCallback<CrewContextValue['addPerson']>(async (params) => {
     if (!params.name.trim()) return null
     const member = createCrewMember(params)
-    setAllPeople(await upsertCrewMember(member))
+    setAllPeople(
+      member.self
+        ? await mutateCrewMembers((all) => withSelfRule(all, member, member.createdAt))
+        : await upsertCrewMember(member)
+    )
     return member
   }, [])
 
   const savePerson = useCallback(async (member: CrewMember) => {
-    setAllPeople(await upsertCrewMember({ ...member, updatedAt: new Date().toISOString() }))
+    const now = new Date().toISOString()
+    const next = { ...member, updatedAt: now }
+    setAllPeople(next.self ? await mutateCrewMembers((all) => withSelfRule(all, next, now)) : await upsertCrewMember(next))
   }, [])
 
   const removePerson = useCallback(async (id: string) => {

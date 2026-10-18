@@ -80,6 +80,12 @@ them. `useQuoteDocState`/`useQuote()` bind the calculator tabs to the open proje
 keeps `Project.quote` as the chosen variant (plan §8). The default price list for new quotes, PDF texts and
 the portfolio come from `company.json`.
 
+R1 (plan §14): a crew line has two amounts, „Koszt" (`costRate`, plan) and „Klient" (`clientRate`, before margin);
+picking a person fills both from their rate in the role, hand edits are marked and survive „zaktualizuj stawki"
+(`quote-crew.ts`). `CrewMember.self` is „Ja". Quotes with `QuoteData.marginAsLine` (every quote created since R1)
+show items at their own prices and the header margin as ONE line (`MARGIN_PHASE`, PDF row `marza`, „Koordynacja i
+produkcja" / „Rabat"); quotes without it stretch every margined item as before. Totals are the same either way.
+
 ## Events and kinds
 
 `lib/event-kinds.ts` is the registry (code, not data): sprzedaż (`lead_in`, `reply_sent`, `quote_sent`,

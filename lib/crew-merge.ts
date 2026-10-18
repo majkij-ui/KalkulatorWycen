@@ -138,6 +138,8 @@ export function mergedCrewMember(
   })
 
   if (roleRates.length > 0) merged.roleRates = roleRates
+  // „Ja" (R1): karta, która zostaje, jest mną, jeśli którakolwiek ze scalanych była.
+  if (merged.self !== true && sources.some((source) => source.self === true)) merged.self = true
   merged.notes = notes.join('\n')
   merged.updatedAt = at
   return merged

@@ -11,6 +11,7 @@ import { BipolarSlider } from '@/components/ui/bipolar-slider'
 import { SettingsSheet } from '@/components/settings-sheet'
 import { QuoteCurrencyControl } from '@/components/quote-currency-control'
 import { formatMoney } from '@/lib/quote-currency'
+import { DISCOUNT_LINE_LABEL, MARGIN_LINE_LABEL, hasMarginLine, marginLineAmount } from '@/lib/quote-calc'
 
 export function StickyHeader() {
   const {
@@ -22,6 +23,8 @@ export function StickyHeader() {
     hardReset,
     money,
     sumaNettoPln,
+    data,
+    breakdown,
   } = useQuote()
   // Wycena to dokument otwartego projektu — zapisuje się sama (bez „Zapisz").
   const { activeProject } = useProjectHub()
@@ -59,6 +62,14 @@ export function StickyHeader() {
 
   const displayPercent = Math.round((marginMultiplier - 1) * 100)
   const sign = displayPercent > 0 ? '+' : ''
+  // R1 (A5): w nowej wycenie marża to osobna pozycja; w starej rozciąga ceny pozycji jak dotąd.
+  const marginLine = marginLineAmount(breakdown)
+  const marginNote =
+    displayPercent === 0
+      ? null
+      : hasMarginLine(data)
+        ? `${marginLine < 0 ? DISCOUNT_LINE_LABEL : MARGIN_LINE_LABEL}: ${formatCurrency(Math.round(marginLine))} (osobna pozycja)`
+        : 'rozciąga ceny pozycji (starsza wycena)'
 
   // ── Resety (dwa kliknięcia) ──────────────────────────────────────────────────
   const handleReset = (kind: 'zero' | 'hard') => {
@@ -195,7 +206,8 @@ export function StickyHeader() {
             <QuoteCurrencyControl />
 
             {/* Margin slider */}
-            <div className="flex items-center gap-3 w-64 opacity-80 hover:opacity-100 transition-opacity">
+            <div className="flex flex-col items-stretch gap-0.5 w-64">
+            <div className="flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
               <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 shrink-0">
                 Marża / Rabat
               </span>
@@ -210,6 +222,12 @@ export function StickyHeader() {
               <span className="text-xs font-mono text-white w-10 text-right tabular-nums">
                 {sign}{displayPercent}%
               </span>
+            </div>
+            {marginNote && (
+              <div className="truncate text-right text-[10px] tabular-nums text-zinc-500" title={marginNote}>
+                {marginNote}
+              </div>
+            )}
             </div>
             </div>
           </div>

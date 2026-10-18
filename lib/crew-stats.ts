@@ -198,13 +198,14 @@ export function computeCrewStats<P extends StatsProject>(
 
 /**
  * „Najczęściej pracuję z…": osoby z jakąkolwiek pracą, od największej liczby
- * dni (potem projektów, wypłat, imienia).
+ * dni (potem projektów, wypłat, imienia). Bez „Ja" (R1) — nie pracuję sam ze sobą.
  */
 export function crewRanking<P extends StatsProject>(
   members: CrewMember[],
   stats: Map<string, CrewMemberStats<P>>
 ): { member: CrewMember; stats: CrewMemberStats<P> }[] {
   return liveCrewMembers(members)
+    .filter((member) => member.self !== true)
     .flatMap((member) => {
       const s = stats.get(member.id)
       return s && s.projects > 0 ? [{ member, stats: s }] : []
@@ -216,6 +217,19 @@ export function crewRanking<P extends StatsProject>(
         b.stats.paidTotal - a.stats.paidTotal ||
         a.member.name.localeCompare(b.member.name, 'pl')
     )
+}
+
+/**
+ * „Wypłacone w roku" na ekranie Ekipy: suma wypłat ludzi z bazy w tym roku,
+ * bez „Ja" (R1) — moja praca to nie wypłata. Jego dni i role zostają w jego
+ * statystykach.
+ */
+export function crewPaidThisYear<P extends StatsProject>(
+  members: Pick<CrewMember, 'id' | 'self'>[],
+  stats: Map<string, CrewMemberStats<P>>
+): number {
+  const selfIds = new Set(members.filter((m) => m.self === true).map((m) => m.id))
+  return [...stats.values()].reduce((sum, s) => (selfIds.has(s.memberId) ? sum : sum + s.paidThisYear), 0)
 }
 
 export interface UnknownCrewName {

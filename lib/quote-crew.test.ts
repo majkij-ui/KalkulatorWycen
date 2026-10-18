@@ -67,16 +67,18 @@ test('nowa pozycja zamraża nazwę, grupę i stawki; osoba = jedna osoba', () =>
   assert.equal(staffed.qty, 1)
 })
 
-test('decyzja 7: osoba zmienia tylko mój koszt, nigdy cenę dla klienta', () => {
+test('R1 (A3, zastępuje decyzję 7): osoba wpisuje swoją stawkę w obie kwoty; zdjęcie osoby wraca do roli', () => {
   const placeholder = createQuoteCrewLine(OPERATOR, null, 2)
   const staffed = withCrewPerson(placeholder, LUKASZ, OPERATOR)
-  assert.equal(staffed.clientRate, 1500)
+  assert.equal(staffed.clientRate, 1000)
   assert.equal(staffed.costRate, 1000)
   assert.equal(staffed.qty, 1)
+  assert.equal(staffed.clientFromPerson, true)
   const freed = withCrewPerson(staffed, null, OPERATOR)
   assert.equal(freed.costRate, 1200)
   assert.equal(freed.clientRate, 1500)
   assert.equal('personName' in freed, false)
+  assert.equal('clientFromPerson' in freed, false)
 })
 
 test('cena dnia: stawka roli × osoby × marża; obsada w swoim wierszu, post w ekipie', () => {
@@ -173,7 +175,7 @@ test('„Przepisz ekipę z planu" niesie osobę; miejsca do obsadzenia zostają 
   ])
 })
 
-test('zaktualizuj stawki: rola zmienia cenę i koszt, osoba tylko koszt, usunięta osoba zostaje zamrożona', () => {
+test('zaktualizuj stawki: rola zmienia cenę i koszt miejsca, osoba (R1) obie kwoty, usunięta osoba zostaje zamrożona', () => {
   const placeholder = line(OPERATOR)
   const staffed = createQuoteCrewLine(GAFFER, LUKASZ)
   const gone = createQuoteCrewLine(GAFFER, { id: 'cm-x', name: 'Xavier', rate: 800 })
@@ -184,10 +186,34 @@ test('zaktualizuj stawki: rola zmienia cenę i koszt, osoba tylko koszt, usunię
   assert.equal(staleCrewLines(days, roles, people), 2)
   const refreshed = refreshCrewLines(days[0].crew, roles, people)!
   assert.deepEqual([refreshed[0].clientRate, refreshed[0].costRate], [1800, 1300])
-  assert.deepEqual([refreshed[1].clientRate, refreshed[1].costRate], [1500, 1100])
-  assert.deepEqual([refreshed[2].costRate, refreshed[2].personName], [800, 'Xavier'])
+  assert.deepEqual([refreshed[1].clientRate, refreshed[1].costRate], [1100, 1100])
+  assert.deepEqual([refreshed[2].clientRate, refreshed[2].costRate, refreshed[2].personName], [800, 800, 'Xavier'])
   assert.equal(staleCrewLines([{ crew: refreshed }], roles, people), 0)
   assert.equal(refreshCrewLines(undefined, roles, people), undefined)
+})
+
+test('zaktualizuj stawki: pozycja sprzed R1 z osobą zostaje przy decyzji 7 (klient = rola, osoba tylko koszt)', () => {
+  // Kształt pozycji zapisanej przed R1 (Morris A: Kamil 1 500 / 1 200) — bez `clientFromPerson`.
+  const legacy: QuoteCrewLine = {
+    id: 'qc-old',
+    roleId: 'gafer',
+    roleName: 'Gafer',
+    group: 'ekipa',
+    personId: 'cm-l',
+    personName: 'Łukasz',
+    clientRate: 1500,
+    costRate: 1000,
+    qty: 1,
+  }
+  assert.equal(staleCrewLines([{ crew: [legacy] }], [GAFFER], [LUKASZ]), 0, 'nic nowego do aktualizacji po R1')
+  const raised = [{ ...LUKASZ, rate: 1100 }]
+  assert.equal(staleCrewLines([{ crew: [legacy] }], [GAFFER], raised), 1)
+  const [next] = refreshCrewLines([legacy], [GAFFER], raised)!
+  assert.deepEqual([next.clientRate, next.costRate], [1500, 1100])
+  assert.equal('clientFromPerson' in next, false)
+  // Rola zdrożała: klient za rolą, jak dotąd.
+  const [byRole] = refreshCrewLines([legacy], [{ ...GAFFER, clientRate: 1700 }], [LUKASZ])!
+  assert.equal(byRole.clientRate, 1700)
 })
 
 test('zestaw z ekipą: dokłada brakujące role, osoba wycofana to miejsce do obsadzenia', () => {

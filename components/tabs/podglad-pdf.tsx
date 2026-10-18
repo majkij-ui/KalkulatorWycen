@@ -15,13 +15,15 @@ import { useQuote } from '@/lib/quote-context'
 import { PrintableQuote } from '@/components/pdf/printable-quote'
 import { PortfolioRowsEditor } from '@/components/pdf/portfolio-rows-editor'
 import { safeNum } from '@/lib/safe-numbers'
-import type { LocalPdfState, PdfRowKey } from '@/lib/quote-types'
+import type { LocalPdfState, PdfAnyRowKey } from '@/lib/quote-types'
 import {
-  PDF_ROW_KEYS,
   buildInitialPdfState,
   coerceLocalPdfDraft,
   flipPdfCurrency,
   isLegacyEurDraft,
+  pdfMarginRowTitle,
+  pdfRowKeys,
+  pdfRowsTotal,
   reconcilePdfCurrency,
   roundToUnit,
 } from '@/lib/pdf-draft'
@@ -53,19 +55,13 @@ const item = {
 const VAT_RATE = 0.23
 
 
-const ROWS: { key: PdfRowKey; title: string }[] = [
-  { key: 'preprodukcja', title: 'Preprodukcja' },
-  { key: 'ekipa', title: 'Ekipa filmowa' },
-  { key: 'obsada', title: 'Obsada' },
-  { key: 'sprzet', title: 'Sprzęt filmowy' },
-  { key: 'logistyka', title: 'Logistyka' },
-  { key: 'postprodukcja', title: 'Postprodukcja' },
-  { key: 'inne', title: 'Inne koszty' },
-]
+/** Wszystkie klucze wierszy (z wierszem marży R1) — do znaczników „ruszone ręcznie". */
+const ALL_ROW_KEYS: PdfAnyRowKey[] = ['preprodukcja', 'ekipa', 'obsada', 'sprzet', 'logistyka', 'postprodukcja', 'inne', 'marza']
 
-function rowTitleForLang(key: PdfRowKey, lang: PdfLang): string {
+function rowTitleForLang(key: PdfAnyRowKey, lang: PdfLang, amount = 0): string {
   const L = PDF_LABELS[lang]
   switch (key) {
+    case 'marza':        return pdfMarginRowTitle(amount, lang)
     case 'preprodukcja': return L.rowPreprodukcja
     case 'ekipa':        return L.rowEkipa
     case 'obsada':       return L.rowObsada
@@ -197,7 +193,7 @@ export function PodgladPdfTab() {
   const [uwagiManualText, setUwagiManualTextState] = useState('')
   // mergedTerms is computed later (after localPdfState + draft mode are known)
 
-  const touchedRowsRef = useRef<Record<PdfRowKey, boolean>>({
+  const touchedRowsRef = useRef<Record<PdfAnyRowKey, boolean>>({
     preprodukcja: false,
     ekipa: false,
     obsada: false,
@@ -205,6 +201,7 @@ export function PodgladPdfTab() {
     logistyka: false,
     postprodukcja: false,
     inne: false,
+    marza: false,
   })
   const touchedOpcjeRef = useRef(false)
 
@@ -270,7 +267,7 @@ export function PodgladPdfTab() {
   const prevLangRef = useRef<PdfLang>(localPdfState.pdfLanguage)
   useEffect(() => {
     if (prevLangRef.current !== localPdfState.pdfLanguage) {
-      PDF_ROW_KEYS.forEach((key) => {
+      ALL_ROW_KEYS.forEach((key) => {
         touchedRowsRef.current[key] = false
       })
       touchedOpcjeRef.current = false
@@ -365,8 +362,8 @@ export function PodgladPdfTab() {
         terms,
       })
       const nextRows = { ...init.rows }
-      ;(Object.keys(nextRows) as PdfRowKey[]).forEach((key) => {
-        if (touchedRowsRef.current[key]) nextRows[key] = prev.rows[key]
+      ;(Object.keys(nextRows) as PdfAnyRowKey[]).forEach((key) => {
+        if (touchedRowsRef.current[key] && prev.rows[key]) nextRows[key] = prev.rows[key]
       })
 
       return {
@@ -387,9 +384,9 @@ export function PodgladPdfTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [breakdown, totals?.sumaNetto, clientData, clientPricing, marginMultiplier, terms, draftHydrationStatus, isUsingDraft])
 
-  const totalNetto = useMemo(() => {
-    return ROWS.reduce((sum, r) => sum + safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0), 0)
-  }, [localPdfState.rows])
+  // Wiersze szkicu: siedem stałych i wiersz marży (R1), gdy wycena go ma.
+  const rowKeys = pdfRowKeys(localPdfState.rows)
+  const totalNetto = useMemo(() => pdfRowsTotal(localPdfState.rows), [localPdfState.rows])
 
   // Ceny, które PDF miałby TERAZ z kalkulatora. Szkic (isUsingDraft) przestaje
   // śledzić kalkulator, żeby nie nadpisać ręcznych tekstów — więc porównujemy
@@ -405,16 +402,16 @@ export function PodgladPdfTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [breakdown, totals?.sumaNetto, clientData, clientPricing, marginMultiplier, terms, localPdfState.pdfLanguage, pdfMoney.currency, pdfMoney.exchangeRate]
   )
-  const calculatorTotal = ROWS.reduce((sum, r) => sum + safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0), 0)
-  const priceSignature = ROWS.map((r) => Math.round(safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0))).join('|')
+  const calculatorTotal = pdfRowsTotal(calculatorRows)
+  const compareKeys = [...new Set([...rowKeys, ...pdfRowKeys(calculatorRows)])]
+  // Stałe wiersze jak dotąd (od zera w górę); wiersz marży może być ujemny.
+  const rowAmount = (rows: LocalPdfState['rows'], key: PdfAnyRowKey) =>
+    Math.round(safeNum(rows[key]?.cenaNetto, 0, key === 'marza' ? undefined : 0))
+  const priceSignature = compareKeys.map((key) => rowAmount(calculatorRows, key)).join('|')
   const pricesDiffer =
     isUsingDraft &&
     draftHydrationStatus === 'ready' &&
-    ROWS.some(
-      (r) =>
-        Math.round(safeNum(localPdfState.rows[r.key]?.cenaNetto, 0, 0)) !==
-        Math.round(safeNum(calculatorRows[r.key]?.cenaNetto, 0, 0))
-    )
+    compareKeys.some((key) => rowAmount(localPdfState.rows, key) !== rowAmount(calculatorRows, key))
   const showStalePrices = pricesDiffer && dismissedPriceSignature !== priceSignature
 
   // Terms are always re-derived from the active language + current pdfTexts
@@ -440,7 +437,7 @@ export function PodgladPdfTab() {
   }, [localPdfState.showVat, localPdfState.pdfLanguage, mergedTerms])
 
   const resetEditorSyncFlags = () => {
-    PDF_ROW_KEYS.forEach((key) => {
+    ALL_ROW_KEYS.forEach((key) => {
       touchedRowsRef.current[key] = false
     })
     touchedOpcjeRef.current = false
@@ -460,8 +457,11 @@ export function PodgladPdfTab() {
 
     editDraft((prev) => {
       const nextRows = { ...prev.rows }
-      PDF_ROW_KEYS.forEach((key) => {
-        nextRows[key] = { ...prev.rows[key], cenaNetto: fresh.rows[key].cenaNetto }
+      pdfRowKeys(fresh.rows).forEach((key) => {
+        const freshRow = fresh.rows[key]
+        if (!freshRow) return
+        const prevRow = prev.rows[key]
+        nextRows[key] = prevRow ? { ...prevRow, cenaNetto: freshRow.cenaNetto } : { ...freshRow }
       })
       return { ...prev, rows: nextRows }
     })
@@ -869,28 +869,40 @@ export function PodgladPdfTab() {
                 })()}
 
                 <div key={previewResetKey} className="rounded-md border border-zinc-200">
-                  {ROWS.map((r) => {
+                  {rowKeys.map((rowKey) => {
+                    const r = { key: rowKey }
                     const row = localPdfState.rows[r.key]
+                    if (!row) return null
                     const nettoValue = row.cenaNetto
+                    // Wiersz marży (R1) może być ujemny (rabat); drukuje się, gdy ≠ 0.
+                    const isMargin = r.key === 'marza'
 
                     return (
                       <div
                         key={r.key}
                         className="grid grid-cols-12 gap-x-4 items-start border-b border-zinc-200 last:border-b-0 px-3 py-3"
                       >
-                        <div className="col-span-4 text-[12px] font-semibold text-zinc-800 pt-2">{rowTitleForLang(r.key, localPdfState.pdfLanguage)}</div>
+                        <div className="col-span-4 text-[12px] font-semibold text-zinc-800 pt-2">
+                          {rowTitleForLang(r.key, localPdfState.pdfLanguage, nettoValue)}
+                          {isMargin && (
+                            <div className="mt-0.5 text-[10px] font-normal text-zinc-500">
+                              marża z nagłówka · drukuje się, gdy ≠ 0
+                            </div>
+                          )}
+                        </div>
 
                         <div className="col-span-2">
                           <div className="flex items-center justify-end gap-1">
                             <input
                               type="number"
                               inputMode="decimal"
-                              min={0}
+                              min={isMargin ? undefined : 0}
                               step={0.01}
                             value={Number.isFinite(nettoValue) ? roundToUnit(nettoValue) : 0}
+                              aria-label={`Kwota netto: ${rowTitleForLang(r.key, localPdfState.pdfLanguage, nettoValue)}`}
                               onChange={(e) => {
                                 const raw = e.target.value
-                                const parsed = safeNum(raw === '' ? 0 : Number.parseFloat(raw), 0, 0)
+                                const parsed = safeNum(raw === '' ? 0 : Number.parseFloat(raw), 0, isMargin ? undefined : 0)
                               const nextNet = roundToUnit(parsed)
                                 touchedRowsRef.current[r.key] = true
                                 editDraft((prev) => ({
