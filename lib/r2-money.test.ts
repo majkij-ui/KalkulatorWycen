@@ -180,6 +180,11 @@ test('C1: dosprzedaż dolicza się do zatwierdzonej ceny; kwota przelewu wpisana
   near(projectMoney(project({ financials: fin(10_000, 0, { revenueSource: 'pdf' }) }), [extra], TODAY).expected, 11_000)
   near(projectMoney(project({ financials: fin(10_000, 0) }), [extra], TODAY).expected, 11_000, 'plan sprzed R2 — jak dotąd')
   near(projectMoney(project({ financials: fin(12_000, 0, { revenueSource: 'transfer' }) }), [extra], TODAY).expected, 12_000)
+  // Finanse zapisane przed R2 (bez `revenueSource`): kwotę wpisaną ręcznie zna wycena.
+  const legacyTyped = project({ financials: fin(12_000, 0), quote: { data: { profitTransferAmount: 12_000 } } as Project['quote'] })
+  near(projectMoney(legacyTyped, [extra], TODAY).expected, 12_000)
+  const legacyUntyped = project({ financials: fin(10_000, 0), quote: { data: { profitTransferAmount: null } } as Project['quote'] })
+  near(projectMoney(legacyUntyped, [extra], TODAY).expected, 11_000)
 })
 
 test('C1: faktury wygrywają także z kwotą wpisaną ręcznie', () => {

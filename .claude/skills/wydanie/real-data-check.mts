@@ -76,9 +76,41 @@ const money = await load('money-loop')
 const subs = await load('subscriptions')
 const finance = await load('finance-calc')
 const years: Record<string, unknown> = {}
+// Best-known money per project (R2 adds ownWork / producerMargin; an older tree prints null for them).
+const perProject: Record<string, unknown> = {}
+// R2: quote crew lines of the „Ja" card without the `ownWork` flag (made by a build before R2) —
+// their Koszt still counts as a plan cost until „zaktualizuj stawki" or a re-pick flags them.
+const unflaggedJaLines: string[] = []
+const selfIds = new Set(items('crew.json').filter((m) => m.self === true && !m.deletedAt).map((m) => m.id))
+for (const p of projects) {
+  const snaps = [p.quote, ...((p.quoteVariants as { snapshot?: unknown }[] | undefined) ?? []).map((v) => v.snapshot)]
+  snaps.forEach((snap, i) => {
+    const days = ((snap as { data?: { detailedShootingDays?: { crew?: Rec[] }[] } } | null)?.data?.detailedShootingDays ?? [])
+    days.forEach((d, n) =>
+      (d.crew ?? []).forEach((line) => {
+        if (selfIds.has(String(line.personId)) && line.ownWork !== true) {
+          unflaggedJaLines.push(`${p.id} ${String(p.name)} ${i === 0 ? 'chosen' : `variant ${i}`} day ${n + 1}`)
+        }
+      })
+    )
+  })
+}
 try {
   if (money?.moneyLedger && money.summarizeMoney) {
     const ledger = money.moneyLedger(projects, events, TODAY)
+    for (const m of ledger) {
+      const p = projects.find((x) => x.id === m.id)
+      perProject[`${m.id} ${String(p?.name)}`] = roundAll({
+        counts: m.counts,
+        revenue: m.revenue,
+        revenueBasis: m.revenueBasis,
+        costs: m.costs,
+        costsBasis: m.costsBasis,
+        profit: m.profit,
+        ownWork: m.ownWork ?? null,
+        producerMargin: m.producerMargin ?? null,
+      })
+    }
     const list: number[] = money.moneyYears ? money.moneyYears(ledger) : [Number(TODAY.slice(0, 4))]
     for (const year of list) {
       const yearCosts = subs?.fixedCostsInYear ? subs.fixedCostsInYear(fixedCosts, subscriptions, year) : fixedCosts
@@ -102,7 +134,16 @@ try {
 
 console.log(
   JSON.stringify(
-    { tree, dir, today: TODAY, counts: { projects: projects.length, quotes: Object.keys(quotes).length }, quotes, years },
+    {
+      tree,
+      dir,
+      today: TODAY,
+      counts: { projects: projects.length, quotes: Object.keys(quotes).length },
+      quotes,
+      years,
+      perProject,
+      unflaggedJaLines,
+    },
     null,
     2
   )

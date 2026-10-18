@@ -49,7 +49,20 @@ const EPSILON = 0.005
 
 export type MoneyEvent = PaymentEvent
 
-export type MoneyProject = Pick<Project, 'id' | 'status' | 'date' | 'financials' | 'costs'>
+export type MoneyProject = Pick<Project, 'id' | 'status' | 'date' | 'financials' | 'costs'> & Partial<Pick<Project, 'quote'>>
+
+/**
+ * Czy przychód planu to kwota przelewu wpisana ręcznie (R2: cały przelew, już
+ * z dosprzedażą). Finanse zapisane przed R2 nie mają `revenueSource` — wtedy
+ * mówi o tym wycena (`profitTransferAmount`), żeby reguła nie czekała na zapis.
+ */
+export function isTypedTransfer(project: Pick<MoneyProject, 'financials' | 'quote'>): boolean {
+  const source = project.financials?.revenueSource
+  if (source) return source === 'transfer'
+  const data = project.quote && typeof project.quote === 'object' ? (project.quote as { data?: unknown }).data : null
+  const typed = data && typeof data === 'object' ? (data as { profitTransferAmount?: unknown }).profitTransferAmount : null
+  return typeof typed === 'number' && Number.isFinite(typed)
+}
 
 export interface ExtraSale {
   day: string
@@ -203,7 +216,7 @@ export function projectMoney(
   const extrasTotal = sum(pricedExtras)
   const basePlan = plan?.revenue ?? (planned.length > 0 ? plannedTotal : null)
   // R2 (C1): kwota przelewu wpisana ręcznie to CAŁY przelew — już z dosprzedażą.
-  const typedTransfer = plan?.revenueSource === 'transfer'
+  const typedTransfer = !!plan && isTypedTransfer(project)
   const expected =
     basePlan === null && pricedExtras.length === 0 ? null : (basePlan ?? 0) + (typedTransfer ? 0 : extrasTotal)
 
