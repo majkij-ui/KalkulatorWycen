@@ -1421,3 +1421,46 @@ scroll (tables scroll inside their cards).
 - ROAS per period is the lead cohort of the period, which can include jobs from later quarters; the since-start columns
   are the headline.
 - R2: add the „Marża producencka" metric row and `extra.producerMargin`; nothing else in the report changes.
+
+## 17. Next: rentals as one source of truth, and EBBT *(planned with M.J. 2026-10-18 — not built yet)*
+
+### 17.1 Rentals („Wynajem sprzętu")
+**Why.** Gear payoff on a shoot („odpracował") must be the quote's gear line minus what was paid for rentals.
+Rental costs live in several places today: quote day rentals (`QuoteExternalRental`), the plan's „wynajem"
+lines, Realizacja costs, and S4's direct costs. The app needs ONE number per project, the **rental total**, that
+every other place reads.
+- **Realizacja:** a fixed line „Wynajem sprzętu" near the top (in „Koszty projektu"), always there (0 zł when
+  nothing was rented). Typing a total is enough; listing items is optional.
+- **Items:** what was rented, picked from a dropdown or created on the spot (like a new person or role in the crew
+  picker), with an amount (optionally days and the rental house). The picks form a dictionary of rented gear
+  (its own small collection, or catalogue items of a „wynajem" kind — the session decides). The session also
+  decides how a typed total and listed items combine (e.g. items sum up, with the rest shown as „bez szczegółów
+  X zł").
+- **Sprzęt tab:** a section „Wynajmowany sprzęt" aggregating the picks: item, times rented, days, total spent,
+  last rental, per year. This is the basis for deciding whether to buy instead of rent.
+- **Company Finanse (main tab, not the project tab):** rental spend per period, top rented items, plus a row in
+  the S5 report.
+- **Readers of the one number:** the gear payoff denominator (gear line − rental total), layer 1 direct costs,
+  and the S5 report.
+- **Open (four layers, ARCHITECTURE.md):** the gear line should be the PDF's gear row(s), since M.J. reshuffles
+  people and gear there, falling back to the calculator — confirm in the session.
+- **Rules:** additive; existing quote rentals and Realizacja rental costs map into it without changing any
+  number.
+
+### 17.2 Company result, producer margin and EBBT
+- **Company result** = the sum of the projects' net profit after all costs and taxes: S4's „Wynik po kosztach
+  firmy" (after tax, ZUS, fixed costs and subscriptions, gear and marketing). Crew and everything else paid out
+  on jobs is already deducted in project profit.
+- **Producer margin, company-wide** = the sum of the projects' producer margins, after tax (decided 2026-10-18;
+  built in R2).
+- **EBBT, „earnings before bad things"** = revenue − direct costs − ryczałt − ZUS. It leaves out everything M.J.
+  could in theory skip: gear purchases, subscriptions and other fixed costs, and marketing. Taxes and ZUS can't be
+  skipped; crew costs are already in project profit.
+  - **The gap EBBT − company result** = the room to optimise the business.
+  - **Where:** a Finance tile or line next to the result, and a `metrics[]` row in the S5 report. EBBT is the
+    same in both gear views.
+
+### 17.3 Session
+One session after R2 is merged („F2 Wynajem i EBBT"): the Realizacja line and items, the rental dictionary, the
+Sprzęt section, Finanse stats, the payoff denominator, the EBBT tile and the report row. It builds on R2's cost
+model (`Project.costs` with `planKey`, `skipped`, `ownWork`).
