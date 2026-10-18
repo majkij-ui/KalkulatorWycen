@@ -1212,3 +1212,93 @@ hides the numbers he needs, Realizacja shows the same costs three times (top sum
 
 R1 and S5 share no files (calculator crew vs Finance / report). R2 waits for R1: it reads R1's row amounts and the
 „Ja" flag, and it reshapes the realization and plan code R1's lines feed.
+
+## 15. S5 as built
+
+*(2026-10-18, branch `claude/s5-raport-okresowy`, on top of `v3/project-hub` `1ee75f5`.)*
+
+M.J. answered the ten phase-1 questions as recommended: mock order plus a one-line „Wyceny w toku"; the .md starts with
+the definitions and „Do wyjaśnienia"; W2 per project / group only in a year view (decision A); crew by the period's jobs;
+marketing with both column sets and „od startu do dziś" as the headline; gear without forecasts beyond 10 years; a
+previous period without a project or a recorded fixed cost is „brak danych"; „w drugim widoku wynik = X"; open invoices
+as of the generation date; Polish text, English JSON keys with Polish labels; a third Finance tab „Raport".
+
+**Where it lives.** Finanse → „Raport" (third tab, uses the page's Rok / Półrocze / Kwartał picker and the same „Rozłóż duże
+zakupy sprzętu" switch, which is the same state as in „Projekty").
+- `lib/period-report.ts` (pure): `buildPeriodReport(input, period) → PeriodReport`. Money comes from `marginSummary`
+  ONLY (this period, the previous one, the other gear view, and one `scope`d call per client / group). Everything else
+  calls its module: `openInvoices` / `paymentDays`, `effectiveFixedCosts` / `totalsBySubscription`, `summarizeCampaign`
+  (a campaign clipped to the period, and unclipped for „od startu do dziś"), `computeGearReport`, `crewOnProjects`,
+  `summarizePeriod` (quotes in progress). It adds period choice, grouping and comparisons, no money rules.
+- `lib/period-report-sections.ts` (pure): `reportSections(report)` turns the report into formatted tables. The screen,
+  the PDF sheet and the Markdown all render these, so „the same tables" is literal (a test checks every table is in the
+  file verbatim).
+- `lib/period-report-markdown.ts` (pure): definitions → „Do wyjaśnienia" → sections 1–8 → fenced JSON of the whole
+  report. File name „Raport Q3 2026.md" (open period: „… (wstępnie)").
+- UI: `components/finance/report-tab.tsx` (screen), `printable-report.tsx` (white A4 sheet), `lib/export-report.ts`
+  (save). PDF goes through the call sheet's desktop path (`exportCallSheetPdf`: html2canvas-pro → jsPDF → native save
+  dialog + `writeFile`); Markdown uses the same dialog and `writeFile`. No new permission.
+
+**Report shape (open for R2).** `metrics[]` is a list of rows `{ key, label, unit, group, value, previous, change,
+changePct, emphasis, pctOfRevenue }` (revenue, direct costs, W1, tax, ZUS, fixed, marketing, gear, company costs, W2,
+paid, awaiting). Project and client rows carry `extra: Record<string, number | null>`. R2 adds „Marża producencka" as one
+more `metrics` row and one `extra` key; the renderers take whatever is on the list (a test does exactly that). The rest
+of the JSON: `period`, `provisional`, `view`, `definitions`, `alternativeView`, `pipeline`, `coverage`, `projects`,
+`clients`, `payments`, `companyCosts`, `marketing`, `gear`, `crew`, `previous`, `notes`.
+
+**Cases → behaviour** (all tested in `period-report.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| Closed quarter / half / year | the report is a fact; title and files have no „wstępnie" |
+| Open period (today inside it) | „wstępnie" in title, tile, file name, PDF; company costs to the end of the period from plan (subscription instalments, spread gear), the planned part named; note „Okres jeszcze trwa" |
+| Month without jobs (builder only, the picker has no month) | no project or client rows, W1 = 0, W2 = −company costs, tables say „Brak projektów w okresie" |
+| Gear switch on / off | koszty firmy and W2 change, W1 does not; the report names the view in its header and definitions, and adds „w drugim widoku wynik = X" (equals the other view's real report) |
+| Client group | one row (members that have jobs in the period listed), sums from `marginSummary({ scope })`; W2 per group and per project only in a year view, otherwise `null` |
+| EUR job | revenue in zł at the quote's frozen rate, row marked „EUR, kurs 4,3661", a note; an invoice in zł replaces the plan as everywhere |
+| Previous period has no project and no fixed cost | `previous.hasData = false`: comparison columns „—", a note; carried gear alone does not count (2025 shows 28,858 zł of spread gear, but is „brak danych") |
+| Previous period wraps the year | Q1 → Q4 of last year, H1 → H2, January → December, year → year |
+| Project with an invoice in the period but its anchor earlier | row marked „tylko część przychodu w okresie", no costs, its crew and gear stay in the earlier period |
+| Invoices | issued in the period (counted projects) listed; open invoices on the generation date, all periods, `issuedInPeriod` marked, 30-day term marked „przyjęty", invoices without amount counted apart |
+| Crew | by the period's jobs (anchored, counted): paid and days of the job even when the calendar day falls later (a note says so) |
+| Gear forecast | payoff month only within 10 years, otherwise „powyżej 10 lat" |
+
+**„Do wyjaśnienia" — what is listed instead of chosen** (`notes`, kind `disagreement` / `gap` / `info`): Marketing's ROAS
+revenue is the frozen plan, Finanse's is invoices and extra sales (listed per job when they differ); Marketing spend is a
+panel reading or a budget estimate, the ledger counts entered costs only (listed when they differ); Ekipa counts Realizacja
+rows only (paid vs direct costs of the period) and dates a day by the calendar; gear without a purchase date is outside
+company costs but inside „zainwestowano" of the payoff stats. Gaps: jobs without Realizacja costs (plan), invoices without
+amount, deposits, jobs without amount, unpriced / retired gear, crew names outside Ekipa. `payments.paymentSplit` (plan-based,
+unused by the UI) is not used.
+
+**Real data, read-only (2026-10-18, hub folder only read; the hub was open and M.J. was editing, so figures move).**
+Q3 2026 vs Q2: revenue 73,325 vs 84,690 zł; W1 50,460 (69 %) vs 36,210; company costs 31,058 vs 29,656 (tax 6,233,
+ZUS 4,193, fixed 3,827, marketing 1,306, gear 15,500 spread); W2 19,402 vs 6,554 spread, 26,535 in the cash view; paid
+15,145, waiting 58,180. 2026 year: 192,334 / 115,689 / 96,179 / 19,510 zł, equal to the Finance „Projekty" tiles (checked
+side by side); 2025 is „brak danych". Q4 2026 is „wstępnie" and carries Tchibo Event as EUR at 4.3661.
+
+**Tests:** 728 (690 before, +38 in `period-report.test.ts`): parity with `marginSummary`, comparison and year wrap,
+month without jobs, open vs closed period, no previous data, gear view and alternative line, groups and year-only W2, EUR,
+payments, marketing clipping and disagreements, crew by jobs, notes, Markdown order, verbatim tables, JSON round trip,
+fence and pipe escaping, the R2 hook. 55 deliberate mutations, 55 caught (13 survived the first pass and got tests).
+`npx tsc --noEmit` clean.
+
+**Verified on the production export** (`npm run build`, served on port 3012, real hub data copied into the page's
+localStorage, restored afterwards): Q3, Q4 (open), year with and without previous data, switch off and on, the groups,
+EUR; tiles identical to the Finance tab for 2026; Markdown download (50 KB, JSON parses); PDF (4 pages, Polish letters,
+cuts between rows after a fix that stopped headings and table headers being cut points); phone width, no horizontal page
+scroll (tables scroll inside their cards).
+
+**Desktop-only checks for the main session** (installed app, real data):
+1. „Zapisz PDF" opens the native save dialog, writes the file (4 pages for Q3), Polish letters and page cuts look as in
+   the browser (html2canvas on WKWebView).
+2. „Zapisz Markdown + JSON" opens the dialog with a .md filter, writes UTF-8; the JSON block parses.
+3. After a restart the tab shows the same numbers as „Projekty" for the same period; the switch survives.
+
+**Known limits / next:**
+- The picker has no month (the builder supports it).
+- The PDF table header is not repeated on the next page (same as the call sheet).
+- Ekipa shows Realizacja rows only; most jobs still carry plan costs without people.
+- ROAS per period is the lead cohort of the period, which can include jobs from later quarters; the since-start columns
+  are the headline.
+- R2: add the „Marża producencka" metric row and `extra.producerMargin`; nothing else in the report changes.
