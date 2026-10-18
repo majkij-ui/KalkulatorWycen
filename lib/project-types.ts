@@ -360,6 +360,17 @@ export const projectCostSchema = z
     dayId: z.string().min(1).optional().catch(undefined),
     /** Skąd pozycja: brak = wpisana ręcznie, `plan` = przepisana z planu wyceny. */
     source: z.string().optional().catch(undefined),
+    /**
+     * R2: pozycja planu, z której wiersz powstał (klucz z `profit-calc.ts`; kopie
+     * pozycji „× 2" mają `#2`…). Brak = wiersz dopisany ręcznie albo sprzed R2.
+     */
+    planKey: z.string().min(1).optional().catch(undefined),
+    /** R2: odznaczony — tego nie było. Nie liczy się nigdzie, ale zostaje widoczny. */
+    skipped: z.literal(true).optional().catch(undefined),
+    /** R2: „Moja praca" — moja robota wyceniona kwotą wiersza; nie jest kosztem. */
+    ownWork: z.literal(true).optional().catch(undefined),
+    /** R2: zmieniony ręcznie po przyjściu z planu — zmiany wyceny go nie ruszają. */
+    edited: z.literal(true).optional().catch(undefined),
     createdAt: z.string().optional().catch(undefined),
     /** Miękkie usunięcie (ISO); „Cofnij" przywraca pozycje o tym samym znaczniku. */
     deletedAt: z.string().optional().catch(undefined),
@@ -448,6 +459,17 @@ export const projectFinancialsSchema = z.object({
   zysk: z.number().finite().catch(0),
   marzaPct: z.number().finite().catch(0),
   computedAt: z.string().catch(''),
+  /**
+   * R2: wartość mojej pracy w planie (pozycje „Ja" z wyceny, po ich „Koszcie").
+   * Nie jest kosztem — `koszty` są bez niej. Brak = 0 (każdy plan sprzed R2).
+   */
+  ownWork: z.number().finite().nonnegative().optional().catch(undefined),
+  /**
+   * R2: skąd `sumaNetto` — `transfer` = kwota przelewu wpisana ręcznie (zawiera
+   * dosprzedaż), `pdf` = suma PDF wybranego wariantu, `calculator` = kalkulator
+   * (wycena bez szkicu PDF). Brak = plan sprzed R2 (kwota jak dotąd + dosprzedaż).
+   */
+  revenueSource: z.enum(['transfer', 'pdf', 'calculator']).optional().catch(undefined),
 })
 export type ProjectFinancials = z.infer<typeof projectFinancialsSchema>
 
@@ -546,6 +568,11 @@ export const projectSchema = z
      * Brak = nic jeszcze nie wpisano. Nie zmieniają `financials` (to T6).
      */
     costs: lenientArray(projectCostSchema).optional(),
+    /**
+     * R2: kiedy Realizacja wystartowała z wyceny (pozycje planu zapisane jako
+     * wiersze). Brak przy wierszach = koszty wpisane przed R2, liczone jak dotąd.
+     */
+    costsFromQuoteAt: z.string().optional().catch(undefined),
     /** Wnioski / lessons learned z projektu. */
     notes: z.string().catch(''),
     /**

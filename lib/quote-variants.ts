@@ -322,8 +322,9 @@ export function variantFigures(snapshot: unknown, client = ''): VariantFigures {
   const { data, pricing, margin } = resolved
   const views = quoteViews(data, pricing)
   const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
-  const financials = computeSnapshotFinancials({ data, pricingConfig: pricing, marginMultiplier: margin })
   const draft = isObject(snapshot) && isObject(snapshot.pdfDraft) ? (snapshot.pdfDraft as Partial<LocalPdfState>) : null
+  // Plan jak finanse wariantu po wyborze: przychód z PDF (R2), gdy jest szkic.
+  const financials = computeSnapshotFinancials({ data, pricingConfig: pricing, marginMultiplier: margin, pdfDraft: draft })
   const pdfNetto = draft && isObject(draft.rows) ? pdfRowsTotal(draft.rows as LocalPdfState['rows']) : null
   const gear = quoteGearFigures(views.client.data)
   const shootingDays = data.isDetailedProdukcja

@@ -670,10 +670,33 @@ const GOLDEN: Record<string, ReturnType<typeof metrics>> = {
   }
 }
 
+/**
+ * R2 (C1, decyzja M.J. 13.2a/5): przychód planu to suma PDF. Jedyny szkic
+ * wśród wzorców pokazał klientowi 1 460 € po kursie szkicu 4,3699 (wycena w
+ * złotych, euro tylko na PDF), więc finanse i plan liczą 6 380,05 zł zamiast
+ * 8 100 zł z kalkulatora. Wszystko inne (wydruk, kalkulator, sprzęt) bez zmian.
+ */
+function withPdfPrice(golden: ReturnType<typeof metrics>, revenue: number): ReturnType<typeof metrics> {
+  const [, koszty] = golden.financials as number[]
+  const tax = revenue * (8.5 / 100)
+  const zysk = revenue - tax - koszty
+  const plan = golden.plan as unknown[]
+  return {
+    ...golden,
+    financials: [revenue, koszty, tax, zysk, (zysk / revenue) * 100],
+    plan: [revenue, tax, plan[2], zysk, plan[4]],
+  }
+}
+
+const EXPECTED: Record<string, ReturnType<typeof metrics>> = {
+  ...GOLDEN,
+  legacyEurPdf: withPdfPrice(GOLDEN.legacyEurPdf, 1460 * 4.3699),
+}
+
 for (const [name, snapshot] of Object.entries(FIXTURES)) {
   test(`stara wycena „${name}" liczy się i drukuje jak przed S3`, () => {
     const actual = metrics(snapshot)
     if (process.env.PRINT_GOLDEN) console.log(`GOLDEN ${name} ${JSON.stringify(actual)}`)
-    assert.deepEqual(actual, GOLDEN[name])
+    assert.deepEqual(actual, EXPECTED[name])
   })
 }

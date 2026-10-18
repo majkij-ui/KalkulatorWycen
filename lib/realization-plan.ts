@@ -14,7 +14,7 @@
 import { crewLineKey, isRentalCostKey, resolveProfitSections, type ProfitLine } from './profit-calc'
 import { quotePlnPlan, quoteViews, resolveSnapshot, computeTotalCrewDays, type FinancialsSource } from './quote-financials'
 import { isBlankQuoteData } from './project-save'
-import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts } from './project-costs'
+import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts, totalOwnWork } from './project-costs'
 import type { Project, ProjectCost, ProjectFinancials } from './project-types'
 import type { QuoteCrewLine, QuoteData } from './quote-types'
 import { safeArray, safeNum } from './safe-numbers'
@@ -24,11 +24,19 @@ export type PlanSource = 'quote' | 'import' | 'none'
 export interface PlanFigures {
   /** `quote` — z wyceny (Profit), `import` — wynik z importu, `none` — brak planu. */
   source: PlanSource
-  /** Kwota przelewu netto (ręczna z Profitu albo suma wyceny). */
+  /** Przychód planu: kwota przelewu wpisana ręcznie, a bez niej zatwierdzona cena (PDF / kalkulator). */
   revenue: number
+  /**
+   * R2: skąd przychód — `transfer` (wpisany ręcznie, zawiera dosprzedaż), `pdf`,
+   * `calculator`; `null` = plan sprzed R2 albo import (przychód + dosprzedaż jak dotąd).
+   */
+  revenueSource: 'transfer' | 'pdf' | 'calculator' | null
   taxRatePercent: number
   tax: number
+  /** Koszty zewnętrzne (bez mojej pracy). */
   costs: number
+  /** R2: wartość mojej pracy w planie (pozycje „Ja"). */
+  ownWork: number
   profit: number
   marginPct: number
   /** Koszty planu w kategoriach kosztów rzeczywistych; `null` = nieznany podział (import). */
@@ -38,7 +46,10 @@ export interface PlanFigures {
 export interface ActualFigures {
   revenue: number
   tax: number
+  /** Koszty zewnętrzne z Realizacji (zaznaczone, bez mojej pracy). */
   costs: number
+  /** R2: moja praca z Realizacji. */
+  ownWork: number
   profit: number
   marginPct: number
   /** Ile pozycji kosztów wpisano (0 = rzeczywistość jeszcze nieznana). */
@@ -74,7 +85,7 @@ export function planLineCategory(line: Pick<ProfitLine, 'key' | 'section' | 'isC
 function byCategory(lines: ProfitLine[]): Map<string, number> {
   const totals = new Map<string, number>()
   lines.forEach((line) => {
-    if (line.total === 0) return
+    if (line.total === 0 || line.ownWork) return
     const category = planLineCategory(line)
     totals.set(category, (totals.get(category) ?? 0) + line.total)
   })
@@ -86,13 +97,15 @@ export function planFromQuote(snapshot: FinancialsSource | null | undefined): Pl
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return null
   const { data, pricing, margin } = resolved
-  const { sections, summary } = quotePlnPlan(data, pricing, margin)
+  const { sections, summary, ownWork, revenueSource } = quotePlnPlan(data, pricing, margin, snapshot?.pdfDraft)
   return {
     source: 'quote',
     revenue: summary.sumaNetto,
+    revenueSource,
     taxRatePercent: summary.taxRatePercent,
     tax: summary.podatek,
     costs: summary.koszty,
+    ownWork,
     profit: summary.zysk,
     marginPct: summary.marzaPct,
     byCategory: byCategory(sections.flatMap((s) => s.lines)),
@@ -106,9 +119,11 @@ export function planFromFinancials(financials: ProjectFinancials): PlanFigures {
   return {
     source: 'import',
     revenue,
+    revenueSource: financials.revenueSource ?? null,
     taxRatePercent: revenue > 0 ? (tax / revenue) * 100 : DEFAULT_TAX_RATE,
     tax,
     costs: safeNum(financials.koszty, 0),
+    ownWork: safeNum(financials.ownWork, 0, 0),
     profit: safeNum(financials.zysk, 0),
     marginPct: safeNum(financials.marzaPct, 0),
     byCategory: null,
@@ -118,9 +133,11 @@ export function planFromFinancials(financials: ProjectFinancials): PlanFigures {
 const NO_PLAN: PlanFigures = {
   source: 'none',
   revenue: 0,
+  revenueSource: null,
   taxRatePercent: DEFAULT_TAX_RATE,
   tax: 0,
   costs: 0,
+  ownWork: 0,
   profit: 0,
   marginPct: 0,
   byCategory: null,
@@ -134,7 +151,7 @@ const NO_PLAN: PlanFigures = {
  */
 export function projectPlan(
   project: Pick<Project, 'quote' | 'financials'>,
-  live: { data: Partial<QuoteData>; pricingConfig?: unknown; marginMultiplier?: number } | null
+  live: { data: Partial<QuoteData>; pricingConfig?: unknown; marginMultiplier?: number; pdfDraft?: unknown } | null
 ): PlanFigures {
   if (live && (project.quote || !isBlankQuoteData(live.data))) {
     return planFromQuote(live) ?? NO_PLAN
@@ -162,6 +179,7 @@ export function actualFigures(
     revenue,
     tax,
     costs: total,
+    ownWork: totalOwnWork(costs),
     profit,
     marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
     costCount: (costs ?? []).filter((c) => !c.deletedAt).length,

@@ -678,6 +678,25 @@ test('kształt otwarty pod R2: nowy wiersz nagłówka i klucz w `extra` pojawiaj
   assert.equal(JSON.parse(reportToMarkdown(withProducer).split('```json\n')[1].split('\n```')[0]).projects[0].extra.producerMargin, 100)
 })
 
+test('R2: wiersz „Marża producencka" = suma marż producenckich (po podatku, minus moja praca); `extra` projektów i klientów', () => {
+  const data = input({
+    projects: [
+      project('a', { date: '2026-08-10', financials: { ...financials(10_000, 2_000), ownWork: 3_000 } }),
+      project('b', { date: '2026-09-10' }),
+    ],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  const row = metric(report, 'producerMargin')
+  const expected = 10_000 - 850 - 2_000 - 3_000 + (10_000 - 850 - 2_000)
+  near(row.value, expected)
+  near(row.pctOfRevenue, (expected / 20_000) * 100)
+  assert.equal(report.metrics.findIndex((m) => m.key === 'producerMargin'), report.metrics.findIndex((m) => m.key === 'margin') + 1)
+  near(report.projects.find((p) => p.id === 'a')!.extra.producerMargin, 10_000 - 850 - 2_000 - 3_000)
+  near(report.clients.find((c) => c.members.includes('Klient a'))!.extra.producerMargin, 4_150)
+  assert.ok(report.definitions.some((d) => d.key === 'producerMargin'))
+  assert.match(reportToMarkdown(report), /\| Marża producencka \|/)
+})
+
 // ── Odporność ────────────────────────────────────────────────────────────────
 
 test('usunięte projekty i wydarzenia nie wchodzą do raportu; wejście nie jest zmieniane', () => {

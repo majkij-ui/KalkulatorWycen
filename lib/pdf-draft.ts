@@ -449,6 +449,7 @@ export function flipPdfCurrency(prev: LocalPdfState, nextCurrency: PdfCurrency):
 
 /** Suma netto wierszy szkicu (to, co drukuje PDF) — z wierszem marży, gdy jest (może być ujemny). */
 export function pdfRowsTotal(rows: LocalPdfState['rows']): number {
+  if (!rows || typeof rows !== 'object') return 0
   const base = PDF_ROW_KEYS.reduce((sum, key) => sum + safeNum(rows[key]?.cenaNetto, 0, 0), 0)
   return rows?.marza ? base + safeNum(rows.marza.cenaNetto, 0) : base
 }

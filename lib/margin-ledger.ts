@@ -17,6 +17,10 @@
  *     w widoku roku (decyzja A): koszty firmy bez podatku dzielimy na projekty
  *     wg udziału w przychodzie roku, podatek każdy projekt ma swój. Suma
  *     wierszy = wynik roku.
+ *  - MARŻA PRODUCENCKA (R2) = warstwa 1 − ryczałt − wartość mojej pracy, per
+ *    projekt (po podatku, jak w zakładce Finanse projektu); dla firmy to suma
+ *    wierszy. Wynikiem firmy zostaje warstwa 2. Kolejne liczby z tych samych
+ *    składników (np. EBBT, plan §17.2) dopisuje się do `MarginTotals`.
  *  - Przełącznik „Rozłóż duże zakupy sprzętu" zmienia sprzęt, więc każdą
  *    liczbę warstwy 2 (także per projekt).
  *  - Okres, który się jeszcze nie skończył, jest „wstępnie": koszty firmy do
@@ -70,6 +74,13 @@ export interface ProjectMargin {
   /** Czy przychód jest znany; `false` = „brak kwoty", warstwa 1 to tylko koszty. */
   known: boolean
   tax: number
+  /** R2: wartość mojej pracy w okresie (projekt zakotwiczony, jak koszty). */
+  ownWork: number
+  /**
+   * R2: marża producencka w okresie = warstwa 1 − podatek − moja praca (po
+   * podatku, decyzja M.J. 2026-10-18). Suma wierszy = marża producencka firmy.
+   */
+  producerMargin: number
   /** Udział w przychodzie roku (0–1); `null` poza widokiem roku. */
   share: number | null
   /** Przypisane koszty firmy bez podatku; `null` poza widokiem roku. */
@@ -84,6 +95,10 @@ export interface MarginTotals {
   costs: number
   margin: number
   tax: number
+  /** R2: moja praca w projektach okresu. */
+  ownWork: number
+  /** R2: suma marż producenckich projektów (po podatku). */
+  producerMargin: number
   /** Koszty firmy bez podatku przypisane projektom; `null` poza rokiem (dla zawężenia). */
   overhead: number | null
   /** Warstwa 2; dla całej firmy zawsze, dla zawężenia tylko w roku. */
@@ -168,6 +183,8 @@ function totalsOf(rows: ProjectMargin[], perProject: boolean): MarginTotals {
     costs: sum(rows.map((r) => r.costs)),
     margin: sum(rows.map((r) => r.margin)),
     tax: sum(rows.map((r) => r.tax)),
+    ownWork: sum(rows.map((r) => r.ownWork)),
+    producerMargin: sum(rows.map((r) => r.producerMargin)),
     overhead: perProject ? sum(rows.map((r) => r.overhead ?? 0)) : null,
     result: perProject ? sum(rows.map((r) => r.result ?? 0)) : null,
   }
@@ -183,6 +200,8 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
 
   const all: ProjectMargin[] = money.projects.map((row) => {
     const costs = row.anchored ? (row.money.costs ?? 0) : 0
+    const ownWork = row.anchored ? row.money.ownWork : 0
+    const tax = row.revenue * (row.money.taxRatePercent / 100)
     return {
       money: row.money,
       anchored: row.anchored,
@@ -190,7 +209,9 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
       costs,
       margin: row.revenue - costs,
       known: row.money.revenue !== null,
-      tax: row.revenue * (row.money.taxRatePercent / 100),
+      tax,
+      ownWork,
+      producerMargin: row.revenue - costs - tax - ownWork,
       share: null,
       overhead: null,
       result: null,

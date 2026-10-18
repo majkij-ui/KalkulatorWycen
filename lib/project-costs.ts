@@ -34,9 +34,30 @@ export function liveCosts(costs: ProjectCost[] | null | undefined): ProjectCost[
   return (costs ?? []).filter((cost) => !cost.deletedAt)
 }
 
-/** Suma kosztów rzeczywistych projektu (bez usuniętych). */
+/**
+ * Pozycje, które się liczą (R2): nieusunięte i zaznaczone — odznaczona
+ * (`skipped`, „tego nie było") zostaje widoczna, ale nie liczy się nigdzie.
+ */
+export function countedCosts(costs: ProjectCost[] | null | undefined): ProjectCost[] {
+  return liveCosts(costs).filter((cost) => !cost.skipped)
+}
+
+/** Czy wiersz to moja praca („Moja praca", R2) — nie koszt. */
+export function isOwnWork(cost: Pick<ProjectCost, 'ownWork'>): boolean {
+  return cost.ownWork === true
+}
+
+/**
+ * Suma kosztów rzeczywistych projektu: zaznaczone pozycje zewnętrzne (bez
+ * usuniętych, odznaczonych i mojej pracy). Koszty sprzed R2 liczą się jak dotąd.
+ */
 export function totalActualCosts(costs: ProjectCost[] | null | undefined): number {
-  return liveCosts(costs).reduce((sum, cost) => sum + costAmount(cost), 0)
+  return countedCosts(costs).reduce((sum, cost) => sum + (isOwnWork(cost) ? 0 : costAmount(cost)), 0)
+}
+
+/** Wartość mojej pracy w Realizacji (R2): zaznaczone pozycje „Moja praca". */
+export function totalOwnWork(costs: ProjectCost[] | null | undefined): number {
+  return countedCosts(costs).reduce((sum, cost) => sum + (isOwnWork(cost) ? costAmount(cost) : 0), 0)
 }
 
 /** Kategorie w kolejności `COST_CATEGORIES`, nieznane na końcu alfabetycznie. */
@@ -49,10 +70,11 @@ export function compareCategories(a: string, b: string): number {
   return categoryRank(a) - categoryRank(b) || a.localeCompare(b, 'pl')
 }
 
-/** Suma kosztów w każdej kategorii (bez usuniętych i bez zerowych kategorii). */
+/** Suma kosztów w każdej kategorii (zaznaczone, zewnętrzne; bez zerowych kategorii). */
 export function actualCostsByCategory(costs: ProjectCost[] | null | undefined): Map<string, number> {
   const totals = new Map<string, number>()
-  liveCosts(costs).forEach((cost) => {
+  countedCosts(costs).forEach((cost) => {
+    if (isOwnWork(cost)) return
     totals.set(cost.category, (totals.get(cost.category) ?? 0) + costAmount(cost))
   })
   return new Map([...totals.entries()].filter(([, v]) => v !== 0).sort(([a], [b]) => compareCategories(a, b)))
