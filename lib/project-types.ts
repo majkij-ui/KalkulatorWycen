@@ -51,9 +51,10 @@ export function countsTowardRevenue(status: ProjectStatus): boolean {
 
 /**
  * Zakładki otwartego projektu (T3). Klucze na stałe, etykiety w interfejsie:
- * `sprzet` to od T5a zakładka „Realizacja" (dni, sprzęt, ekipa, koszty, plan).
+ * `sprzet` to od T5a zakładka „Realizacja" (dni, sprzęt, ekipa, koszty), `finanse`
+ * (R2) — cena z PDF, przelew i marże projektu.
  */
-export const PROJECT_TABS = ['os', 'wycena', 'sprzet', 'notatki'] as const
+export const PROJECT_TABS = ['os', 'wycena', 'sprzet', 'finanse', 'notatki'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /**

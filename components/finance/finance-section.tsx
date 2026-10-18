@@ -320,7 +320,7 @@ function KpiTiles({
   const planMargin = money.plan.revenue - money.plan.costs
   const gearView = summary.spread ? 'sprzęt rozłożony' : 'sprzęt w całości'
   return (
-    <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Przychód netto</div>
         <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.revenue)}</div>
@@ -368,6 +368,20 @@ function KpiTiles({
           </div>
         )}
       </div>
+      {/* R2 (D2): suma marż producenckich projektów — po podatku i po wartości mojej pracy. */}
+      <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
+        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Marża producencka</div>
+        <div className={`mt-1 tabular-nums text-xl font-bold ${view.producerMargin < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>
+          {pln(view.producerMargin)}
+        </div>
+        <div className="mt-1 text-xs text-zinc-500">
+          marża − podatek {pln(view.tax)} − Twoja praca {pln(view.ownWork)}
+          {view.revenue > 0 && ` · ${pctOf(view.producerMargin, view.revenue)}`}
+        </div>
+        <div className="mt-0.5 text-xs text-zinc-500">
+          {view.ownWork > 0.5 ? 'gdybyś tylko produkował, a na plan wysłał kogoś innego' : 'nic nie oznaczono jako „Moja praca"'}
+        </div>
+      </div>
       <button
         type="button"
         onClick={onOpenFixed}
@@ -400,7 +414,7 @@ function KpiTiles({
           </div>
         )}
       </button>
-      <div className={`rounded-xl border p-4 ${tone.box}`}>
+      <div className={`col-span-2 rounded-xl border p-4 lg:col-span-1 ${tone.box}`}>
         <div className="text-[11px] uppercase tracking-wide text-zinc-400">
           Wynik po kosztach firmy
           {provisional && <Provisional />}

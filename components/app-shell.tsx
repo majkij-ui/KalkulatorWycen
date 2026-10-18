@@ -23,6 +23,7 @@ import {
   Package,
   Settings2,
   Users,
+  Wallet,
   Waypoints,
 } from 'lucide-react'
 import { ProjectHubProvider, useProjectHub } from '@/lib/project-hub-context'
@@ -36,6 +37,7 @@ import { ProjectList } from '@/components/projects/project-list'
 import { ProjectHeader } from '@/components/projects/project-header'
 import { ProjectTimeline } from '@/components/projects/project-timeline'
 import { ProjectNotes } from '@/components/projects/project-notes'
+import { ProjectFinance } from '@/components/project-finance/project-finance'
 import { defaultProjectTab, type Project, type ProjectTab } from '@/lib/project-types'
 import { listVariants } from '@/lib/quote-variants'
 import { VariantStatusQuestion } from '@/components/projects/variant-status-question'
@@ -133,6 +135,8 @@ const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calcul
   { value: 'wycena', label: 'Wycena', icon: Calculator },
   // Klucz `sprzet` na stałe; od T5a to zakładka Realizacja (sprzęt jest jej częścią).
   { value: 'sprzet', label: 'Realizacja', icon: Clapperboard },
+  // R2 (C): cena z PDF, przelew, zysk netto i marża producencka projektu.
+  { value: 'finanse', label: 'Finanse', icon: Wallet },
   { value: 'notatki', label: 'Notatki', icon: NotebookPen },
 ]
 
@@ -182,7 +186,7 @@ function ProjectView({
     <>
       <ProjectHeader onOpenClient={onOpenClient} docId={headerDocId} />
       <div className="border-b border-white/5 bg-black/20">
-        <div className="mx-auto flex max-w-4xl gap-1 px-4 py-1.5" role="tablist" aria-label="Zakładki projektu">
+        <div className="mx-auto flex max-w-4xl gap-1 overflow-x-auto px-4 py-1.5" role="tablist" aria-label="Zakładki projektu">
           {PROJECT_TAB_ITEMS.map(({ value, label, icon: Icon }) => {
             const active = value === tab
             return (
@@ -192,7 +196,7 @@ function ProjectView({
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(value)}
-                className={`relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                   active ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
               >
@@ -225,6 +229,7 @@ function ProjectView({
         />
       )}
       {tab === 'sprzet' && <ProjectRealization />}
+      {tab === 'finanse' && <ProjectFinance project={project} />}
       {tab === 'notatki' && <ProjectNotes project={project} />}
     </>
   )
