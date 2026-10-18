@@ -73,6 +73,7 @@ import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
 import { GearCostsPanel } from './gear-costs-panel'
 import { PaymentsPanel, PlanVsActual } from './money-loop-panels'
+import { ReportTab } from './report-tab'
 import { SubscriptionsPanel, type FinanceNotice } from './subscriptions-panel'
 import { useFixedCosts } from './use-fixed-costs'
 import { useSubscriptions } from './use-subscriptions'
@@ -108,10 +109,11 @@ function writePref(key: string, value: string): void {
 
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru']
 
-/** Zakładki Finansów; „Raport" (S5) dopisze się tu jako trzecia. */
+/** Zakładki Finansów; „Raport" (S5) to trzecia. */
 const FINANCE_TABS = [
   { value: 'projects', label: 'Projekty' },
   { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
+  { value: 'report', label: 'Raport' },
 ] as const
 type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
@@ -480,6 +482,31 @@ function ThresholdEditor({
   )
 }
 
+/** Przełącznik „Rozłóż duże zakupy sprzętu" z progiem — w Projektach i w Raporcie. */
+function GearToggle({
+  id,
+  spread,
+  onSpread,
+  settings,
+  onThreshold,
+}: {
+  id: string
+  spread: boolean
+  onSpread: (next: boolean) => void
+  settings: GearSpreadSettings
+  onThreshold: (value: number) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Switch id={id} checked={spread} onCheckedChange={onSpread} />
+      <label htmlFor={id} className="cursor-pointer text-sm text-zinc-300">
+        Rozłóż duże zakupy sprzętu
+      </label>
+      {spread && <ThresholdEditor settings={settings} onSave={onThreshold} />}
+    </div>
+  )
+}
+
 function FinanceToolbar({
   directory,
   scopeName,
@@ -512,13 +539,7 @@ function FinanceToolbar({
         />
         {memberNames.length > 0 && <span className="text-xs text-zinc-500">grupa: {memberNames.join(', ')}</span>}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Switch id="finance-spread-gear" checked={spread} onCheckedChange={onSpread} />
-        <label htmlFor="finance-spread-gear" className="cursor-pointer text-sm text-zinc-300">
-          Rozłóż duże zakupy sprzętu
-        </label>
-        {spread && <ThresholdEditor settings={settings} onSave={onThreshold} />}
-      </div>
+      <GearToggle id="finance-spread-gear" spread={spread} onSpread={onSpread} settings={settings} onThreshold={onThreshold} />
     </div>
   )
 }
@@ -811,10 +832,15 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
                 podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing. Przychód z faktur (w miesiącu wystawienia), a
                 gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich brak — z planu. Wyceny nie wchodzą do wyniku.
               </>
-            ) : (
+            ) : tab === 'fixed' ? (
               <>
                 Subskrypcje liczą się same w każdym miesiącu cyklu; miesiąc, który był inny, poprawiasz na liście
                 miesięcy. Wszystko tutaj wchodzi do wyniku firmy w zakładce Projekty.
+              </>
+            ) : (
+              <>
+                Raport za wybrany okres: przychód i obie warstwy marży (per projekt i klient), płatności, koszty firmy,
+                marketing, sprzęt i ekipa — obok poprzedniego okresu. PDF i plik Markdown z JSON-em mają te same liczby co ekran.
               </>
             )}
           </p>
@@ -865,6 +891,23 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
           />
           <GearCostsPanel gear={margin.gear} periodLabel={periodLabel(period)} />
         </>
+      ) : tab === 'report' ? (
+        <ReportTab
+          period={period}
+          projects={projects}
+          events={events}
+          fixedCosts={fixed.costs}
+          subscriptions={subs.subscriptions}
+          equipment={equipment}
+          groups={groups}
+          spread={spread}
+          settings={settings}
+          taxRatePercent={taxRate}
+          today={today}
+          gearToggle={
+            <GearToggle id="report-spread-gear" spread={spread} onSpread={changeSpread} settings={settings} onThreshold={changeThreshold} />
+          }
+        />
       ) : (
         <>
           {notice && <NoticeBar notice={notice} onDone={() => setNotice(null)} />}
