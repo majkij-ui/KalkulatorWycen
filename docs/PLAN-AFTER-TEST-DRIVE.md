@@ -1132,6 +1132,10 @@ hides the numbers he needs, Realizacja shows the same costs three times (top sum
 - **A4 Role rates findable.** They are edited in Ekipa → Role (client rate + my cost; built-ins come from the
   default price list), but M.J. could not find that. Link to it from the crew picker.
 
+- **A5 Margin as its own line** (M.J. 2026-10-18). The header margin multiplier no longer stretches every line
+  proportionally; lines show their own client prices and the margin lands as one extra line item („marża
+  produkcji" — the client-facing label is for M.J. to choose). Totals stay what the multiplier gives today.
+
 **B. Realizacja tab** (`components/realization/*`, `components/tabs/profit.tsx`)
 - **B1** Remove the top summary (koszty według kategorii, koszty / zysk / marża rzeczywista) → tab C.
 - **B2 „Koszty projektu" at the top**, above the days: everything not per day — przedprodukcja, dojazd / paliwo,
@@ -1179,11 +1183,29 @@ hides the numbers he needs, Realizacja shows the same costs three times (top sum
 8. **Existing plans that include his own roles** (e.g. a „Reżyser" line without a person counted as a cost): no
    silent change — list them on real data and propose a review patch.
 
+### 13.2a Decisions (M.J. 2026-10-18)
+1. **The PDF is the price; Finanse is final.** The multiplier only helps arrive at PDF numbers („what if +10 %").
+   „Klient" in a crew row = that line's client price before margin; the margin is a separate line (A5).
+   The four layers (calculator → PDF → Realizacja → Finanse) are written down in ARCHITECTURE.md „Money pipeline".
+2. One line „Reżyser-operator · Ja" by default (as recommended).
+3. Own work is valued at the line's „Koszt" (as recommended).
+4. Final transfer: approved price + extra sales; a typed number is the override; a gap offers „Zapisz różnicę
+   jako dosprzedaż" (as recommended).
+5. **PDF ≠ calculator is normal and permanent.** Nothing goes backwards from the PDF into the calculator. Finanse
+   (revenue) reads the PDF, never the calculator; Realizacja (costs) starts from the calculator and is adjusted.
+   No per-project button: the PDF rule applies to every project, but every project whose revenue moves because
+   of it is listed for M.J. before release (expected: Morris 11,725 → 14,000, UAM 8,238 → 8,630); hand-typed
+   transfers, extra sales and invoices still win.
+6. Tab name: **„Finanse"**.
+7. Own gear in days: „mój sprzęt", no amount, no pill; rentals external (as recommended).
+8. Old plans: no silent changes; M.J. will rebuild most of them himself — leave them alone apart from a listed,
+   optional review patch.
+
 ### 13.3 Sessions
 
 | Session | Model | Contents | Runs with | Needs |
 |---|---|---|---|---|
-| **R1 Ekipa w wycenie** | Opus | A1–A4 | S5 | — |
+| **R1 Ekipa w wycenie** | Opus | A1–A5 | S5 | — |
 | **S5 Raport okresowy** | Opus | §3.7 on S4's ledger | R1 | S4 |
 | **R2 Realizacja i finanse projektu** | Opus | B, C, D1, P1, producer margin per project and in the ledger (Finance tile; report row if S5 is merged) | — | R1 merged |
 | later | | T9c (old quote rows), company profile / branding, G3 packing-list PDF | | R2 |

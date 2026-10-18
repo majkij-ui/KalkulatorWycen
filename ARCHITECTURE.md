@@ -90,6 +90,20 @@ the user; the app never changes a status silently. A lead is a `lead_in` event, 
 
 ## Money pipeline
 
+**Four layers of a job's money (M.J., 2026-10-18 — keep this direction in all code):**
+1. **Kalkulator** — estimating: what the job needs and roughly costs. The margin multiplier is a tool for
+   arriving at client prices, nothing more.
+2. **PDF** — presenting the estimate to the client in an attractive shape. **The PDF is the price.** It may
+   differ from the calculator by design (lines moved, people shown cheaper, gear dearer); nothing ever flows
+   back from the PDF into the calculator, and the difference is never an error.
+3. **Realizacja** — how the money is actually deployed: costs start from the calculator's plan and are
+   adjusted by hand (usually they are), each counted line either an external cost or M.J.'s own work.
+4. **Finanse (project tab)** — the final word: derived from the PDF by default, overridable (final transfer
+   incl. extra sales), and invoices win once issued.
+
+Revenue therefore follows PDF → Finanse → invoices; costs follow calculator → Realizacja. Never change a
+number of an existing project silently: list what moves and let M.J. confirm.
+
 - **Plan** = `Project.financials`, frozen from the quote on save (Profit tab: costs from the price list
   without margin, overrides, flat tax 8.5 % by default).
 - **Money loop** (`money-loop.ts`, T6): actual revenue = issued invoices (`invoice_sent.amountNetto`, net)
