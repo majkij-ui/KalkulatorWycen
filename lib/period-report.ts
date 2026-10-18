@@ -724,7 +724,8 @@ function buildMarketing(
   const revenueDiffs: string[] = []
   const estimated: string[] = []
 
-  input.campaigns.forEach((campaign) => {
+  const ordered = [...input.campaigns].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name, 'pl'))
+  ordered.forEach((campaign) => {
     const clipped = summarizeCampaign(clipCampaign(campaign, period.from, period.to), {
       costs: costsInPeriod,
       leads: leadsInPeriod,

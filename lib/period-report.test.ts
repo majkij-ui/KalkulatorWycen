@@ -125,6 +125,9 @@ test('liczby raportu = rejestr marży dla tego samego okresu (nic nie jest liczo
     near(row.margin, s.projects[i].margin)
   })
   assert.equal(report.provisional, false)
+  // Zlecenie b nie ma faktury: jego przychód jest z planu.
+  near(report.payments.invoicedRevenue, 10_000)
+  near(report.payments.fromPlan, 6_000)
 })
 
 test('porównanie: poprzedni kwartał z tego samego rejestru; zmiana = różnica, zmiana % względem poprzedniego', () => {
@@ -141,6 +144,7 @@ test('porównanie: poprzedni kwartał z tego samego rejestru; zmiana = różnica
 // ── Okresy: krawędzie ────────────────────────────────────────────────────────
 
 test('poprzedni okres przechodzi przez granicę roku (Q1 → Q4, H1 → H2, styczeń → grudzień, rok → rok)', () => {
+  assert.deepEqual(previousPeriod(Q(2026, 2)), { kind: 'quarter', year: 2026, index: 1 })
   assert.deepEqual(previousPeriod(Q(2026, 1)), { kind: 'quarter', year: 2025, index: 4 })
   assert.deepEqual(previousPeriod({ kind: 'half', year: 2026, index: 1 }), { kind: 'half', year: 2025, index: 2 })
   assert.deepEqual(previousPeriod(MONTH(2026, 1)), { kind: 'month', year: 2025, index: 12 })
@@ -206,10 +210,22 @@ test('poprzedni okres bez projektu i bez zapisanego kosztu stałego = „brak da
   })
   // Sam przeniesiony sprzęt nie jest „danymi": w 2025 raty rozkładania istnieją, a porównania nie ma.
   assert.ok(buildPeriodReport(data, YEAR(2025)).companyCosts.gear > 0, 'w 2025 raty sprzętu istnieją, a porównania z nimi nie ma')
+  assert.match(reportSections(report)[0].lead[0], /^Brak danych za 2025 — porównanie pominięte/)
   const row = reportSections(report)[0].tables[0].rows[1]
   assert.deepEqual(row.slice(2), ['—', '—', '—'])
   assert.ok(report.notes.some((n) => n.code === 'no_previous'))
   assert.match(reportToMarkdown(report), /Brak danych za 2025/)
+})
+
+test('kategorie kosztów stałych nie zawierają „Sprzętu spoza katalogu" (jest w sekcji Sprzęt)', () => {
+  const data = input({
+    projects: [project('a', { date: '2026-08-10' })],
+    fixedCosts: [fixed('2026-08', 800, { category: 'gear' }), fixed('2026-08', 300, { category: 'software' })],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  assert.deepEqual(report.companyCosts.byCategory.map((c) => c.key), ['software'])
+  near(report.gear.manual, 800)
+  near(report.companyCosts.gear, 800)
 })
 
 test('poprzedni okres z samym kosztem stałym (bez projektu) ma dane', () => {
@@ -253,13 +269,22 @@ test('zakupy sprzętu w okresie i sprzęt na planie: odpracował, % ceny, progno
     projects: [
       project('a', {
         date: '2026-08-10',
-        gearDays: [{ id: 'd1', label: '', date: '2026-08-10', lines: [{ itemId: 'tani', qty: 1 }, { itemId: 'drogi', qty: 1 }] }],
+        gearDays: [
+          {
+            id: 'd1',
+            label: '',
+            date: '2026-08-10',
+            lines: [{ itemId: 'tani', qty: 1 }, { itemId: 'drogi', qty: 1 }, { itemId: 'sredni', qty: 1 }],
+          },
+        ],
       }),
     ],
     events: [invoice('a', '2026-08-12', 10_000)],
     equipment: [
       gearItem('tani', 1_000, '2026-07-01', { rentalDayRate: 400 }),
       gearItem('drogi', 100_000, '2024-01-01', { rentalDayRate: 100 }),
+      // ~28 lat przy dotychczasowym tempie: za 10 latami, ale nie absurd.
+      gearItem('sredni', 20_000, '2025-01-01', { rentalDayRate: 1_200 }),
     ],
   })
   const report = buildPeriodReport(data, Q(2026, 3))
@@ -270,7 +295,14 @@ test('zakupy sprzętu w okresie i sprzęt na planie: odpracował, % ceny, progno
   near(tani.rentValuePct, 40)
   assert.ok(tani.rentPayoffMonth !== null, 'bliska prognoza zostaje')
   assert.equal(drogi.rentPayoffMonth, null, 'dalej niż 10 lat — bez prognozy')
-  assert.match(sectionText(report), /powyżej 10 lat/)
+  const sredni = report.gear.onSet.find((u) => u.name === 'sredni')!
+  assert.equal(sredni.rentPayoffMonth, null, 'także prognoza za dwadzieścia kilka lat jest pominięta')
+  // W tabeli: bliska prognoza jako miesiąc, daleka słowami.
+  const usage = reportSections(report).find((x) => x.id === 'gear')!.tables.find((t) => t.head[0].startsWith('Na planie'))!
+  const forecast = (name: string) => usage.rows.find((r) => r[0] === name)!.at(-1)
+  assert.match(forecast('tani')!, /^\d{2}\.\d{4}$/)
+  assert.equal(forecast('drogi'), 'powyżej 10 lat')
+  assert.equal(forecast('sredni'), 'powyżej 10 lat')
 })
 
 // ── Grupy klientów ───────────────────────────────────────────────────────────
@@ -304,6 +336,17 @@ test('grupa klientów to jedna pozycja: suma członków, przychód i W1 jak w re
   assert.match(sectionText(report), /CIONET \+ DE Group \(grupa: /)
 })
 
+test('grupa bez własnej nazwy dostaje nazwy członków', () => {
+  const unnamed = clientGroupSchema.parse({ id: 'g2', name: '', members: ['a', 'b'], createdAt: '2026-10-16', updatedAt: '' })
+  const data = input({
+    groups: [unnamed],
+    projects: [project('x', { client: 'A', date: '2026-08-10' }), project('y', { client: 'B', date: '2026-08-11' })],
+  })
+  const group = buildPeriodReport(data, Q(2026, 3)).clients[0]
+  assert.equal(group.isGroup, true)
+  assert.deepEqual(group.name.split(' + ').sort(), ['A', 'B'])
+})
+
 test('widok roku: W2 per projekt i per grupa (suma wierszy = wynik firmy); kwartał tylko W1', () => {
   const data = input({
     groups: [GROUP],
@@ -316,6 +359,9 @@ test('widok roku: W2 per projekt i per grupa (suma wierszy = wynik firmy); kwart
   })
   const year = buildPeriodReport(data, YEAR(2026))
   assert.equal(year.perProject, true)
+  near(year.projects.reduce((total, p) => total + (p.share ?? 0), 0), 1, 'udziały sumują się do 100%')
+  near(year.projects.find((p) => p.id === 'c')!.share, 5_000 / 15_000)
+  quarterShareIsNull(data)
   const resultSum = year.projects.reduce((total, p) => total + (p.result ?? 0), 0)
   near(resultSum, metric(year, 'result').value, 'suma wyników projektów = wynik firmy')
   const group = year.clients.find((c) => c.isGroup)!
@@ -329,6 +375,10 @@ test('widok roku: W2 per projekt i per grupa (suma wierszy = wynik firmy); kwart
   assert.ok(quarter.definitions.some((d) => d.key === 'decisionA'))
   assert.ok(!year.definitions.some((d) => d.key === 'decisionA'))
 })
+
+function quarterShareIsNull(data: ReportInput) {
+  buildPeriodReport(data, Q(2026, 3)).projects.forEach((p) => assert.equal(p.share, null))
+}
 
 // ── Projekt w EUR ────────────────────────────────────────────────────────────
 
@@ -361,18 +411,24 @@ test('projekt w EUR: w zł po kursie z wyceny, oznaczony kursem w tabeli, w JSON
 
 test('płatności: faktury z okresu, otwarte na dzień raportu z oznaczeniem okresu, po terminie, bez kwoty', () => {
   const data = input({
-    projects: [project('a', { date: '2026-08-10' }), project('b', { date: '2026-09-02', financials: financials(6_000, 0) }), project('old', { date: '2026-05-10' })],
+    projects: [
+      project('a', { date: '2026-08-10' }),
+      project('b', { date: '2026-09-02', financials: financials(6_000, 0) }),
+      project('c', { date: '2026-09-03', financials: financials(3_000, 0) }),
+      project('old', { date: '2026-05-10' }),
+    ],
     events: [
       invoice('a', '2026-08-12', 10_000),
       payment('a', '2026-08-30'),
       invoice('b', '2026-09-02', 6_000, { data: { amountNetto: 6_000, dueDate: '2026-10-20' } }),
+      invoice('c', '2026-09-03', 3_000),
       invoice('old', '2026-05-12'), // faktura bez kwoty, z innego kwartału
     ],
   })
   const report = buildPeriodReport(data, Q(2026, 3))
-  assert.equal(report.payments.issued.length, 2)
-  assert.deepEqual(report.payments.issued.map((i) => i.state), ['paid', 'open'])
-  assert.equal(report.payments.open.length, 2)
+  assert.equal(report.payments.issued.length, 3)
+  assert.deepEqual(report.payments.issued.map((i) => i.state), ['paid', 'open', 'open'])
+  assert.equal(report.payments.open.length, 3)
   const old = report.payments.open.find((i) => i.projectId === 'old')!
   assert.equal(old.issuedInPeriod, false)
   assert.equal(old.amount, null)
@@ -382,8 +438,13 @@ test('płatności: faktury z okresu, otwarte na dzień raportu z oznaczeniem okr
   assert.equal(b.issuedInPeriod, true)
   assert.ok(b.daysOverdue < 0, 'termin 20.10 jeszcze nie minął')
   assert.equal(report.payments.openWithoutAmount, 1)
-  near(report.payments.openTotal, 6_000)
-  assert.equal(report.payments.overdueCount, 1)
+  near(report.payments.openTotal, 9_000)
+  assert.equal(report.payments.overdueCount, 2, 'faktura c ma termin 30 dni od 3.09 = 3.10')
+  near(report.payments.overdueTotal, 3_000)
+  near(report.payments.invoicedRevenue, 19_000)
+  near(report.payments.fromPlan, 0, 'cały przychód okresu z faktur')
+  near(report.payments.issuedTotal, 19_000)
+  assert.equal(report.payments.issuedWithoutAmount, 0)
   assert.equal(report.payments.paymentDays.paidCount, 1)
   assert.ok(report.notes.some((n) => n.code === 'open_without_amount'))
   const text = sectionText(report)
@@ -505,7 +566,7 @@ test('ekipa wg zleceń okresu: koszt leży w okresie projektu, nawet gdy dzień 
   assert.equal(dates.kind, 'disagreement')
   assert.match(dates.text, /15\.10\.2026/)
   const coverage = report.notes.find((n) => n.code === 'crew_coverage')!
-  assert.match(coverage.text, /1 500 zł z 1 500 zł|1 500 zł z /)
+  assert.match(coverage.text, /: 1 500 zł z 1 500 zł kosztów bezpośrednich okresu/)
   assert.match(sectionText(report), /Łukasz/)
 })
 
@@ -563,6 +624,8 @@ test('Markdown: najpierw definicje i „Do wyjaśnienia", potem sekcje 1–8, na
   }, -1)
   const json = md.split('```json\n')[1].split('\n```')[0]
   assert.deepEqual(JSON.parse(json), JSON.parse(JSON.stringify(report)))
+  assert.match(md, /\|---\|---:\|---:\|---:\|---:\|/, 'liczby wyrównane do prawej')
+  assert.match(md, /\| \*\*Marża na realizacji \(W1\)\*\* \| \*\*/, 'warstwy pogrubione')
   // Twarde spacje nie trafiają do pliku.
   assert.doesNotMatch(md.slice(0, md.indexOf('## Dane (JSON)')), / /)
 })
@@ -634,4 +697,150 @@ test('pusty hub: raport się buduje, tabele są puste, nic nie rzuca', () => {
   assert.equal(report.previous.hasData, false)
   assert.doesNotThrow(() => reportToMarkdown(report))
   reportSections(report).forEach((s) => assert.ok(s.title))
+})
+
+// ── Dopełnienie: krawędzie, które łatwo zepsuć ───────────────────────────────
+
+test('wyceny w toku: liczba i wartość po dacie księgowej; bez wycen „brak"', () => {
+  const none = buildPeriodReport(input({ projects: [project('a', { date: '2026-08-10' })] }), Q(2026, 3))
+  assert.deepEqual(none.pipeline, { count: 0, value: 0 })
+  assert.match(sectionText(none), /Wyceny w toku: brak\./)
+  const some = buildPeriodReport(
+    input({
+      projects: [
+        project('w1', { status: 'quote', date: '2026-08-10', financials: financials(5_000, 0) }),
+        project('w2', { status: 'quote', date: '2026-09-10', financials: financials(2_500, 0) }),
+        project('poza', { status: 'quote', date: '2026-05-10', financials: financials(999, 0) }),
+      ],
+    }),
+    Q(2026, 3)
+  )
+  assert.deepEqual(some.pipeline, { count: 2, value: 7_500 })
+  assert.match(sectionText(some), /Wyceny w toku: 2 na 7\s500 zł/)
+  assert.ok(!some.projects.some((p) => p.id.startsWith('w')), 'wyceny nie wchodzą do projektów raportu')
+})
+
+test('poprzedni okres z samym projektem (bez kosztów stałych) też ma dane', () => {
+  const report = buildPeriodReport(input({ projects: [project('q2', { date: '2026-05-10' }), project('a', { date: '2026-08-10' })] }), Q(2026, 3))
+  assert.equal(report.previous.hasData, true)
+  near(metric(report, 'revenue').previous, 10_000)
+})
+
+test('zmiana % liczona od wartości bezwzględnej poprzedniej: z minusa na plus to wzrost', () => {
+  // II kwartał: tylko koszt stały → wynik −2 000; III kwartał: przychód i koszt.
+  const data = input({
+    projects: [project('a', { date: '2026-08-10', financials: financials(10_000, 0) })],
+    fixedCosts: [fixed('2026-05', 2_000, { type: 'zus', category: 'zus' })],
+  })
+  const result = metric(buildPeriodReport(data, Q(2026, 3)), 'result')
+  near(result.previous, -2_000)
+  assert.ok(result.change! > 0)
+  assert.ok(result.changePct! > 0, 'wzrost, nie spadek')
+  near(result.changePct, (result.change! / 2_000) * 100)
+  // Poprzednie zero: zmiana jest, procentu nie ma.
+  const zero = metric(buildPeriodReport(input({ projects: [project('a', { date: '2026-08-10' })], fixedCosts: [fixed('2026-05', 1)] }), Q(2026, 3)), 'zus')
+  assert.equal(zero.changePct, null)
+})
+
+test('projekt z fakturą w tym okresie, ale z kotwicą wcześniej: tylko część przychodu, bez jego ekipy i sprzętu', () => {
+  const lukasz = crewMemberSchema.parse({ id: 'cm1', name: 'Łukasz' })
+  const early = project('wczesny', {
+    date: '2026-05-10',
+    financials: financials(10_000, 1_000),
+    gearDays: [{ id: 'd1', label: '', date: '2026-05-10', lines: [{ itemId: 'kamera', qty: 1 }] }],
+    costs: [crewCost('cm1', 'Łukasz', 1_000, 'd1')],
+  })
+  const data = input({
+    crew: [lukasz],
+    projects: [early],
+    equipment: [gearItem('kamera', 1_000, '2025-01-01', { rentalDayRate: 300 })],
+    events: [invoice('wczesny', '2026-05-12', 4_000), invoice('wczesny', '2026-08-12', 6_000)],
+  })
+  const q3 = buildPeriodReport(data, Q(2026, 3))
+  const row = q3.projects.find((p) => p.id === 'wczesny')!
+  assert.equal(row.anchored, false)
+  near(row.revenue, 6_000, 'tylko faktura z III kwartału')
+  near(row.costs, 0, 'koszty projektu leżą w II kwartale')
+  assert.equal(q3.crew.members.length, 0, 'ekipa tego zlecenia jest w II kwartale')
+  assert.equal(q3.gear.onSet.length, 0)
+  assert.match(sectionText(q3), /tylko część przychodu w okresie/)
+  const q2 = buildPeriodReport(data, Q(2026, 2))
+  assert.equal(q2.projects.find((p) => p.id === 'wczesny')!.anchored, true)
+  near(q2.crew.paid, 1_000)
+  assert.equal(q2.gear.onSet.length, 1)
+})
+
+test('leady po końcu okresu i przed jego początkiem nie liczą się do leadów okresu', () => {
+  const data = input({
+    campaigns: [campaign()],
+    events: [
+      event(null, 'lead_in', '2026-06-30', { quality: 'good', campaignId: 'cmp1' }),
+      event(null, 'lead_in', '2026-07-01', { quality: 'good', campaignId: 'cmp1' }),
+      event(null, 'lead_in', '2026-09-30', { quality: 'very_good', campaignId: 'cmp1' }),
+      event(null, 'lead_in', '2026-10-01', { quality: 'good', campaignId: 'cmp1' }),
+    ],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  assert.equal(report.marketing.leads.total, 2)
+  assert.equal(report.marketing.campaigns[0].inPeriod.leads.total, 2)
+  assert.equal(report.marketing.campaigns[0].toDate.leads.total, 4)
+})
+
+test('kampania bez wydatku i leadów w okresie nie wchodzi do tabeli, ale jej budżet z okna liczy się do wydatku kampanii', () => {
+  const report = buildPeriodReport(input({ campaigns: [campaign({ startDate: '2026-01-01', endDate: '2026-01-31' })] }), Q(2026, 3))
+  assert.equal(report.marketing.campaigns.length, 0)
+  near(report.marketing.campaignSpend, 0)
+  const running = buildPeriodReport(input({ campaigns: [campaign({ startDate: '2026-09-01' })] }), Q(2026, 3))
+  assert.equal(running.marketing.campaigns.length, 1, 'kampania z oknem emisji w okresie (szacunek z budżetu)')
+  near(running.marketing.campaignSpend, 3_000, '30 dni września po 100 zł')
+})
+
+test('faktura wyceny (projekt, który się nie liczy) jest na liście otwartych, ale nie w fakturach okresu', () => {
+  const data = input({ projects: [project('wycena', { status: 'quote', date: '2026-08-10' })], events: [invoice('wycena', '2026-08-12', 500)] })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  assert.equal(report.payments.issued.length, 0)
+  assert.equal(report.payments.open.length, 1)
+})
+
+test('kampanie w stałej kolejności: po dacie startu, potem po nazwie', () => {
+  const data = input({
+    campaigns: [campaign({ id: 'b', name: 'B', startDate: '2026-07-01' }), campaign({ id: 'a', name: 'A', startDate: '2026-08-01' }), campaign({ id: 'c', name: 'C', startDate: '2026-07-01' })],
+    fixedCosts: ['a', 'b', 'c'].map((id) => fixed('2026-08', 100, { type: 'marketing', category: 'marketing', campaignId: id })),
+  })
+  assert.deepEqual(buildPeriodReport(data, Q(2026, 3)).marketing.campaigns.map((c) => c.name), ['B', 'C', 'A'])
+})
+
+test('subskrypcje w okresie od najdroższej; sprzęt: „spłacone od zakupu" liczone od zakupu, nie tylko z okresu', () => {
+  const subs = [
+    subscriptionSchema.parse({ id: 's1', name: 'Tania', category: 'software', amount: 10, currency: 'PLN', cadence: 'monthly', startDate: '2026-07-01' }),
+    subscriptionSchema.parse({ id: 's2', name: 'Droga', category: 'office', amount: 500, currency: 'PLN', cadence: 'monthly', startDate: '2026-07-01' }),
+  ]
+  const day = (id: string, date: string) => ({ id, label: '', date, lines: [{ itemId: 'kamera', qty: 1 }] })
+  const data = input({
+    subscriptions: subs,
+    equipment: [gearItem('kamera', 2_000, '2025-01-01', { rentalDayRate: 200 })],
+    projects: [
+      project('stary', { date: '2026-02-10', gearDays: [day('d1', '2026-02-10'), day('d2', '2026-02-11')] }),
+      project('nowy', { date: '2026-08-10', gearDays: [day('d3', '2026-08-10')] }),
+    ],
+    events: [invoice('stary', '2026-02-12', 10_000), invoice('nowy', '2026-08-12', 10_000)],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  assert.deepEqual(report.companyCosts.subscriptions.map((s) => s.name), ['Droga', 'Tania'])
+  const kamera = report.gear.onSet[0]
+  near(kamera.rentValue, 200, 'w III kwartale jeden dzień')
+  near(kamera.rentValuePct, 30, 'od zakupu trzy dni: 600 z 2 000 zł')
+})
+
+test('marketing bez kampanii w kosztach firmy, a nie w Marketingu, to rozjazd — nawet bez szacunku z budżetu', () => {
+  const data = input({
+    campaigns: [campaign({ startDate: '2026-01-01', endDate: '2026-01-31' })],
+    fixedCosts: [fixed('2026-08', 400, { type: 'marketing', category: 'marketing' })],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  near(report.marketing.ledgerSpend, 400)
+  near(report.marketing.campaignSpend, 0)
+  const note = report.notes.find((n) => n.code === 'marketing_spend')!
+  assert.equal(note.kind, 'disagreement')
+  assert.match(note.text, /marketing w kosztach firmy 400 zł/)
 })

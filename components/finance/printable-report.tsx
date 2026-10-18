@@ -47,9 +47,10 @@ function PrintTable({ table }: { table: ReportTable }) {
           {table.caption}
         </div>
       )}
-      <table className="w-full border-collapse overflow-hidden rounded-lg text-[7.5pt] leading-tight">
+      <table className={`${table.head.length <= 2 ? 'w-1/2' : 'w-full'} border-collapse overflow-hidden rounded-lg text-[7.5pt] leading-tight`}>
         <thead>
-          <tr data-pdf-break="after" className="bg-zinc-50">
+          {/* Bez cięcia po nagłówku: tabela nie zostaje na dole strony sama z nagłówkiem. */}
+          <tr className="bg-zinc-50">
             {table.head.map((cell, i) => (
               <th
                 key={i}
@@ -83,7 +84,8 @@ function PrintTable({ table }: { table: ReportTable }) {
 function PrintSection({ index, section }: { index: number | null; section: ReportSection }) {
   return (
     <section className="mt-5">
-      <div data-pdf-break="after">
+      {/* Cięcie po nagłówku tylko, gdy sekcja nie ma ani tabel, ani zdań po nich. */}
+      <div data-pdf-break={section.tables.length === 0 && section.after.length === 0 ? 'after' : undefined}>
         <Eyebrow>
           {index !== null ? `${index}. ` : ''}
           {section.title}
@@ -155,7 +157,7 @@ export function PrintableReport({ report, production }: PrintableReportProps) {
       ))}
 
       <section className="mt-5">
-        <div data-pdf-break="after">
+        <div>
           <Eyebrow>{sections.length + 1}. Do wyjaśnienia</Eyebrow>
         </div>
         {notes.length === 0 ? (

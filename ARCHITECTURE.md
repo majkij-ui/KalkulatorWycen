@@ -63,7 +63,7 @@ synchronous. Providers: `ProjectHubProvider` → `QuoteProvider` → equipment, 
   calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`, `margin-ledger`,
   `gear-costs`,
   `subscriptions`, `client-money`, `client-stats`, `crew-rates`, `gear-usage`, `equipment-roi`,
-  `thread-stats`, `realization-plan`), decisions (`project-save`, `quote-documents`, `inbox`,
+  `thread-stats`, `realization-plan`, `period-report`), decisions (`project-save`, `quote-documents`, `inbox`,
   `inbox-validate`, `auto-backup`, `company-settings-core`). Put every rule here, with a test.
 - **Stores** (`*-store.ts`, `project-library.ts`, `equipment-catalog.ts`, `company-settings.ts`):
   file/localStorage IO through `createCollectionStore` only.
@@ -120,7 +120,8 @@ number of an existing project silently: list what moves and let M.J. confirm.
   marketing; per project only in a year view (company costs split by revenue share). Gear purchases come
   from the catalogue only: spread over 36 months from 5,000 zł (company.json) or in full; manual
   „Sprzęt spoza katalogu" (`category: 'gear'`) counts in full, minus `catalogueItemIds` it covered.
-  S5 should call `marginSummary` rather than re-adding numbers.
+  The S5 period report (`period-report.ts`, Finanse → „Raport") calls `marginSummary` for every money number and
+  re-adds nothing; where two modules disagree it lists the difference in „Do wyjaśnienia".
 
 ## Adding a collection
 

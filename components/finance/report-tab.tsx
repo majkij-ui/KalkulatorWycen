@@ -63,7 +63,7 @@ function ScreenTable({ table }: { table: ReportTable }) {
     <div className="mt-3 first:mt-0">
       {table.caption && <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">{table.caption}</div>}
       <div className="overflow-x-auto rounded-lg border border-white/5">
-        <table className="w-full min-w-max border-collapse text-sm">
+        <table className={`${table.head.length <= 2 ? 'w-full sm:w-1/2' : 'w-full min-w-max'} border-collapse text-sm`}>
           <thead>
             <tr className="bg-white/[0.03] text-[10px] uppercase tracking-wide text-zinc-500">
               {table.head.map((cell, i) => (

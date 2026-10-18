@@ -278,10 +278,10 @@ function costsSection(report: PeriodReport): ReportSection {
   if (costs.byCategory.length > 0) {
     tables.push(
       table(
-        ['Kategoria (bez sprzętu spoza katalogu)', 'Kwota'],
+        ['Kategoria', 'Kwota'],
         costs.byCategory.map((c) => [c.label, pln(c.amount)]),
         ['l', 'r'],
-        { caption: 'Koszty stałe w okresie' }
+        { caption: 'Koszty stałe w okresie (bez „Sprzętu spoza katalogu" — ten jest w sekcji Sprzęt)' }
       )
     )
   }
