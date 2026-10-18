@@ -1109,3 +1109,84 @@ company.json and survives a restart; after applying the patch, Finance 2026 in t
   Finance itself fits.
 - Open for M.J.: which lens was sold in June 2026 (−577.99 zł entry) — if it is in the catalogue, set its
   `retiredAt`.
+
+## 13. Crew pricing, Realizacja, project finances and own work *(M.J. feedback 2026-10-18)*
+
+M.J. tested pricing a shoot day and settling it in Realizacja. Functionally everything works, but the crew row
+hides the numbers he needs, Realizacja shows the same costs three times (top summary, days, Profit collapsible +
+„Koszty całego projektu" at the bottom), and nothing tells him how much of a job's margin is his own labour.
+
+### 13.1 Items
+
+**A. Wycena — crew rows** (`components/tabs/produkcja-crew.tsx`, `lib/quote-crew.ts`, `lib/crew-types.ts`)
+- **A1 „Ja" in Ekipa.** One person flagged as M.J. himself, with roles Reżyser, Reżyser-operator, Operator,
+  Asystent and a rate per role. He also works on other people's productions in lower roles, so crew stats per
+  role must include him.
+- **A2 Default first shoot day.** A new quote's day 1 starts with director + operator = „Ja" (see question 2).
+- **A3 Two editable amounts per row.** Left „Koszt" (what I pay / settle with the person = `costRate`), right
+  „Klient" (what goes to the PDF = `clientRate`). Picking a person fills BOTH from that person's rate in the role
+  (Kamil 1,200 → koszt 1,200, klient 1,200); either can be changed per row. Today the client side is the role rate
+  (1,500) and cannot be edited (decision 7, plan §6d) — this replaces decision 7 for new and edited lines.
+  *Why:* the client should see cheap people and pricier gear (people's rates get haggled, gear's less); M.J.
+  shifts the margin himself.
+- **A4 Role rates findable.** They are edited in Ekipa → Role (client rate + my cost; built-ins come from the
+  default price list), but M.J. could not find that. Link to it from the crew picker.
+
+**B. Realizacja tab** (`components/realization/*`, `components/tabs/profit.tsx`)
+- **B1** Remove the top summary (koszty według kategorii, koszty / zysk / marża rzeczywista) → tab C.
+- **B2 „Koszty projektu" at the top**, above the days: everything not per day — przedprodukcja, dojazd / paliwo,
+  nocleg, catering, postprodukcja, sprzęt kupiony na ten projekt, inne. Prefilled from the quote. Replaces the
+  bottom „Koszty całego projektu" (which sits after the packing list and gets lost).
+- **B3 Days = crew and gear only**, prefilled 1:1 from the quote's shoot days, with the Profit mechanics: tick
+  what really was a cost, edit the amount, add a person or a custom day cost if needed.
+- **B4** Remove the Profit collapsible at the bottom; its mechanics live in B2 / B3, its „Kwota przelewu" moves to C.
+- **B5** Gear grid, packing list and call sheet: unchanged (they work well).
+
+**C. New project tab „Finanse"** between Realizacja and Notatki (name: question 6)
+- **C1 Headline:** big „Zatwierdzona cena" (the chosen variant's PDF total; the calculator when the PDF is not
+  hand-edited); below, smaller and editable, „Kwota finalnego przelewu" (with extra sales agreed by mail or on
+  set). This is the „PDF total is the final price" session proposed in §9 (P1), folded in here.
+- **C2** Kept as today: zysk netto, marża, ryczałt 8,5 %, łączne koszty.
+- **C3** Plan vs actual by category (moved from Realizacja's top), low-key: small differences don't matter, big
+  jobs (S-AI) show where he under- or over-estimated.
+- **C4 Two margins:** „Marża" = what stays on his account after external costs and tax (his own work counts as
+  his), and „Marża producencka" = the same minus his own work valued at its rate, also as % of the total — „if I
+  only produced and sent someone else, is anything left?".
+
+**D. Own work vs external cost**
+- **D1** Every cost line in B2 / B3: checkbox „realny koszt" (unticked = didn't happen) plus a pill
+  „Zewnętrzny | Moja praca". No third kind: a counted line is either paid out or his own work. Lines with
+  person = „Ja" default to „Moja praca".
+- **D2** Company Finance and the S5 report show the producer margin next to S4's layers.
+
+### 13.2 Questions for M.J. (the session confirms them at step 1; main session's recommendation)
+1. **Header margin and „Klient" (A3).** `clientRate` is before the quote's margin multiplier. Rec: the row shows
+   and edits the amount that lands in the PDF; check on real quotes which multiplier M.J. uses before deciding.
+2. **Default day 1 (A2):** one line „Reżyser-operator · Ja" or two lines „Reżyser · Ja" + „Operator · Ja"? Rec:
+   one line — one person-day of his work; two lines would count his day twice in own work and crew stats. He
+   splits it when the client should see two lines.
+3. **Value of own work (C4):** the line's „Koszt" (what he would pay someone for that role); „Ja"'s rates in Ekipa
+   give the default. Rec: yes.
+4. **Final transfer vs extra sales (C1):** one truth. Facts today: `profitTransferAmount` (hand-typed, in the
+   quote's plan; S-AI 80,440, JHJ 25,780, M&L Broker 16,200), `extra_sale` events, invoices (win in the money
+   loop). Rec: the field shows approved price + extra sales; typing a number is the hand-typed override (as
+   today); a gap to approved + extras offers „Zapisz różnicę jako dosprzedaż" — never silent.
+5. **Existing projects whose PDF ≠ calculator** (Morris 11,725 → 14,000; UAM 8,238 → 8,630): switch only with a
+   button per project (rec, so 2026 doesn't move silently) or automatically?
+6. **Tab name:** „Finanse" (rec — the word M.J. uses), „Zysk" or „Rozliczenie".
+7. **Own gear in days:** catalogue gear is not a cash cost (S4 counts purchases); show it as „mój sprzęt" with no
+   amount and no pill; rentals are external. Rec: yes.
+8. **Existing plans that include his own roles** (e.g. a „Reżyser" line without a person counted as a cost): no
+   silent change — list them on real data and propose a review patch.
+
+### 13.3 Sessions
+
+| Session | Model | Contents | Runs with | Needs |
+|---|---|---|---|---|
+| **R1 Ekipa w wycenie** | Opus | A1–A4 | S5 | — |
+| **S5 Raport okresowy** | Opus | §3.7 on S4's ledger | R1 | S4 |
+| **R2 Realizacja i finanse projektu** | Opus | B, C, D1, P1, producer margin per project and in the ledger (Finance tile; report row if S5 is merged) | — | R1 merged |
+| later | | T9c (old quote rows), company profile / branding, G3 packing-list PDF | | R2 |
+
+R1 and S5 share no files (calculator crew vs Finance / report). R2 waits for R1: it reads R1's row amounts and the
+„Ja" flag, and it reshapes the realization and plan code R1's lines feed.
