@@ -1213,6 +1213,125 @@ hides the numbers he needs, Realizacja shows the same costs three times (top sum
 R1 and S5 share no files (calculator crew vs Finance / report). R2 waits for R1: it reads R1's row amounts and the
 „Ja" flag, and it reshapes the realization and plan code R1's lines feed.
 
+## 14. R1 as built
+
+*(2026-10-18, branch `claude/r1-ekipa-w-wycenie`, rebased on `v3/project-hub` `f6caf24` after S5.)*
+
+**Phase 1 (real data, read-only).** 14 quote documents then (16 at the end: M.J. added Solvo Film CeZ and Zabudowy
+Warszawa during the session). Margin multiplier: every document at 1.00 except Dräger (lost, 1.15). Crew lines only in
+Morris A (ReżOp placeholder 1,500 / 1,500; „Asystent/Operator · Kamil" Klient 1,500 from the role, Koszt 1,200) and
+Morris B; Morris A's hand-edited PDF already shows people cheaper (Ekipa 2,400 vs 3,000). No `crew-roles.json` at the
+start; M.J. later created a role „Ja jako Asystent" (1,400) and used it on Solvo Film Grodzisk — the real „Ja hired on
+someone else's production" case.
+
+**Decided with M.J. (2026-10-18):** (1) quotes without the new flag keep today's stretched look, PDF included; new
+quotes, „Pusta wycena" and variant copies use the margin line; (2) PDF label „Koordynacja i produkcja" / „Production &
+coordination", negative = „Rabat" / „Discount", description editable; (3) a role change after a hand edit refills both
+amounts; (4) M.J. is never on two lines on one day (a combined role such as „ReżOp + dron op" is one line) — no special
+handling, no dedupe; (5) ship the roles and „Ja" as a data patch, ReżOp keeps its built-in name (and keeps following
+the price list), day 1 = „ReżOp · Ja".
+
+**Data (additive, passthrough, no version bump).**
+- `CrewMember.self?: true` — „Ja" (R2 reads exactly this). At most one live: `withSelfRule` takes the flag from the
+  others in the same write; `selfCrewMember` picks the oldest live one if a restore ever leaves two.
+- `QuoteCrewLine.clientFromPerson?` (R1 line: „Klient" follows the person's rate in the role), `clientEdited?`,
+  `costEdited?` (typed by hand). Lines without them are pre-R1 and keep decision 7 on „zaktualizuj stawki".
+- `QuoteData.marginAsLine?: true` — set by `blankQuoteSnapshot` (new project, lead, „Pusta wycena"), by
+  `withMarginLine` in `addVariantPatch` (copies) and by ⌫/↺ resets. `mergeQuoteDataPartial` never adds it, so every
+  saved quote reads as before.
+- PDF draft: optional `rows.marza` (only in drafts of flagged quotes; `PDF_ROW_KEYS` stays the seven rows).
+
+**Real-life cases, as built** (tests in `quote-crew-r1.test.ts` and `quote-margin-line.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| Kamil as Operator (role 1,500) | Koszt 1,200, Klient 1,200 |
+| Person without a rate in the role | their day rate in both; no rates at all: Koszt = role cost (else client rate), Klient = role rate |
+| Klient typed, then Koszt typed | each kept on its own, „ręcznie" + ↺ (back to Ekipa); the other does not follow |
+| Role or person changed after a hand edit | both amounts refilled; the marks go (M.J. 3) |
+| „zaktualizuj stawki" after a hand edit | typed amounts stay, the rest refreshes; hand edits never count as „inne stawki" |
+| Pre-R1 line with a person (Morris A, Kamil 1,500 / 1,200) | unchanged; refresh keeps Klient = role, Koszt = person |
+| qty 2 placeholder | amounts per person-day; picking a person splits it: person (qty 1) + placeholder (qty 1) |
+| EUR quote | Klient in whole euros (stored in zł, S3), Koszt in zł: 1,200 zł → 275 € at 4.3699 |
+| Old quote opened (Dräger 1.15) | identical numbers and PDF (1,610 / 6,210 / 1,725 / 4,140 = 13,685); header says „rozciąga ceny pozycji (starsza wycena)" |
+| New quote, margin 1.15 | items at own prices + one „Koordynacja i produkcja" = (m − 1) × what the multiplier stretches (pre, post, crew lines, old counters and gear fields, quick production); catalogue gear, rentals, day adjustment, travel, catering, lodging, actor fee stay outside; copyright % surcharge on the subtotal incl. the line; total identical (Dräger as a copy: 1,400 / 5,400 / 1,500 / 3,600 + 1,785) |
+| Margin 1.0 / below 1 | no line, PDF row 0 and not printed / negative „Rabat" („Rabat od wyceny.") |
+| Hand-edited PDF draft | never rewritten; a draft without the margin row reads it as 0; „Zaktualizuj ceny z kalkulatora" also fills the margin row |
+| Variant copy of an old quote | gets the flag, totals identical; its copied draft stays as typed, so „Ceny w PDF różnią się" shows until updated |
+| New quote's day 1 | „ReżOp · Ja" at my rates (Koszt = Klient = 1,500 after the patch); without Ja a ReżOp placeholder |
+| „Scal osoby" with Ja | the kept card is Ja if any merged card was; „Cofnij" restores both flags |
+| Ja hired elsewhere as Asystent | change the line's role to Asystent: both amounts from my Asystent rate; crew stats per role count him |
+| Ja in Ekipa | „Ja" pill, „To ja" on the card (moving it says who had it), first in quote pickers, out of „najczęściej pracuję z…" and the „wypłacone" tile, his card says „Wartość mojej pracy" |
+
+**Screens.** Produkcja crew row: Rola (select) · Osoba · Osób (placeholders) · Koszt (zł) · Klient (quote currency) ·
+Razem (or „Z marżą" in older quotes); „Stawki ról" next to „+ Dodaj rolę…" opens Ekipa › Role over the calculator
+(A4). Sticky header under the slider: „Koordynacja i produkcja: X (osobna pozycja)" / „Rabat: −X" or „rozciąga ceny
+pozycji (starsza wycena)". PDF tab: the margin row last with „marża z nagłówka · drukuje się, gdy ≠ 0", negatives
+allowed; printout prints it last when ≠ 0. Role sheet text explains rates for placeholders vs people.
+
+**Code.** `quote-crew.ts` (`crewClientRate`, `withCrewPerson`, `staffCrewLine`, `withCrewRole`, `withCrewAmount`,
+`resetCrewAmount`, `defaultFirstDayCrew`, refresh rules), `quote-calc.ts` (`MARGIN_PHASE`, `lineMarginMultiplier`,
+`marginLineAmount`), `pdf-draft.ts` (`pdfRowKeys`, `pdfMarginRowTitle`, `printsMarginRow`, margin row in build / coerce /
+total / currency), `crew-types.ts` (`self`, `selfCrewMember`, `withSelfRule`), `crew-merge.ts`, `crew-stats.ts`
+(`crewPaidThisYear`, ranking without Ja), `project-save.ts`, `quote-variants.ts` (`withMarginLine`), `pdf-i18n.ts`;
+UI in `produkcja-crew.tsx`, `produkcja.tsx`, `sticky-header.tsx`, `podglad-pdf.tsx`, `printable-quote.tsx`,
+`components/crew/*`, `crew-context.tsx`, `quote-context.tsx` (`addShootingDay(firstDayCrew)`). Realizacja, Profit,
+Finance, money loop and margin ledger untouched.
+
+**Tests:** 723 on the R1 branch (690 + 33), 761 after rebasing on S5. Golden tests (`quote-crew-legacy`,
+`quote-currency-legacy`) unchanged; three decision-7 unit tests rewritten for A3 plus one new pre-R1 refresh test. 50
+deliberate mutations, 50 caught (five survived at first — role change with a person whose role rate equals the role's,
+a kept hand-typed Koszt, ↺ with a deleted person, detailed pre/post in the margin base, the discount text — and got
+assertions). `npx tsc --noEmit` clean; `npm run build` passes.
+
+**Real data (read-only, `projects.json` hash and mtime unchanged by every run).** All 16 documents (incl. variants and
+the deleted S-AI copy) computed by the base tree and the branch: totals, VAT, catering/lodging, every phase and item,
+financials, plan lines, PDF rows PL and EN with titles and descriptions, restored hand-edited drafts and their totals,
+gear revenue, crew staleness and refreshed lines, variant figures — byte-identical. The release check
+(`.claude/skills/wydanie/real-data-check.mts`) is identical too.
+
+**Data patch for the main session** (hub closed): `npm run data -- apply imports/2026-10-18-r1-ja-and-roles.json`.
+Adds roles „Reżyser" (`cr-r1-rezyser`, order 5) and „Asystent" (`cr-r1-asystent`, order 25), both client 1,500;
+stores the built-in `asystent` as „Operator" (client 1,500, frozen from the default price list); adds „Michał"
+(`cm-r1-ja`, `self: true`, roles Reżyser / ReżOp / Operator / Asystent, 1,500 each); moves Kamil's and Łukasz's 1,000
+„Asystent" rates (notes kept) from Gafer to Asystent and replaces Gafer by Asystent in their roles. Dry run on the real
+folder: crew-roles +3 (4 with M.J.'s „Ja jako Asystent"), crew +1 new and 2 changed; nothing written. Applied to a
+scratch copy and simulated: Ekipa shows Reżyser | ReżOp | Operator | Asystent | Gafer…, day 1 = „ReżOp · Michał"
+1,500 / 1,500, Kamil and Łukasz as Operator 1,200 / 1,200, as Asystent 1,000; Morris A then shows „1 pozycja ekipy ma
+inne stawki niż baza" — the name only (Asystent/Operator → Operator), amounts the same. Notes: re-check Kamil's and
+Łukasz's cards before applying (the `update` sets their whole `roleIds` / `roleRates`); a second run reports the two
+people as „zmienione" again with the same values; M.J. can retire „Ja jako Asystent" afterwards (Solvo's old line keeps
+1,400 / 1,400 until he edits it).
+
+**Verified** on the production export served by `node scripts/serve-export.mjs 3011` (the preview tool does not read
+the worktree's launch file; opened by URL), build checked by its strings and commit, with seeded localStorage (Morris,
+Dräger, Tchibo ×2, Solvo, the patched crew and roles) restored afterwards to the two keys the origin had: Ekipa „Ja"
+pill, card, moving „To ja" to Kamil and back; Morris A unchanged with Koszt/Klient columns and the rename notice; new
+project → 0.5 day documentation, +15 %, detailed production → day 1 „ReżOp · Ja · Michał" 1,500 / 1,500, Operator × 2 →
+Kamil splits off at 1,200 / 1,200, Klient 1,400 „ręcznie" (no stale notice), role → ReżOp refilled 1,500 / 1,500;
+header „Koordynacja i produkcja: 750,00 zł"; PDF 600 / 4,500 + 765 = 5,865, −10 % → „Rabat −510 zł / Rabat od wyceny."
+(4,590), 0 % → seven printed rows; Dräger PDF as before; Dräger copy B with the flag, draft kept + warning, update →
+1,400 / 5,400 / 1,500 / 3,600 + 1,785; „Stawki ról" sheet over the calculator (no autofocus); reload keeps the flag and
+line marks; phone width without horizontal scroll; no console errors besides the missing Vercel analytics script.
+
+**Desktop-only checks for the main session** (installed app, after the patch):
+1. Ekipa: Michał has „Ja"; Reżyser / Operator / Asystent listed; Kamil and Łukasz show their Asystent rate 1,000.
+2. Nowy projekt → Produkcja szczegółowa: day 1 „ReżOp · Ja"; `projects.json` gets `marginAsLine: true` and the line
+   with `clientFromPerson`.
+3. Morris & Lloyd A: numbers and PDF as before; „zaktualizuj" only renames Asystent/Operator → Operator.
+4. „Pobierz PDF" of a new quote with +15 %: „Koordynacja i produkcja" printed last; with 0 % not printed.
+5. „Stawki ról" sheet in the app window (z-index over the sticky header, focus).
+
+**Known limits / for R2.**
+- The plan still counts a „Ja" line's Koszt as a cost (profit ≈ 0 on Klient = Koszt rows); D1 „Moja praca" is R2's.
+- S5's report crew section (`crewOnProjects`) will count Realizacja rows of „Ja" as crew pay once they exist.
+- The Realizacja person picker shows Michał without the „Ja" pill (components/realization untouched).
+- Keeping ReżOp unrenamed breaks nothing: day 1 uses the built-in id `rezOp`. Renaming `asystent` to „Operator" means
+  Realizacja rows with the role text „Asystent/Operator" (Morris, CIONET TribesDay — amounts untouched) no longer match
+  a role by name: picking a person there uses their day rate, and a kit saved from such a day skips that row.
+- Gear revenue (`equipment-roi`) of a flagged quote excludes the margin on old gear fields (the margin is not gear).
+- No button converts an old stretched quote to the margin line (only Dräger has a margin ≠ 1.00); a copy does.
+
 ## 15. S5 as built
 
 *(2026-10-18, branch `claude/s5-raport-okresowy`, on top of `v3/project-hub` `1ee75f5`.)*
