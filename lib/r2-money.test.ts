@@ -260,6 +260,37 @@ test('D2: marża producencka firmy = suma projektów (po podatku); projekt spoza
   near(scoped.scoped!.producerMargin, a.producerMargin)
 })
 
+test('D2: moja praca leży w okresie kotwicy, jak koszty — późniejsza faktura jej nie przenosi', () => {
+  const p = {
+    ...project({ id: 'a', financials: fin(10_000, 2_000, { ownWork: 3_000 }), date: '2026-05-10' }),
+    client: 'A',
+  }
+  const events = [
+    { ...ev('invoice_sent', '2026-05-12', { amountNetto: 5_000 }), projectId: 'a' },
+    { ...ev('invoice_sent', '2026-07-01', { amountNetto: 5_000 }), projectId: 'a' },
+  ]
+  const input: MarginInput = {
+    ledger: moneyLedger([p], events, TODAY),
+    fixedCosts: [],
+    equipment: [],
+    spread: true,
+    settings: DEFAULT_GEAR_SPREAD,
+    today: TODAY,
+  }
+  const july = marginSummary(input, { kind: 'month', year: 2026, index: 7 })
+  near(july.totals.ownWork, 0)
+  near(july.totals.producerMargin, 5_000 - 425)
+  near(marginSummary(input, { kind: 'month', year: 2026, index: 5 }).totals.ownWork, 3_000)
+})
+
+test('plan z zapisanych finansów niesie źródło przychodu; suma PDF bez wierszy = 0', async () => {
+  const { planFromFinancials } = await import('./realization-plan')
+  const { pdfRowsTotal } = await import('./pdf-draft')
+  assert.equal(planFromFinancials(fin(1, 0, { revenueSource: 'pdf' })).revenueSource, 'pdf')
+  assert.equal(planFromFinancials(fin(1, 0)).revenueSource, null)
+  assert.equal(pdfRowsTotal(undefined as never), 0)
+})
+
 // ── Ekipa: odznaczone wiersze ────────────────────────────────────────────────
 
 test('Ekipa: odznaczony wiersz (tego nie było) nie liczy się w statystykach osoby', () => {

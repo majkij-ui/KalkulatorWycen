@@ -89,9 +89,8 @@ export function basePlanKey(key: string): string {
  */
 export function planKeyDay(key: string | undefined): string | 'quick' | null {
   if (!key) return null
-  const base = basePlanKey(key)
-  if (base.startsWith('pro:quick:')) return 'quick'
-  const match = base.match(/^pro:([^:]+):/)
+  // `pro:quick:…` daje tu „quick" — ekipa szybkiej wyceny, wszystkie dni.
+  const match = basePlanKey(key).match(/^pro:([^:]+):/)
   return match ? match[1] : null
 }
 

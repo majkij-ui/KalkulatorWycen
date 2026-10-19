@@ -83,6 +83,33 @@ test('szkic = plan: suma kosztów i mojej pracy jak w finansach, „× 2" to dwa
   assert.ok(draft.every((c) => c.id.startsWith('draft:')))
 })
 
+test('osoba z wyceny przy pozycji „× 2" (ilość podniesiona w planie) siedzi tylko w pierwszym wierszu', () => {
+  const kamil = { ...createQuoteCrewLine(OPERATOR, KAMIL), id: 'qc-k' }
+  const day = { ...createDefaultShootingDay(), id: 'd1', crew: [kamil] }
+  const snap = {
+    data: { isDetailedProdukcja: true, detailedShootingDays: [day], profitOverrides: { 'pro:d1:crew:qc-k': { quantity: 2 } } } as Partial<QuoteData>,
+    marginMultiplier: 1,
+  }
+  const rows = quotePlanRows(snap).rows.filter((r) => r.category === 'ekipa')
+  assert.deepEqual(rows.map((r) => [r.planKey, r.person, r.personId ?? null]), [
+    ['pro:d1:crew:qc-k', 'Kamil', 'cm-kamil'],
+    ['pro:d1:crew:qc-k#2', '', null],
+  ])
+})
+
+test('tryb: same usunięte wiersze = szkic (Finanse liczą wtedy plan)', () => {
+  assert.equal(realizationMode({ costs: [{ id: 'x', category: 'inne', unitCost: 5, deletedAt: '2026-10-01' }], costsFromQuoteAt: '2026-10-01' }), 'draft')
+})
+
+test('zmiana wyceny przy odznaczonej mojej pracy: moja praca się nie zmienia', () => {
+  const costs = started().map((c) => (c.planKey === 'pro:d1:crew:qc-me' ? { ...c, skipped: true as const } : c))
+  const snap = snapshot()
+  const me = (snap.data.detailedShootingDays as { crew: { id: string; costRate: number }[] }[])[0].crew.find((l) => l.id === 'qc-me')!
+  me.costRate = 1800
+  const diff = quoteChanges(costs, quotePlanRows(snap).rows, ['day-a', 'day-b'])
+  assert.deepEqual([diff.changed, diff.ownDelta], [1, 1800])
+})
+
 test('układ: „Koszty projektu" na górze, dni — ekipa i wypożyczalnia; dzień wyceny bez dnia Realizacji osobno', () => {
   const { rows, quoteDayIds } = quotePlanRows(snapshot())
   const draft = draftCosts(rows, ['day-a'])
