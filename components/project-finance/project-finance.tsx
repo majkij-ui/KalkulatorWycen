@@ -29,6 +29,11 @@ function signedPln(value: number): string {
   return `${rounded > 0 ? '+' : rounded < 0 ? '−' : '±'}${pln(Math.abs(rounded))}`
 }
 
+/** Odliczenie w rozliczeniu: „−1 234 zł", a zero bez znaku. */
+function minus(amount: number): string {
+  return Math.abs(amount) < 0.5 ? pln(0) : `−${pln(amount)}`
+}
+
 function eur(amount: number): string {
   return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} €`
 }
@@ -130,7 +135,7 @@ export function ProjectFinance({ project }: { project: Project }) {
     money.costsBasis === 'actual'
       ? 'z Realizacji'
       : money.costsNote === 'partial'
-        ? `z planu (w Realizacji ${pln((money.actualCosts ?? 0) + (money.actualOwnWork ?? 0))} z ${pln(plan.costs + plan.ownWork)})`
+        ? `z planu — w Realizacji ${pln((money.actualCosts ?? 0) + (money.actualOwnWork ?? 0))} z ${pln(plan.costs + plan.ownWork)}`
         : money.costsBasis === 'plan'
           ? 'z planu'
           : 'brak kosztów'
@@ -251,6 +256,11 @@ export function ProjectFinance({ project }: { project: Project }) {
             ))}
           </ul>
         )}
+        {money.invoicesWithoutAmount > 0 && money.invoiced === null && (
+          <p className="mt-3 text-xs text-zinc-400">
+            Faktura bez kwoty — dopóki jej nie uzupełnisz, liczy się kwota przelewu.
+          </p>
+        )}
         {money.invoiced !== null && (
           <p className="mt-3 text-xs text-zinc-400">
             Faktury: {pln(money.invoiced)}
@@ -282,7 +292,7 @@ export function ProjectFinance({ project }: { project: Project }) {
 
       <section aria-label="Rozliczenie" className="rounded-xl border border-white/5 bg-zinc-900/20 px-4 py-3 text-sm">
         <Row label={<>Przychód <span className="text-xs text-zinc-500">({revenueSourceText(view)})</span></>} value={revenue === null ? '—' : pln(revenue)} />
-        <Row label="" value={revenue === null ? '' : `−${pln(money.tax)}`}>
+        <Row label="" value={revenue === null ? '' : minus(money.tax)}>
           <span className="inline-flex items-center gap-1.5">
             Ryczałt
             {view.hasQuote ? (
@@ -292,9 +302,9 @@ export function ProjectFinance({ project }: { project: Project }) {
             )}
           </span>
         </Row>
-        <Row label={<>Koszty zewnętrzne <span className="text-xs text-zinc-500">({costsText})</span></>} value={money.costs === null ? '—' : `−${pln(money.costs)}`} />
+        <Row label={<>Koszty zewnętrzne <span className="text-xs text-zinc-500">({costsText})</span></>} value={money.costs === null ? '—' : minus(money.costs)} />
         <Row label="Zysk netto (marża)" value={money.profit === null ? '—' : pln(money.profit)} strong />
-        <Row label="Moja praca (po koszcie z wyceny / Realizacji)" value={`−${pln(money.ownWork)}`} muted />
+        <Row label="Moja praca (po koszcie z wyceny / Realizacji)" value={minus(money.ownWork)} muted />
         <Row label="Marża producencka" value={money.producerMargin === null ? '—' : pln(money.producerMargin)} strong />
         {!counts && <p className="pt-2 text-[11px] text-zinc-500">{statusNote}</p>}
       </section>

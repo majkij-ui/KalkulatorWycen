@@ -296,12 +296,17 @@ export interface QuoteChanges {
   removed: number
   /** Koszty (zewnętrzne, zaznaczone) po uwzględnieniu − teraz. */
   delta: number
+  /** Moja praca po uwzględnieniu − teraz. */
+  ownDelta: number
   /** Podpis listy — „Ukryj" trzyma go, dopóki wycena znowu się nie zmieni. */
   signature: string
 }
 
 const external = (cost: Pick<ProjectCost, 'skipped' | 'ownWork' | 'quantity' | 'unitCost'>) =>
   cost.skipped || isOwnWork(cost) ? 0 : costAmount(cost)
+
+const own = (cost: Pick<ProjectCost, 'skipped' | 'ownWork' | 'quantity' | 'unitCost'>) =>
+  !cost.skipped && isOwnWork(cost) ? costAmount(cost) : 0
 
 const FIELDS = ['category', 'label', 'person', 'personId', 'role', 'quantity', 'unitCost', 'skipped', 'ownWork'] as const
 
@@ -340,6 +345,11 @@ export function quoteChanges(costs: ProjectCost[], rows: PlanRow[], shootDayIds:
     changed: count('changed'),
     removed: count('removed'),
     delta: changes.reduce((sum, c) => sum + c.delta, 0),
+    ownDelta: changes.reduce((sum, c) => {
+      const after = c.type === 'removed' || !c.row ? 0 : own(rowToCost(c.row, shootDayIds))
+      const before = c.cost ? own(c.cost) : 0
+      return sum + after - before
+    }, 0),
     signature: changes
       .map((c) => `${c.type}:${c.planKey}:${c.row ? `${c.row.quantity}x${c.row.unitCost}${c.row.skipped ? 's' : ''}${c.row.ownWork ? 'o' : ''}` : ''}`)
       .sort()

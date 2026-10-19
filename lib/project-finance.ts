@@ -124,7 +124,7 @@ export function revenueSourceText(view: Pick<ProjectFinanceView, 'money' | 'appr
   if (view.transfer?.typed !== null && view.transfer?.typed !== undefined) return 'kwota przelewu wpisana ręcznie'
   const extras = money.extrasTotal > 0 ? ' + dosprzedaż' : ''
   if (view.approved?.source === 'pdf') return `z PDF${extras}`
-  if (view.approved?.source === 'calculator') return `z kalkulatora (bez szkicu PDF)${extras}`
+  if (view.approved?.source === 'calculator') return `z kalkulatora, bez szkicu PDF${extras}`
   if (view.imported !== null) return `z importu${extras}`
   return 'plan'
 }

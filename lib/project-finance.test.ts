@@ -66,7 +66,7 @@ test('C1: wpisana kwota równa cenie (Morris 12 020) — bez różnicy; niższa 
 test('C1: bez szkicu PDF — kalkulator; EUR — € × kurs wyceny', () => {
   const calc = projectFinanceView(project(), live(), [], TODAY)
   assert.deepEqual([calc.approved!.source, calc.approved!.pln], ['calculator', 2700])
-  assert.equal(revenueSourceText(calc), 'z kalkulatora (bez szkicu PDF)')
+  assert.equal(revenueSourceText(calc), 'z kalkulatora, bez szkicu PDF')
   const eur = projectFinanceView(project(), live({ currency: 'EUR', exchangeRate: 4.3661 }, pdf({ ekipa: 1460 }, { currency: 'EUR' }), []), [], TODAY)
   assert.deepEqual([eur.approved!.currency, eur.approved!.amount, eur.approved!.rate], ['EUR', 1460, 4.3661])
   assert.equal(eur.money.revenue, 1460 * 4.3661)

@@ -88,13 +88,13 @@ function TickBox({ mechanics, label }: { mechanics: LineMechanics; label: string
 
 /** „Zewnętrzny | Moja praca" — przy odznaczonym wierszu nie ma czego rozróżniać. */
 export function WorkPill({ mechanics }: { mechanics: LineMechanics }) {
-  if (!mechanics.counted) return <span className="hidden w-[148px] shrink-0 sm:block" aria-hidden />
+  if (!mechanics.counted) return <span className="hidden w-[168px] shrink-0 sm:block" aria-hidden />
   const option = (own: boolean, text: string) => (
     <button
       type="button"
       aria-pressed={mechanics.own === own}
       onClick={() => mechanics.own !== own && mechanics.onWork(own)}
-      className={`px-1.5 py-0.5 text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-white/60 ${
+      className={`flex-1 whitespace-nowrap px-1.5 py-1 text-center text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-white/60 ${
         mechanics.own === own ? (own ? 'bg-sky-500/20 text-sky-200' : 'bg-white/10 text-zinc-100') : 'text-zinc-500 hover:text-zinc-200'
       }`}
     >
@@ -102,7 +102,7 @@ export function WorkPill({ mechanics }: { mechanics: LineMechanics }) {
     </button>
   )
   return (
-    <span className="inline-flex w-[148px] shrink-0 overflow-hidden rounded-md border border-white/10" role="group" aria-label="Kto płaci">
+    <span className="inline-flex w-[168px] shrink-0 overflow-hidden rounded-md border border-white/10" role="group" aria-label="Kto płaci">
       {option(false, 'Zewnętrzny')}
       {option(true, 'Moja praca')}
     </span>

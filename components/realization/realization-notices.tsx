@@ -79,8 +79,9 @@ export function QuoteChangesBanner({
     <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-300" role="status">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="min-w-0 flex-1">
-          Wycena zmieniła się od startu Realizacji: {parts.join(' / ')}, koszty {signedPln(changes.delta)}. Wpisanych ręcznie
-          wierszy to nie rusza.
+          Wycena zmieniła się od startu Realizacji: {parts.join(' / ')}, koszty {signedPln(changes.delta)}
+          {Math.abs(changes.ownDelta) >= 0.5 && `, moja praca ${signedPln(changes.ownDelta)}`}. Wpisanych ręcznie wierszy to nie
+          rusza.
         </span>
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className={quietButton}>
           {open ? 'Zwiń' : 'Pokaż'}

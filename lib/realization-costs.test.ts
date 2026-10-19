@@ -186,6 +186,17 @@ test('nowa pozycja w wycenie → „dodana" w swoim dniu; usunięty ręcznie wie
   assert.equal(after.find((c) => c.planKey === 'pro:d2:crew:qc-new')!.dayId, 'day-b')
 })
 
+test('nowy dzień „ReżOp · Ja" w wycenie: koszty bez zmian, moja praca +1 500 zł', () => {
+  const costs = started()
+  const snap = snapshot()
+  ;(snap.data.detailedShootingDays as { crew: unknown[] }[])[1].crew.push({ ...createQuoteCrewLine(ROLE, ME), id: 'qc-me2' })
+  const diff = quoteChanges(costs, quotePlanRows(snap).rows, ['day-a', 'day-b'])
+  assert.deepEqual([diff.added, diff.delta, diff.ownDelta], [1, 0, 1500])
+  const dropped = snapshot()
+  ;(dropped.data.detailedShootingDays as { crew: { id: string }[] }[])[0].crew = (dropped.data.detailedShootingDays as { crew: { id: string }[] }[])[0].crew.filter((l) => l.id !== 'qc-me')
+  assert.equal(quoteChanges(costs, quotePlanRows(dropped).rows, ['day-a', 'day-b']).ownDelta, -1500)
+})
+
 test('„Ukryj" trzyma podpis listy: ten sam przy tej samej wycenie, inny po kolejnej zmianie', () => {
   const costs = started()
   const a = snapshot({ crudeEditCount: 3 })

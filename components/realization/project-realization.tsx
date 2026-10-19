@@ -626,6 +626,46 @@ function RealizationView({ project }: { project: Project }) {
     </Sheet>
   )
 
+  const renderGroup = (group: (typeof layout.unassigned)[number]) => (
+      <article
+        key={String(group.quoteDay)}
+        className="rounded-xl border border-dashed border-white/10 bg-zinc-900/30 p-4"
+        aria-label={group.quoteDay === null ? 'Ekipa z szybkiej wyceny' : `Dzień ${group.quoteDay + 1} z wyceny`}
+      >
+        <header className="mb-2 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-white">
+              {group.quoteDay === null ? 'Ekipa z szybkiej wyceny — wszystkie dni' : `Dzień ${group.quoteDay + 1} z wyceny`}
+            </h4>
+            <p className="text-[11px] text-zinc-500">
+              {group.quoteDay === null
+                ? 'Szybka wycena nie dzieli ekipy na dni. Rozpisz ją na dni, jeśli chcesz (i odznacz tę pozycję).'
+                : 'W Realizacji nie ma takiego dnia zdjęciowego — koszty liczą się do projektu.'}
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            {days.length > 0 && (
+              <select
+                value=""
+                aria-label="Przenieś do dnia"
+                onChange={(e) => e.target.value && moveToDay(group.costs, e.target.value)}
+                className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-300"
+              >
+                <option value="">Przenieś do dnia…</option>
+                {days.map((d, i) => (
+                  <option key={d.id} value={d.id}>
+                    {labelOf(d, i)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <TotalsText lines={group.costs} label="Koszty" />
+          </div>
+        </header>
+        <DayLines lines={group.costs} handlers={handlers} />
+      </article>
+  )
+
   if (plannerDay) {
     return (
       <>
@@ -792,45 +832,7 @@ function RealizationView({ project }: { project: Project }) {
             <span className="text-zinc-600">— kliknij, żeby dodać do bazy</span>
           </div>
         )}
-        {layout.unassigned.map((group) => (
-          <article
-            key={String(group.quoteDay)}
-            className="rounded-xl border border-dashed border-white/10 bg-zinc-900/30 p-4"
-            aria-label={group.quoteDay === null ? 'Ekipa z szybkiej wyceny' : `Dzień ${group.quoteDay + 1} z wyceny`}
-          >
-            <header className="mb-2 flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-semibold text-white">
-                  {group.quoteDay === null ? 'Ekipa z szybkiej wyceny — wszystkie dni' : `Dzień ${group.quoteDay + 1} z wyceny`}
-                </h4>
-                <p className="text-[11px] text-zinc-500">
-                  {group.quoteDay === null
-                    ? 'Szybka wycena nie dzieli ekipy na dni. Rozpisz ją na dni, jeśli chcesz (i odznacz tę pozycję).'
-                    : 'W Realizacji nie ma takiego dnia zdjęciowego — koszty liczą się do projektu.'}
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                {days.length > 0 && (
-                  <select
-                    value=""
-                    aria-label="Przenieś do dnia"
-                    onChange={(e) => e.target.value && moveToDay(group.costs, e.target.value)}
-                    className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-300"
-                  >
-                    <option value="">Przenieś do dnia…</option>
-                    {days.map((d, i) => (
-                      <option key={d.id} value={d.id}>
-                        {labelOf(d, i)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <TotalsText lines={group.costs} label="Koszty" />
-              </div>
-            </header>
-            <DayLines lines={group.costs} handlers={handlers} />
-          </article>
-        ))}
+        {layout.unassigned.filter((g) => g.quoteDay === null).map(renderGroup)}
         <DayCards
           days={days}
           info={info}
@@ -847,6 +849,8 @@ function RealizationView({ project }: { project: Project }) {
           callSheetsReady={!callSheets.isLoading}
           onOpenCallSheet={openCallSheet}
         />
+        {/* Dni wyceny bez odpowiednika w Realizacji — po dniach. */}
+        {layout.unassigned.filter((g) => g.quoteDay !== null).map(renderGroup)}
       </section>
 
       <GearGrid
