@@ -547,6 +547,11 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
       text: 'W1 − ryczałt − ZUS − subskrypcje i koszty stałe − sprzęt − marketing. Dla okresu zawsze; per projekt i per klient tylko w raporcie rocznym (koszty firmy dzielone wg udziału w przychodzie roku).',
     },
     {
+      key: 'producerMargin',
+      label: 'Marża producencka',
+      text: 'W1 − ryczałt − wartość mojej pracy (pozycje „Moja praca" w Realizacji, a bez Realizacji pozycje „Ja" z wyceny, po ich koszcie). Czy zlecenie zarabia, gdybym tylko produkował, a na plan wysłał kogoś innego. Suma po projektach; wynikiem firmy zostaje W2.',
+    },
+    {
       key: 'gearView',
       label: 'Widok sprzętu',
       text: `${view.gearLabel} — ${view.description}. Przełącznik „Rozłóż duże zakupy sprzętu" zmienia koszty firmy i W2; W1 się nie zmienia.`,
@@ -649,7 +654,8 @@ function reportProject(
     share: row.share === null ? null : r2(row.share * 10000) / 10000,
     overhead: r2n(row.overhead),
     result: r2n(row.result),
-    extra: {},
+    // R2: marża producencka (po podatku, minus moja praca); `null` = „brak kwoty".
+    extra: { producerMargin: row.known ? r2(row.producerMargin) : null },
   }
 }
 
@@ -969,7 +975,7 @@ function buildClients(
       marginPct: r2n(pctOf(scoped.margin, scoped.revenue)),
       overhead: r2n(scoped.overhead),
       result: r2n(scoped.result),
-      extra: {},
+      extra: { producerMargin: r2(scoped.producerMargin) },
     }
   })
   return clients.sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name, 'pl'))
@@ -1046,6 +1052,10 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     metricRow('margin', 'Marża na realizacji (W1)', 'layer1', current.totals.margin, before((s) => s.totals.margin), {
       emphasis: true,
       pctOfRevenue: pctOf(current.totals.margin, revenue),
+    }),
+    // R2: suma marż producenckich projektów — po podatku i po wartości mojej pracy.
+    metricRow('producerMargin', 'Marża producencka', 'layer1', current.totals.producerMargin, before((s) => s.totals.producerMargin), {
+      pctOfRevenue: pctOf(current.totals.producerMargin, revenue),
     }),
     metricRow('tax', 'Podatek (ryczałt)', 'costs', current.company.tax, before((s) => s.company.tax)),
     metricRow('zus', 'ZUS', 'costs', current.company.zus, before((s) => s.company.zus)),

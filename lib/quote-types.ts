@@ -104,6 +104,11 @@ export interface QuoteCrewLine {
   clientEdited?: boolean
   /** R1: „Koszt" wpisany ręcznie — „zaktualizuj stawki" go nie rusza. */
   costEdited?: boolean
+  /**
+   * R2: osoba to „Ja" (`CrewMember.self`) — moja praca, nie koszt planu. Ustawia
+   * się przy wyborze osoby; inna osoba albo brak osoby go zdejmuje.
+   */
+  ownWork?: true
 }
 
 /**

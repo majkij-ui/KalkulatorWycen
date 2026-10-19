@@ -15,7 +15,7 @@
  * całość) liczy się do projektów i wypłat, ale nie do dni ani średniej stawki.
  */
 
-import { costAmount, isCrew, liveCosts, personKey } from './project-costs'
+import { costAmount, countedCosts, isCrew, liveCosts, personKey } from './project-costs'
 import { crewMemberById, crewMemberByName, liveCrewMembers, type CrewMember } from './crew-types'
 import { countsTowardRevenue, toDateKey, type Project, type ProjectCost } from './project-types'
 import { gearDaysWithCalendarDates } from './realization-days'
@@ -106,7 +106,7 @@ export function computeCrewStats<P extends StatsProject>(
 
   projects.forEach((project) => {
     if (project.deletedAt || !countsTowardRevenue(project.status)) return
-    const crew = liveCosts(project.costs).filter(isCrew)
+    const crew = countedCosts(project.costs).filter(isCrew)
     if (crew.length === 0) return
     const dayDates = new Map(gearDaysWithCalendarDates(project, options.events ?? []).map((d) => [d.id, d.date]))
 

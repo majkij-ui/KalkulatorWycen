@@ -86,8 +86,9 @@ export function PersonPicker({
     setActive(-1)
   }, [query])
 
+  // R2 (D1): wiersz osoby „Ja" to domyślnie „Moja praca"; inna osoba — koszt zewnętrzny.
   const pickMember = (member: CrewMember) => {
-    onChange(costRowPersonPatch(cost, member, roles))
+    onChange({ ...costRowPersonPatch(cost, member, roles), ownWork: member.self ? true : undefined })
   }
 
   const choose = async (option: Option) => {
@@ -100,6 +101,7 @@ export function PersonPicker({
       const s = option.suggestion
       onChange({
         personId: undefined,
+        ownWork: undefined,
         person: s.person,
         ...(!cost.role?.trim() && s.role ? { role: s.role } : {}),
         ...(!cost.unitCost && s.unitCost ? { unitCost: s.unitCost } : {}),
@@ -113,7 +115,7 @@ export function PersonPicker({
         roleIds: role ? [role.id] : [],
         rate: cost.unitCost > 0 ? cost.unitCost : undefined,
       })
-      if (member) onChange({ personId: member.id, person: member.name })
+      if (member) onChange({ personId: member.id, person: member.name, ownWork: undefined })
     } finally {
       setBusy(false)
     }
@@ -139,7 +141,7 @@ export function PersonPicker({
           const person = e.target.value
           // Inne imię niż powiązanej osoby = inna osoba: powiązanie znika.
           const keepLink = linked && personKey(person) === personKey(linked.name)
-          onChange({ person, ...(keepLink ? {} : { personId: undefined }) })
+          onChange({ person, ...(keepLink ? {} : { personId: undefined, ...(linked?.self ? { ownWork: undefined } : {}) }) })
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
@@ -163,9 +165,14 @@ export function PersonPicker({
           }
         }}
         className={`h-8 w-full min-w-0 rounded-md border border-white/10 bg-black/40 pl-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/30 ${
-          linked ? 'pr-7' : 'pr-2'
+          linked?.self ? 'pr-14' : linked ? 'pr-7' : 'pr-2'
         }`}
       />
+      {linked?.self && (
+        <span className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2">
+          <SelfPill />
+        </span>
+      )}
       {linked && (
         <UserCheck
           className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-emerald-400/80"
@@ -217,6 +224,7 @@ export function PersonPicker({
                     <>
                       <span className="min-w-0 truncate">
                         {option.member.name}
+                        {option.member.self && <SelfPill />}
                         {option.member.id === linked?.id && <span className="ml-1.5 text-[11px] text-emerald-400">wybrana</span>}
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
@@ -247,5 +255,14 @@ export function PersonPicker({
         </ul>
       )}
     </div>
+  )
+}
+
+/** „Ja" przy karcie `CrewMember.self` (R1) — ten sam znaczek co w Ekipie. */
+function SelfPill() {
+  return (
+    <span className="ml-1.5 rounded bg-primary/20 px-1 py-px text-[10px] font-bold text-primary" title="To Ty — karta Ja w Ekipie">
+      Ja
+    </span>
   )
 }

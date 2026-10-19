@@ -67,7 +67,7 @@ export function crewClientRate(
   return Math.max(0, safeNum(fallbackClientRate, 0))
 }
 
-type PersonLine = Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates'>
+type PersonLine = Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates'> & Partial<Pick<CrewMember, 'self'>>
 
 /** Nowa pozycja: nazwy i stawki z roli i osoby TERAZ (zamrożone). Z osobą obie kwoty z jej stawki (A3). */
 export function createQuoteCrewLine(
@@ -88,6 +88,8 @@ export function createQuoteCrewLine(
     line.personId = person.id
     line.personName = person.name
     line.clientFromPerson = true
+    // R2 (D1): pozycja „Ja" to moja praca, nie koszt planu.
+    if (person.self) line.ownWork = true
   }
   return line
 }
@@ -95,7 +97,7 @@ export function createQuoteCrewLine(
 /** Pozycja bez osoby i bez znaczników kwot (do przepisania od nowa). */
 function stripped(line: QuoteCrewLine): QuoteCrewLine {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { personId, personName, clientFromPerson, clientEdited, costEdited, ...rest } = line
+  const { personId, personName, clientFromPerson, clientEdited, costEdited, ownWork, ...rest } = line
   return rest
 }
 
@@ -124,6 +126,7 @@ export function withCrewPerson(
     costRate: crewCostRate(role, person, line.clientRate, line.roleId),
     qty: 1,
     clientFromPerson: true,
+    ...(person.self ? { ownWork: true as const } : {}),
   }
 }
 
@@ -275,7 +278,7 @@ export function hasLegacyCrew(
 
 // ── Aktualność stawek ────────────────────────────────────────────────────────
 
-type PersonLike = Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates' | 'deletedAt'>
+type PersonLike = Pick<CrewMember, 'id' | 'name' | 'rate' | 'roleRates' | 'deletedAt'> & Partial<Pick<CrewMember, 'self'>>
 
 /**
  * Kwoty pozycji z bazy TERAZ. „Klient": pozycja R1 z żywą osobą — stawka
@@ -312,7 +315,12 @@ function refreshedLine(line: QuoteCrewLine, roles: Map<string, RoleLike>, people
     next.roleName = role.name
     next.group = role.group
   }
-  if (livePerson) next.personName = livePerson.name
+  if (livePerson) {
+    next.personName = livePerson.name
+    // R2: „Moja praca" idzie za kartą „Ja" (pozycja sprzed R2 dostaje znacznik przy „zaktualizuj").
+    if (livePerson.self) next.ownWork = true
+    else delete next.ownWork
+  }
   const base = baseRates(line, role ?? null, livePerson ?? null)
   if (!line.clientEdited) next.clientRate = base.clientRate
   if (!line.costEdited) next.costRate = base.costRate
@@ -325,7 +333,8 @@ function sameLine(a: QuoteCrewLine, b: QuoteCrewLine): boolean {
     a.group === b.group &&
     a.clientRate === b.clientRate &&
     a.costRate === b.costRate &&
-    a.personName === b.personName
+    a.personName === b.personName &&
+    !!a.ownWork === !!b.ownWork
   )
 }
 
@@ -488,6 +497,7 @@ export function kitCrewDayCosts(
         role: role.name,
         person: person?.name ?? '',
         ...(person ? { personId: person.id } : {}),
+        ...(person?.self ? { ownWork: true as const } : {}),
         quantity: 1,
         unitCost: crewCostRate(role, person),
         dayId,

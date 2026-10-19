@@ -62,6 +62,53 @@ export function AmountInput({
   )
 }
 
+/**
+ * R2 (B3, D1): zaznaczenie „było" (odznaczone = tego nie było, nie liczy się
+ * nigdzie) i „Zewnętrzny | Moja praca" na każdym liczonym wierszu.
+ */
+export interface LineMechanics {
+  counted: boolean
+  own: boolean
+  onTick: (counted: boolean) => void
+  onWork: (own: boolean) => void
+}
+
+function TickBox({ mechanics, label }: { mechanics: LineMechanics; label: string }) {
+  return (
+    <input
+      type="checkbox"
+      checked={mechanics.counted}
+      onChange={(e) => mechanics.onTick(e.target.checked)}
+      aria-label={`Było: ${label}`}
+      title={mechanics.counted ? 'Odznacz, jeśli tego nie było' : 'Zaznacz, jeśli to było'}
+      className="size-4 shrink-0 accent-primary"
+    />
+  )
+}
+
+/** „Zewnętrzny | Moja praca" — przy odznaczonym wierszu nie ma czego rozróżniać. */
+export function WorkPill({ mechanics }: { mechanics: LineMechanics }) {
+  if (!mechanics.counted) return <span className="hidden w-[168px] shrink-0 sm:block" aria-hidden />
+  const option = (own: boolean, text: string) => (
+    <button
+      type="button"
+      aria-pressed={mechanics.own === own}
+      onClick={() => mechanics.own !== own && mechanics.onWork(own)}
+      className={`flex-1 whitespace-nowrap px-1.5 py-1 text-center text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-white/60 ${
+        mechanics.own === own ? (own ? 'bg-sky-500/20 text-sky-200' : 'bg-white/10 text-zinc-100') : 'text-zinc-500 hover:text-zinc-200'
+      }`}
+    >
+      {text}
+    </button>
+  )
+  return (
+    <span className="inline-flex w-[168px] shrink-0 overflow-hidden rounded-md border border-white/10" role="group" aria-label="Kto płaci">
+      {option(false, 'Zewnętrzny')}
+      {option(true, 'Moja praca')}
+    </span>
+  )
+}
+
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -87,8 +134,11 @@ export function CrewRow({
   roleListId,
   onChange,
   onRemove,
+  mechanics,
 }: {
   cost: ProjectCost
+  /** R2: zaznaczenie i „Moja praca"; brak = wiersz jak dotąd. */
+  mechanics?: LineMechanics
   /** Imiona z innych projektów spoza bazy — trzecia sekcja listy wyboru. */
   outsiders: CrewSuggestion[]
   /** `datalist` z nazwami ról. */
@@ -102,20 +152,22 @@ export function CrewRow({
   const member = crewMemberById(allPeople, cost.personId)
   const { own, others } = rolesForPerson(member, roles)
   const personal = own.length > 0
+  const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
-      <PersonPicker cost={cost} outsiders={outsiders} onChange={onChange} className="w-full sm:w-auto sm:flex-[3]" />
+      {mechanics && <TickBox mechanics={mechanics} label={cost.person?.trim() || cost.role?.trim() || 'osoba'} />}
+      <PersonPicker cost={cost} outsiders={outsiders} onChange={onChange} className={`min-w-0 flex-1 sm:w-auto sm:flex-[3] ${dim}`} />
       <input
         value={cost.role ?? ''}
         list={personal ? ownListId : roleListId}
         placeholder="Rola"
         aria-label="Rola"
         onChange={(e) => onChange(costRowRolePatch(cost, e.target.value, member, roles))}
-        className={`${fieldClass} flex-[2]`}
+        className={`${fieldClass} flex-[2] ${dim}`}
       />
       {personal && <CrewRoleDatalist id={ownListId} names={[...own, ...others].map((r) => r.name)} />}
       {quantity !== 1 && (
-        <span className="shrink-0 text-xs tabular-nums text-zinc-500" title="Liczba dni z importu">
+        <span className="shrink-0 text-xs tabular-nums text-zinc-500" title="Ilość (dni, osoby)">
           {String(quantity).replace('.', ',')} ×
         </span>
       )}
@@ -123,9 +175,10 @@ export function CrewRow({
         value={cost.unitCost}
         onChange={(unitCost) => onChange({ unitCost })}
         label="Stawka za dzień (zł netto)"
-        className="w-24 shrink-0"
+        className={`w-24 shrink-0 ${dim}`}
       />
       <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+      {mechanics && <WorkPill mechanics={mechanics} />}
       <RemoveButton label="Usuń osobę" onClick={onRemove} />
     </div>
   )
@@ -143,8 +196,11 @@ export function CostRow({
   withCrewCategory,
   onChange,
   onRemove,
+  mechanics,
 }: {
   cost: ProjectCost
+  /** R2: zaznaczenie i „Moja praca"; brak = wiersz jak dotąd. */
+  mechanics?: LineMechanics
   /** Koszty całego projektu mogą być też „ekipą" (np. montażysta na cały projekt). */
   withCrewCategory: boolean
   onChange: (patch: Partial<ProjectCost>) => void
@@ -152,14 +208,16 @@ export function CostRow({
 }) {
   const id = useId()
   const quantity = cost.quantity ?? 1
+  const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
+      {mechanics && <TickBox mechanics={mechanics} label={cost.label?.trim() || costCategoryLabel(cost.category)} />}
       <select
         id={`${id}-category`}
         value={cost.category}
         aria-label="Kategoria kosztu"
         onChange={(e) => onChange({ category: e.target.value })}
-        className={`${fieldClass} w-full sm:w-44 sm:flex-none`}
+        className={`${fieldClass} min-w-0 flex-1 sm:w-44 sm:flex-none ${dim}`}
       >
         {categoryOptions(cost.category, withCrewCategory).map((c) => (
           <option key={c} value={c}>
@@ -172,7 +230,7 @@ export function CostRow({
         placeholder={cost.category === 'ekipa' ? 'Osoba' : 'Opis (np. wynajem studia)'}
         aria-label="Opis kosztu"
         onChange={(e) => onChange(cost.category === 'ekipa' ? { person: e.target.value } : { label: e.target.value })}
-        className={`${fieldClass} flex-1`}
+        className={`${fieldClass} w-full flex-1 sm:w-auto ${dim}`}
       />
       {quantity !== 1 && (
         <span className="shrink-0 text-xs tabular-nums text-zinc-500" title={`Razem ${pln(costAmount(cost))}`}>
@@ -183,9 +241,10 @@ export function CostRow({
         value={cost.unitCost}
         onChange={(unitCost) => onChange({ unitCost })}
         label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota (zł netto)'}
-        className="w-24 shrink-0"
+        className={`w-24 shrink-0 ${dim}`}
       />
       <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+      {mechanics && <WorkPill mechanics={mechanics} />}
       <RemoveButton label="Usuń koszt" onClick={onRemove} />
     </div>
   )

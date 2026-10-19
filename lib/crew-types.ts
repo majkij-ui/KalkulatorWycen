@@ -221,7 +221,17 @@ export function activeCrewRoles(roles: CrewRole[]): CrewRole[] {
 export function crewRoleByName(roles: CrewRole[], name: string | undefined): CrewRole | null {
   const key = personKey(name)
   if (!key) return null
-  return roles.find((r) => personKey(r.name) === key) ?? null
+  const byName = roles.find((r) => personKey(r.name) === key)
+  if (byName) return byName
+  // R2: dawna nazwa wbudowanej roli zostaje w starych wierszach Realizacji
+  // („Asystent/Operator" → dziś „Operator", id `asystent`; Morris, CIONET, JHJ).
+  const legacyId = LEGACY_ROLE_NAMES[key]
+  return legacyId ? (roles.find((r) => r.id === legacyId) ?? null) : null
+}
+
+/** Dawne nazwy wbudowanych ról (klucz `personKey`) → id roli. */
+const LEGACY_ROLE_NAMES: Record<string, string> = {
+  'asystent/operator': 'asystent',
 }
 
 /** Nowa rola na końcu swojej grupy. */

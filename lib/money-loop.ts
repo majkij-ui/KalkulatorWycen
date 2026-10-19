@@ -36,7 +36,7 @@ import { eventData } from './event-kinds'
 import { isEventDate } from './event-types'
 import { isInPeriod, summarizeFixedCosts, type FixedCostBreakdown, type Period } from './finance-calc'
 import { paymentState, type PaymentEvent } from './payments'
-import { liveCosts, totalActualCosts } from './project-costs'
+import { liveCosts, totalActualCosts, totalOwnWork } from './project-costs'
 import { countsTowardRevenue, type FixedCost, type Project } from './project-types'
 import { DEFAULT_TAX_RATE, planFromFinancials, type PlanFigures } from './realization-plan'
 import { threadStats, type InvoiceStats, type UnpairedPayment } from './thread-stats'
@@ -49,7 +49,20 @@ const EPSILON = 0.005
 
 export type MoneyEvent = PaymentEvent
 
-export type MoneyProject = Pick<Project, 'id' | 'status' | 'date' | 'financials' | 'costs'>
+export type MoneyProject = Pick<Project, 'id' | 'status' | 'date' | 'financials' | 'costs'> & Partial<Pick<Project, 'quote'>>
+
+/**
+ * Czy przychód planu to kwota przelewu wpisana ręcznie (R2: cały przelew, już
+ * z dosprzedażą). Finanse zapisane przed R2 nie mają `revenueSource` — wtedy
+ * mówi o tym wycena (`profitTransferAmount`), żeby reguła nie czekała na zapis.
+ */
+export function isTypedTransfer(project: Pick<MoneyProject, 'financials' | 'quote'>): boolean {
+  const source = project.financials?.revenueSource
+  if (source) return source === 'transfer'
+  const data = project.quote && typeof project.quote === 'object' ? (project.quote as { data?: unknown }).data : null
+  const typed = data && typeof data === 'object' ? (data as { profitTransferAmount?: unknown }).profitTransferAmount : null
+  return typeof typed === 'number' && Number.isFinite(typed)
+}
 
 export interface ExtraSale {
   day: string
@@ -108,17 +121,31 @@ export interface ProjectMoney {
   revenue: number | null
   revenueBasis: 'invoices' | 'plan' | 'none'
   revenueNote: RevenueNote
-  /** Koszty z Realizacji; `null` = brak kosztów. */
+  /** Koszty z Realizacji (zewnętrzne, zaznaczone); `null` = brak kosztów. */
   actualCosts: number | null
+  /** R2: moja praca z Realizacji; `null` = brak wpisów. */
+  actualOwnWork: number | null
   costCount: number
-  /** Najlepsza wiedza o kosztach; `null` = ani planu, ani wpisów. */
+  /** Najlepsza wiedza o kosztach (zewnętrznych); `null` = ani planu, ani wpisów. */
   costs: number | null
   costsBasis: 'actual' | 'plan' | 'none'
   costsNote: CostsNote
+  /**
+   * R2: wartość mojej pracy wg tej samej podstawy co koszty (Realizacja albo
+   * plan). Nie jest kosztem; 0 = nic nie oznaczono jako „Moja praca".
+   */
+  ownWork: number
   taxRatePercent: number
   tax: number
-  /** `null`, gdy przychód nieznany. Po podatku (ryczałt projektu). */
+  /** `null`, gdy przychód nieznany. Po podatku (ryczałt projektu). = „Marża" projektu (C4). */
   profit: number | null
+  /**
+   * R2 (C4): marża producencka = zysk netto − wartość mojej pracy („gdybym tylko
+   * produkował, a na plan wysłał kogoś innego"). Po podatku. `null`, gdy przychód nieznany.
+   */
+  producerMargin: number | null
+  /** Marża producencka jako % przychodu; `null` bez przychodu. */
+  producerMarginPct: number | null
   /**
    * Marża na realizacji (S4, warstwa 1): przychód − koszty bezpośrednie, PRZED
    * podatkiem. `null`, gdy przychód nieznany. Brak kosztów liczy się jako 0,
@@ -188,7 +215,10 @@ export function projectMoney(
   const pricedExtras = extras.flatMap((x) => (x.amount === null ? [] : [x.amount]))
   const extrasTotal = sum(pricedExtras)
   const basePlan = plan?.revenue ?? (planned.length > 0 ? plannedTotal : null)
-  const expected = basePlan === null && pricedExtras.length === 0 ? null : (basePlan ?? 0) + extrasTotal
+  // R2 (C1): kwota przelewu wpisana ręcznie to CAŁY przelew — już z dosprzedażą.
+  const typedTransfer = !!plan && isTypedTransfer(project)
+  const expected =
+    basePlan === null && pricedExtras.length === 0 ? null : (basePlan ?? 0) + (typedTransfer ? 0 : extrasTotal)
 
   const knownInvoices = issued.filter((i) => invoiceAmount(i) !== null)
   const pricedPayments = unpairedPayments.filter((p) => p.amount !== null)
@@ -224,21 +254,30 @@ export function projectMoney(
   }
 
   // ── Koszty ─────────────────────────────────────────────────────────────────
+  // R2: wiersze Realizacji to koszty zewnętrzne i moja praca. Czy wpisy
+  // „dogoniły" plan, porównujemy razem (koszty + moja praca), bo przełączenie
+  // pozycji na „Moja praca" niczego nie ubywa — przenosi tylko kwotę.
   const costCount = liveCosts(project.costs).length
   const actualCosts = costCount > 0 ? totalActualCosts(project.costs) : null
+  const actualOwnWork = costCount > 0 ? totalOwnWork(project.costs) : null
   const planCosts = plan?.costs ?? null
+  const planOwnWork = plan?.ownWork ?? 0
   let costs: number | null
+  let ownWork: number
   let costsBasis: ProjectMoney['costsBasis']
   let costsNote: CostsNote = null
   if (actualCosts === null) {
     costs = planCosts
+    ownWork = planOwnWork
     costsBasis = planCosts === null ? 'none' : 'plan'
     costsNote = 'no_costs'
-  } else if (planCosts === null || actualCosts >= planCosts - EPSILON || done) {
+  } else if (planCosts === null || actualCosts + (actualOwnWork ?? 0) >= planCosts + planOwnWork - EPSILON || done) {
     costs = actualCosts
+    ownWork = actualOwnWork ?? 0
     costsBasis = 'actual'
   } else {
     costs = planCosts
+    ownWork = planOwnWork
     costsBasis = 'plan'
     costsNote = 'partial'
   }
@@ -249,6 +288,8 @@ export function projectMoney(
   const profit = revenue === null ? null : revenue - tax - (costs ?? 0)
   const margin = revenue === null ? null : revenue - (costs ?? 0)
   const marginPct = profit !== null && revenue !== null && revenue > 0 ? (profit / revenue) * 100 : null
+  const producerMargin = profit === null ? null : profit - ownWork
+  const producerMarginPct = producerMargin !== null && revenue !== null && revenue > 0 ? (producerMargin / revenue) * 100 : null
 
   // ── Daty ───────────────────────────────────────────────────────────────────
   const factDays = [...invoices.map((i) => i.sent), ...pricedPayments.map((p) => p.day)].sort()
@@ -293,13 +334,17 @@ export function projectMoney(
     revenueBasis,
     revenueNote,
     actualCosts,
+    actualOwnWork,
     costCount,
     costs,
     costsBasis,
     costsNote,
+    ownWork,
     taxRatePercent,
     tax,
     profit,
+    producerMargin,
+    producerMarginPct,
     margin,
     marginPct,
     pieces,

@@ -37,14 +37,25 @@ export interface ProfitDerivedLine {
   defaultUnitCost: number
   /** Domyślny stan checkboxa "to jest mój koszt" (domyślnie true). */
   defaultIsCost?: boolean
+  /** R2: dzień wyceny (`ShootingDay.id`) pozycji dziennej: ekipa i wypożyczalnia. */
+  quoteDayId?: string
+  /** R2: rola (ekipa) — nazwa z wyceny. */
+  role?: string
+  /** R2: osoba z bazy Ekipa obsadzona w wycenie. */
+  personId?: string
+  personName?: string
+  /** R2 (D1): pozycja „Ja" — moja praca, nie koszt. */
+  ownWork?: boolean
 }
 
 export interface ProfitLine extends ProfitDerivedLine {
   isCost: boolean
   quantity: number
   unitCost: number
-  /** Koszt pozycji: isCost ? quantity × unitCost : 0 */
+  /** Kwota pozycji: isCost ? quantity × unitCost : 0 (przy `ownWork` to wartość mojej pracy, nie koszt). */
   total: number
+  /** R2: moja praca (pozycja „Ja") — liczy się do `ownWork`, nie do kosztów. */
+  ownWork: boolean
   /** Czy użytkownik nadpisał ilość/stawkę/checkbox względem wyceny. */
   isOverridden: boolean
   isCustom: boolean
@@ -54,7 +65,10 @@ export interface ProfitLine extends ProfitDerivedLine {
 export interface ProfitSectionResult {
   section: ProfitSectionKey
   lines: ProfitLine[]
+  /** Koszty sekcji — bez mojej pracy. */
   totalCost: number
+  /** R2: wartość mojej pracy w sekcji. */
+  ownWork: number
 }
 
 export const PROFIT_SECTION_LABELS: Record<ProfitSectionKey, string> = {
@@ -210,6 +224,8 @@ export function buildDerivedCostLines(
           unitLabel: 'os.',
           defaultQuantity: count,
           defaultUnitCost: pro[def.priceKey],
+          quoteDayId: day.id,
+          role: customName && customName.trim() ? customName.trim() : def.label,
         })
       }
       // Sprzęt (kamery, obiektywy, stabilizacja, podgląd, światło, dron) NIE jest
@@ -229,6 +245,10 @@ export function buildDerivedCostLines(
           unitLabel: 'os.',
           defaultQuantity: qty,
           defaultUnitCost: safeNum(line.costRate, 0, 0),
+          quoteDayId: day.id,
+          role: line.roleName,
+          ...(line.personId ? { personId: line.personId, personName: person ?? '' } : {}),
+          ...(line.ownWork === true ? { ownWork: true } : {}),
         })
       })
       // Mój sprzęt z katalogu (G5) też nie jest kosztem. Kosztem jest za to
@@ -244,6 +264,7 @@ export function buildDerivedCostLines(
           unitLabel: 'kpl.',
           defaultQuantity: 1,
           defaultUnitCost: amount,
+          quoteDayId: day.id,
         })
       })
     })
@@ -423,6 +444,7 @@ function applyOverride(line: ProfitDerivedLine, override: ProfitLineOverride | u
     quantity,
     unitCost,
     total: isCost ? quantity * unitCost : 0,
+    ownWork: line.ownWork === true,
     isOverridden,
     isCustom: false,
   }
@@ -442,6 +464,7 @@ function customItemToLine(item: ProfitCustomItem): ProfitLine {
     quantity,
     unitCost,
     total: item.isCost ? quantity * unitCost : 0,
+    ownWork: false,
     isOverridden: false,
     isCustom: true,
     customId: item.id,
@@ -454,7 +477,7 @@ export function resolveProfitSections(
   data: QuoteData,
   pricing: PricingConfigShape,
   autoCrewDays: number
-): { sections: ProfitSectionResult[]; totalCost: number } {
+): { sections: ProfitSectionResult[]; totalCost: number; ownWork: number } {
   const overrides = data.profitOverrides ?? {}
   const derived = buildDerivedCostLines(data, pricing, autoCrewDays)
   const customItems = safeArray<ProfitCustomItem>(data.profitCustomItems)
@@ -467,13 +490,15 @@ export function resolveProfitSections(
     return {
       section,
       lines,
-      totalCost: lines.reduce((s, l) => s + l.total, 0),
+      totalCost: lines.reduce((s, l) => s + (l.ownWork ? 0 : l.total), 0),
+      ownWork: lines.reduce((s, l) => s + (l.ownWork ? l.total : 0), 0),
     }
   })
 
   return {
     sections,
     totalCost: sections.reduce((s, sec) => s + sec.totalCost, 0),
+    ownWork: sections.reduce((s, sec) => s + sec.ownWork, 0),
   }
 }
 

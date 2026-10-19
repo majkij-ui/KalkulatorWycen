@@ -9,7 +9,8 @@
  * — i da się to pokryć testami.
  */
 
-import { defaultQuoteData, type QuoteData, type ShootingDay } from './quote-types'
+import { defaultQuoteData, type LocalPdfState, type QuoteData, type ShootingDay } from './quote-types'
+import { DEFAULT_EXCHANGE_RATE, pdfRowsTotal } from './pdf-draft'
 import { migratePricingConfig, DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
 import { getBreakdownWithPricing, getTotals, type LineItemRow, type PhaseBreakdown } from './quote-calc'
 import { dayCrewFigures } from './quote-crew'
@@ -156,6 +157,8 @@ export interface FinancialsSource {
   data?: Partial<QuoteData>
   pricingConfig?: unknown
   marginMultiplier?: number
+  /** Szkic PDF wyceny (R2: suma PDF to zatwierdzona cena); brak / `null` = PDF idzie za kalkulatorem. */
+  pdfDraft?: unknown
 }
 
 /**
@@ -204,14 +207,85 @@ export function quoteViews(data: QuoteData, pricing: PricingConfigShape): QuoteV
   }
 }
 
-/** Plan wyceny w PLN: przychód (suma × kurs albo kwota przelewu), koszty, zysk. */
-export function quotePlnPlan(data: QuoteData, pricing: PricingConfigShape, margin: number) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Zatwierdzona cena (R2, C1): to, co pokazał PDF wybranego wariantu — w zł i w walucie dokumentu. */
+export interface ApprovedPrice {
+  /** W zł (EUR × kurs). */
+  pln: number
+  /** W walucie PDF (albo kalkulatora, gdy nie ma szkicu PDF). */
+  amount: number
+  currency: 'PLN' | 'EUR'
+  /** Kurs, po którym policzono złotówki; `null` dla PLN. */
+  rate: number | null
+  /** `pdf` = suma szkicu PDF, `calculator` = wycena bez szkicu (PDF idzie za kalkulatorem). */
+  source: 'pdf' | 'calculator'
+  /** Netto kalkulatora w zł — do porównania („PDF różni się od kalkulatora" to normalne). */
+  calculatorPln: number
+}
+
+/**
+ * Suma szkicu PDF w zł. Wycena w EUR (S3): € × kurs zamrożony w wycenie (jak
+ * każdy plan w EUR). Stary szkic EUR do wyceny w złotych (sprzed S3, przeliczany
+ * tylko w PDF): € × kurs szkicu. `null` = nie ma szkicu PDF.
+ */
+export function pdfDraftTotalPln(
+  pdfDraft: unknown,
+  money: QuoteMoney
+): { amount: number; currency: 'PLN' | 'EUR'; rate: number | null; pln: number } | null {
+  if (!isRecord(pdfDraft) || !isRecord(pdfDraft.rows)) return null
+  const amount = pdfRowsTotal(pdfDraft.rows as LocalPdfState['rows'])
+  if (pdfDraft.currency !== 'EUR') return { amount, currency: 'PLN', rate: null, pln: amount }
+  const draftRate = typeof pdfDraft.exchangeRate === 'number' && pdfDraft.exchangeRate > 0 ? pdfDraft.exchangeRate : DEFAULT_EXCHANGE_RATE
+  const rate = money.currency === 'EUR' ? money.rate : draftRate
+  return { amount, currency: 'EUR', rate, pln: amount * rate }
+}
+
+/** Zatwierdzona cena wyceny: suma PDF, a bez szkicu PDF — kalkulator (decyzja M.J. 13.2a/5). */
+export function approvedPrice(data: QuoteData, pricing: PricingConfigShape, margin: number, pdfDraft?: unknown): ApprovedPrice {
+  const views = quoteViews(data, pricing)
+  const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
+  const calculatorPln = toPln(totals.sumaNetto, views.money)
+  const pdf = pdfDraftTotalPln(pdfDraft, views.money)
+  if (pdf) return { ...pdf, source: 'pdf', calculatorPln }
+  const foreign = views.money.currency === 'EUR'
+  return {
+    pln: calculatorPln,
+    amount: totals.sumaNetto,
+    currency: foreign ? 'EUR' : 'PLN',
+    rate: foreign ? views.money.rate : null,
+    source: 'calculator',
+    calculatorPln,
+  }
+}
+
+/**
+ * Plan wyceny w PLN: przychód, koszty, moja praca, zysk. Przychód (R2, C1) =
+ * kwota przelewu wpisana ręcznie, a bez niej zatwierdzona cena — suma PDF albo
+ * kalkulator. `sumaNettoPln` zostaje netto KALKULATORA (sprzęt, porównania).
+ */
+export function quotePlnPlan(data: QuoteData, pricing: PricingConfigShape, margin: number, pdfDraft?: unknown) {
   const views = quoteViews(data, pricing)
   const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
   const sumaNettoPln = toPln(totals.sumaNetto, views.money)
+  const approved = approvedPrice(data, pricing, margin, pdfDraft)
   const profit = resolveProfitSections(views.cost, pricing, computeTotalCrewDays(data))
-  const summary = computeProfitSummary(data.profitTransferAmount ?? sumaNettoPln, data.profitTaxRatePercent, profit.totalCost)
-  return { views, totals, sumaNettoPln, sections: profit.sections, totalCost: profit.totalCost, summary }
+  const typed = data.profitTransferAmount
+  const revenueSource: 'transfer' | 'pdf' | 'calculator' = typed != null ? 'transfer' : approved.source
+  const summary = computeProfitSummary(typed ?? approved.pln, data.profitTaxRatePercent, profit.totalCost)
+  return {
+    views,
+    totals,
+    sumaNettoPln,
+    approved,
+    revenueSource,
+    sections: profit.sections,
+    totalCost: profit.totalCost,
+    ownWork: profit.ownWork,
+    summary,
+  }
 }
 
 export function computeSnapshotFinancials(
@@ -221,7 +295,7 @@ export function computeSnapshotFinancials(
   const resolved = resolveSnapshot(snapshot)
   if (!resolved) return null
   const { data, pricing, margin } = resolved
-  const { summary } = quotePlnPlan(data, pricing, margin)
+  const { summary, ownWork, revenueSource } = quotePlnPlan(data, pricing, margin, snapshot?.pdfDraft)
 
   return {
     sumaNetto: summary.sumaNetto,
@@ -230,6 +304,8 @@ export function computeSnapshotFinancials(
     zysk: summary.zysk,
     marzaPct: summary.marzaPct,
     computedAt: now.toISOString(),
+    ...(ownWork > 0 ? { ownWork } : {}),
+    revenueSource,
   }
 }
 
