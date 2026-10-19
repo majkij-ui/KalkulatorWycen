@@ -1422,6 +1422,149 @@ scroll (tables scroll inside their cards).
   are the headline.
 - R2: add the „Marża producencka" metric row and `extra.producerMargin`; nothing else in the report changes.
 
+## 16. R2 as built
+
+*(2026-10-18/19, branch `claude/r2-realizacja-finanse`, on top of `v3/project-hub` `506bce4`.)*
+
+**Decided with M.J. (2026-10-18), after the phase-1 report:** (1) producer margin company-wide = the sum of the
+projects' producer margins, AFTER tax; the company result stays S4's „Wynik po kosztach firmy"; EBBT is §17.2, not R2;
+(Q2) option A — the first change in Realizacja writes the whole draft as lines, later quote edits only through a banner;
+(3) „Zacznij od wyceny" for pre-R2 projects, as a quiet button with a confirmation, the cost change and „Cofnij"; every
+nagging list hideable per project („Ukryj", back when the quote changes again); (4) no data patch for old unticked
+lines (decision 8) — M.J. marks „Moja praca" himself.
+
+**One cost model.** `Project.costs` is the only list of actual costs; the plan is the calculator (price-list costs, no
+margin) with the old Profit overrides and custom items still applied (they stay in the quote; the editor is gone).
+`lib/realization-costs.ts` (pure):
+- **draft** — no live line yet: Realizacja shows the plan from the live quote (`quotePlanRows` → `draftCosts`), nothing
+  is stored, Finance counts the plan; same total.
+- **first change** (tick, amount, pill, person, added line, kit, „ta sama ekipa", move) → `startFromQuote` writes every
+  draft line (`planKey`, `source: 'plan'`) and sets `Project.costsFromQuoteAt`, then applies the change. From then on
+  Realizacja is the truth. Hand changes mark the line `edited`.
+- **quote changed later** → `quoteChanges`: added (key in no record, deleted ones included), changed (never-edited line
+  whose plan values differ), removed (never-edited line whose key is gone). Banner „Wycena zmieniła się: +N / ~M / −K,
+  koszty ±X zł[, moja praca ±Y zł] · Pokaż · Uwzględnij · Ukryj"; „Uwzględnij" (`applyQuoteChanges`) adds, overwrites
+  and soft-deletes only those lines, with „Cofnij".
+- **pre-R2 costs** (live lines, no `costsFromQuoteAt`): counted exactly as entered. `missingFromQuote` lists plan lines
+  not visible there (a day that already has crew covers its crew; a category already entered anywhere covers its plan
+  lines; quick crew is covered by any crew) as „W wycenie, nie ma w Realizacji" with „Dodaj", „Dodaj wszystkie", and
+  the plan's unticked lines („Dodaj jako Moja praca" / „jako koszt"); nothing counts until added and the mode stays.
+  The quiet „Zacznij od wyceny…" (`restartFromQuote`) soft-deletes the entered lines with one stamp and starts from the
+  plan, after „Koszty w Finansach: X → Y zł"; „Cofnij" restores the previous list and marker.
+- „Ukryj" stores the list's signature per project in localStorage (`nonoise-realization-hidden-v1`, a UI preference
+  like „Pomiń" in the import); a different signature (the quote changed again) shows it again.
+
+**Data (additive, optional, no version bump).** `ProjectCost.planKey`, `skipped` (unticked: didn't happen, counts
+nowhere, stays visible), `ownWork` („Moja praca": not a cost, valued at the line's amount), `edited`;
+`Project.costsFromQuoteAt`; `QuoteCrewLine.ownWork` (set when „Ja" is picked — `createQuoteCrewLine`, `withCrewPerson`,
+day 1 „ReżOp · Ja", kits; „zaktualizuj stawki" flags a pre-R2 Ja line and lists it as stale until then);
+`ProjectFinancials.ownWork` (only when > 0) and `revenueSource` (`transfer` / `pdf` / `calculator`).
+
+**Money.**
+- Plan revenue `financials.sumaNetto` = typed transfer, else the chosen variant's PDF total (`approvedPrice`: EUR × the
+  quote's frozen rate; a pre-S3 EUR draft on a PLN quote × the draft's rate), else the calculator. `koszty` = external
+  plan costs; Ja lines are `ownWork`.
+- Money loop: expected = typed transfer (the whole transfer, extras included) or plan + extra sales; a typed transfer is
+  also recognised from the quote when financials predate R2 (`isTypedTransfer`). Invoices win as before. Costs =
+  counted external lines, `ownWork` = counted own lines; T6's „partial in production keeps the plan" compares
+  Realizacja (costs + own work) with the plan (costs + own work). `profit` = Marża (zysk netto), `producerMargin` =
+  profit − own work, `producerMarginPct`.
+- Margin ledger rows: `ownWork` (anchored, like costs) and `producerMargin` = W1 − tax − own work; totals sum them.
+  Finance has a fifth tile „Marża producencka" (marża − podatek − Twoja praca, % of revenue). S5: metric row
+  `producerMargin` after W1, `extra.producerMargin` on projects and clients, a definition. Crew stats skip unticked rows.
+
+**Screens.**
+- **Realizacja:** B1/B4 done (summary, Profit collapsible and `profit.tsx` / `plan-section.tsx` /
+  `realization-summary.tsx` removed; „Przepisz ekipę z planu" replaced by the draft). B2 „Koszty projektu" on top with
+  its total (external + „moja praca"). B3 day cards hold „Ekipa i sprzęt": crew, rentals, other day costs, „Mój sprzęt N
+  pozycji z katalogu — bez kwoty"; a quick quote's crew sits in „Ekipa z szybkiej wyceny — wszystkie dni" above the
+  days; a quote day without a Realizacja day is a „Dzień N z wyceny" card after them with „Przenieś do dnia…". Every
+  line: tick + „Zewnętrzny | Moja praca" (hidden on unticked lines). The person picker shows „Ja"; picking Ja sets
+  Moja praca, another person clears it. Gear grid, packing list and call sheet unchanged.
+- **Finanse (project tab, between Realizacja and Notatki):** big „Zatwierdzona cena" (source, € × rate, calculator
+  difference „to normalne"); „Kwota finalnego przelewu" (price + extras; a typed number is the override, „z ceny"
+  resets it; a higher one offers „Zapisz różnicę jako dosprzedaż", which writes `extra_sale` and clears the override,
+  with „Cofnij"; a lower one says „O X zł mniej"); extras and invoices listed; tiles „Zysk netto (marża)" and „Marża
+  producencka"; the breakdown with an editable ryczałt; the plan-vs-Realizacja table by category with „Moja praca".
+  A retro project is read-only („z importu").
+
+**Real-life cases, as built** (tests in `r2-money.test.ts`, `realization-costs.test.ts`, `project-finance.test.ts`,
+`period-report.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| Ticked / unticked | ticked counts (cost or own work); unticked = didn't happen, counts nowhere, stays visible; old „nie mój koszt" lines arrive unticked |
+| Moja praca / Zewnętrzny | own work is not a cost: an external line switched to Moja praca raises Marża by its amount, Marża producencka stays; an unticked line ticked as Moja praca leaves Marża and lowers Marża producencka |
+| A Ja line | quote: own work in the plan, not koszty (new quote day 1: koszty 0, ownWork 1 500, zysk 1 372,50 instead of −127,50); Realizacja: Moja praca by default |
+| „Ja jako Asystent" role without the Ja card (Solvo) | no person → Zewnętrzny; unticked there; M.J. ticks + Moja praca, or picks Ja |
+| Realizacja day not in the quote / quote day without a Realizacja day | empty day with „+ Osoba / + Koszt dnia" / „Dzień N z wyceny" card, counted, „Przenieś do dnia…" |
+| Quote edited after Realizacja started | nothing rewritten; banner; edited lines never touched; removals soft |
+| Another variant chosen (Q2) | financials by the PDF rule of the new variant (the dialog shows them); draft follows; started Realizacja gets the banner |
+| Post-production, gear bought | Koszty projektu; a bought item via „+ Koszt projektu" (`sprzet`); catalogue purchases stay in S4 |
+| Rental vs own gear | rentals are external lines in `wynajem` (project-wide „Wynajem sprzętu" or per day); own gear „mój sprzęt", no amount, no pill |
+| Extra sale | final transfer = price + extras; expected + extra (T6) |
+| Hand-typed transfer | override incl. extras; gap → „Zapisz różnicę jako dosprzedaż" (same number after); lower = text only |
+| Invoice | wins; Finanse lists it; an invoice without an amount is named |
+| EUR job | PDF € × the quote's rate (Tchibo Event 1 460 € × 4,3661 = 6 374,51 zł); costs in zł |
+| Retro project | price and costs from the import, read-only, no lines |
+| Lost project | numbers shown with „nie wchodzą do Finansów firmy"; counted nowhere |
+| Old „Asystent/Operator" rows | text kept; `crewRoleByName` maps the old name to role `asystent` (now „Operator"), so person rates and kits work |
+| Pre-R2 Realizacja | as entered; missing plan lines listed (JHJ: AI 600, wynajem 1 500, „lukasz" 1 000, dysk 325, dojazd 1 300 = 4 725 zł); „Zacznij od wyceny" |
+
+**Real data (read-only; snapshots 2026-10-18 22:26 / 23:23 and 2026-10-19 03:11 — `projects.json` unchanged since
+22:37, hash `93ebfa94`).** `real-data-check.mts` (now also printing money per project and Ja lines without the flag),
+base `506bce4` vs branch: every project's best-known revenue and costs and every year identical; `computed` financials
+move only for Tchibo Event (6 501,12 → 6 374,51) and UAM (lost, 8 238 → 8 630); no unflagged Ja lines. Stored
+financials change only with the patch below; with it simulated on a copy: those two projects and Finance 2026 — revenue
+202 384,35 → 202 257,74, tax 16 348,42 → 16 337,66, project profit 113 115,93 → 113 000,08 — nothing else; costs
+72 920 unchanged. Every other project's Marża producencka = its Marża (no own work recorded yet). Not caused by R2: JHJ
+costs 8 700 (crew entered on 18.10, done → actual; plan 12 425) and Zabudowy 0 (an empty „Sprzęt 0 zł" line); JHJ also
+got an empty „Sprzęt 0 zł" line at 22:37 (the old „Koszt projektu" default; R2's default is „Inne").
+
+**Data patch for the main session** (hub closed, regenerate first — M.J. edits live):
+`node --import ./scripts/register-ts.mjs scripts/r2-pdf-price-patch.mts > imports/2026-10-18-r2-pdf-price.json`, check
+the list it prints (expected: Tchibo Event, UAM), `npm run data -- apply imports/2026-10-18-r2-pdf-price.json --dry-run`,
+then without `--dry-run`. The committed file is the 23:23 version (2 changed; dry run on the real folder: „2 zmienione",
+nothing written). Without the patch the two would move at their next quote save.
+
+**Tests:** 810 (761 before; +49: `r2-money` 21, `realization-costs` 19, `project-finance` 8, `period-report` +1; the
+`quote-currency-legacy` golden keeps every number except `legacyEurPdf`'s financials and plan, which now follow its PDF
+— asserted explicitly). 63 deliberate mutations across quote-financials, profit-calc, quote-crew, project-costs,
+money-loop, realization-plan, margin-ledger, period-report, crew-stats, crew-types, realization-costs, project-finance and
+pdf-draft: 56 caught at first; 6 survivors got tests (anchored own work in the ledger, a person only on the first copy,
+deleted-only rows = draft, skipped own work in the banner delta, plan revenue source, `pdfRowsTotal` without rows); one
+was an equivalent branch and was removed — 62 / 62. `npx tsc --noEmit` clean; `npm run build` passes.
+
+**Verified on the production export** (`npm run build`, `node scripts/serve-export.mjs 3013`, opened by URL; build
+checked by its strings; real data with the patch simulated copied into the page's localStorage, restored afterwards to
+the two keys the origin had, from a non-app page so nothing wrote back): Tchibo Event Finanse 6 375 zł from the PDF
+(1 460 € × 4,3661, kalkulator 6 501); S-AI 67 800 PDF, typed 80 440, „Zapisz różnicę jako dosprzedaż (+12 640 zł)" →
+extra sale, same 80 440, „Cofnij" restored both; S-AI Realizacja draft (Koszty projektu 8 320 + quick crew 40 160), first
+tick wrote all lines, Montaż → Moja praca → Marża producencka 13 123 zł (16,3 %), zysk unchanged 25 123; Morris (pre-R2):
+lines as entered, missing list „nic liczonego · odznaczone 1", „Ukryj" kept after reload, „Zacznij od wyceny…" showed
+5 300 → 5 300, replaced and „Cofnij" restored the costs byte for byte; JHJ missing list 5 (4 725 zł) + 5 unticked, „ja na
+planie" added as Moja praca → producer margin 11 289 zł, costs still 8 700; new project → day 1 „ReżOp · Michał" with the
+„Ja" pill and Moja praca, financials koszty 0 / ownWork 1 500; first change, then two quote edits → banner „+1 … moja praca
++1 500 zł", „Uwzględnij" → „Dzień 2 z wyceny" card after Dzień 1, „Ukryj" survived a tab switch and came back after the
+next edit; company Finance 2026: 202 258 zł, Marża producencka tile 113 000 zł, result 33 169 zł; Raport row „Marża
+producencka 113 000 zł · 56 %". Phone width: tabs scroll sideways, rows wrap; the page is 29 px wider only because of the
+known top bar. No console errors besides the missing Vercel analytics script.
+
+**Desktop-only checks for the main session** (installed app, after the patch):
+1. Tchibo Event → Finanse: 6 375 zł from the PDF; company Finance 2026 revenue 202 258 zł.
+2. A project in Realizacja: the first tick writes the lines (`projects.json` gets `costsFromQuoteAt` and `planKey`s);
+   close the window right away (red button) — after restart the tick and the lines are there.
+3. „Ukryj" on a banner survives an app restart (localStorage in WKWebView).
+4. „Zapisz różnicę jako dosprzedaż" puts an `extra_sale` in `events.json` and clears `profitTransferAmount`.
+
+**Known limits / next:**
+- A quote crew line of the Ja card made before R2 counts as a plan cost until „zaktualizuj stawki" (or a re-pick) flags
+  it; the release check lists such lines (none today).
+- The open/closed state of the lists resets when the events reload on window focus (as other local state in the tab).
+- The draft and the money loop agree only after the quote's ~0.6 s autosave (Finance reads the saved financials).
+- Fuel price / consumption are no longer editable (the plan keeps their saved values; Realizacja edits km and zł/km).
+- Rentals: lines stay in category `wynajem` (project-wide „Wynajem sprzętu" and day rentals) for §17.1 to sum.
+
 ## 17. Next: rentals as one source of truth, and EBBT *(planned with M.J. 2026-10-18 — not built yet)*
 
 ### 17.1 Rentals („Wynajem sprzętu")

@@ -19,7 +19,7 @@ read–change–write queue per file, defensive parsing — an unreadable record
 
 | File | Schema (lib/) | What |
 |---|---|---|
-| `projects.json` | `projectSchema` (project-types) | project = client field, status, `quote` (QuoteSnapshot v2, optional), frozen `financials`, gear usage, `gearDays`, `costs`, notes, soft delete |
+| `projects.json` | `projectSchema` (project-types) | project = client field, status, `quote` (QuoteSnapshot v2, optional), frozen `financials`, gear usage, `gearDays`, `costs` (+ `costsFromQuoteAt`, R2), notes, soft delete |
 | `events.json` | `eventSchema` (event-types) | the project thread and business events: `kind`, `projectId` or null, `start`/`end`, open `data`, `source.ref` |
 | `finances.json` | `fixedCostSchema` (project-types) | fixed costs and monthly corrections (`subscriptionId`) |
 | `subscriptions.json` | `subscriptionSchema` (subscription-types) | subscriptions; instalments derived on read (`subscriptions.ts`) |
@@ -63,7 +63,7 @@ synchronous. Providers: `ProjectHubProvider` → `QuoteProvider` → equipment, 
   calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`, `margin-ledger`,
   `gear-costs`,
   `subscriptions`, `client-money`, `client-stats`, `crew-rates`, `gear-usage`, `equipment-roi`,
-  `thread-stats`, `realization-plan`, `period-report`), decisions (`project-save`, `quote-documents`, `inbox`,
+  `thread-stats`, `realization-plan`, `realization-costs`, `project-finance`, `period-report`), decisions (`project-save`, `quote-documents`, `inbox`,
   `inbox-validate`, `auto-backup`, `company-settings-core`). Put every rule here, with a test.
 - **Stores** (`*-store.ts`, `project-library.ts`, `equipment-catalog.ts`, `company-settings.ts`):
   file/localStorage IO through `createCollectionStore` only.
@@ -110,8 +110,19 @@ the user; the app never changes a status silently. A lead is a `lead_in` event, 
 Revenue therefore follows PDF → Finanse → invoices; costs follow calculator → Realizacja. Never change a
 number of an existing project silently: list what moves and let M.J. confirm.
 
-- **Plan** = `Project.financials`, frozen from the quote on save (Profit tab: costs from the price list
-  without margin, overrides, flat tax 8.5 % by default).
+- **Plan** = `Project.financials`, frozen from the quote on save: revenue = typed transfer, else the chosen
+  variant's PDF total, else the calculator (`approvedPrice`, `revenueSource`); costs from the price list without
+  margin with the old Profit overrides (no editor since R2); „Ja" lines are `ownWork`, not `koszty`; flat tax 8.5 %
+  by default.
+- **R2 (plan §16) — Realizacja and the project's Finanse tab.** One cost list, `Project.costs`
+  (`realization-costs.ts`): before the first change the tab shows the plan as a draft and Finance counts the plan;
+  the first change writes the whole draft (`planKey`, `costsFromQuoteAt`); later quote edits only through the
+  „Wycena zmieniła się" banner (never-edited lines); costs entered before R2 count as entered, with the plan lines
+  they lack listed. Every line is ticked („było"; `skipped` counts nowhere) and external or „Moja praca" (`ownWork`,
+  not a cost). Per project: Marża = zysk netto (after external costs and tax), Marża producencka = Marża − own work;
+  company-wide it is the sum of the projects' (ledger `producerMargin`, Finance tile, S5 metric). The project tab
+  „Finanse" (`project-finance.ts`) shows the approved price, the final transfer (price + extra sales; a typed number
+  is the override; a gap can be saved as an extra sale) and these margins.
 - **Money loop** (`money-loop.ts`, T6): actual revenue = issued invoices (`invoice_sent.amountNetto`, net)
   + payments without an invoice; expected = plan + `extra_sale`; costs = `Project.costs` from Realizacja,
   else the plan's. A future-dated invoice is still plan. Pairs invoice → payment: `thread-stats`.
