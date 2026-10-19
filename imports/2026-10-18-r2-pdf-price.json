@@ -1,5 +1,5 @@
 {
-  "note": "R2: finanse z sumy PDF (decyzja 13.2a/5) — 2 projektów, wygenerowane 2026-10-18T21:25:15.436Z",
+  "note": "R2: finanse z sumy PDF (decyzja 13.2a/5) — 2 projektów, wygenerowane 2026-10-19T01:33:04.533Z",
   "update": {
     "projects.json": [
       {
@@ -11,7 +11,7 @@
             "podatek": 541.8330100000001,
             "zysk": 5832.67299,
             "marzaPct": 91.49999999999999,
-            "computedAt": "2026-10-18T21:25:15.436Z",
+            "computedAt": "2026-10-19T01:33:04.533Z",
             "revenueSource": "pdf"
           }
         }
@@ -25,7 +25,7 @@
             "podatek": 733.5500000000001,
             "zysk": 6288.45,
             "marzaPct": 72.86732329084589,
-            "computedAt": "2026-10-18T21:25:15.436Z",
+            "computedAt": "2026-10-19T01:33:04.533Z",
             "revenueSource": "pdf"
           }
         }
