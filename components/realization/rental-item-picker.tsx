@@ -7,7 +7,7 @@
  * pozycji; wybór pozycji ustawia `rentalItemId`, a opis zostaje (np. z wyceny).
  */
 
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Plus, Tag } from 'lucide-react'
 import { findRentalItemByName, rentalNameKey } from '@/lib/rentals'
 import type { ProjectCost } from '@/lib/project-types'
@@ -74,17 +74,27 @@ export function RentalItemPicker({
     setActive(-1)
   }, [query])
 
+  // Opis wiersza sprzed szukania („CamCam: prompter…") zostaje po wyborze pozycji —
+  // wpisany tekst służył tylko do szukania. Bez opisu wiersz dostaje nazwę pozycji.
+  const labelAtFocus = useRef<string | undefined>(undefined)
+  const linkedAtFocus = useRef<string | null>(null)
+  const linkPatch = (item: RentalItem): Partial<ProjectCost> => {
+    const before = labelAtFocus.current ?? ''
+    const description = before.trim() && rentalNameKey(before) !== rentalNameKey(linkedAtFocus.current ?? '') ? before : null
+    return { rentalItemId: item.id, label: description ?? item.name }
+  }
+
   const choose = async (option: Option) => {
     setOpen(false)
     setTyping(false)
     if (option.type === 'item') {
-      onChange({ rentalItemId: option.item.id, ...(cost.label?.trim() ? {} : { label: option.item.name }) })
+      onChange(linkPatch(option.item))
       return
     }
     setBusy(true)
     try {
       const item = await dictionary.addItem(option.name)
-      if (item) onChange({ rentalItemId: item.id, ...(cost.label?.trim() ? {} : { label: item.name }) })
+      if (item) onChange(linkPatch(item))
     } finally {
       setBusy(false)
     }
@@ -114,7 +124,11 @@ export function RentalItemPicker({
           const keep = linkedName !== null && rentalNameKey(next) === rentalNameKey(linkedName)
           onChange({ label: next, ...(cost.rentalItemId && !keep ? { rentalItemId: undefined } : {}) })
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          labelAtFocus.current = cost.label
+          linkedAtFocus.current = linkedName
+          setOpen(true)
+        }}
         onBlur={() => {
           setOpen(false)
           setTyping(false)
