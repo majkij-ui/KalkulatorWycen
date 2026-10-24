@@ -412,6 +412,19 @@ test('U2: pozycja usunięta z katalogu nic nie dostaje — jej część idzie do
   assert.equal(report.totals.unassignedClientPaid, 0)
 })
 
+test('U2: kwota wpisana w projekcie (wynajem w osobnym wierszu PDF) dzieli się tak samo, także ujemna', () => {
+  const camera = item('c1', 'FX3', 20000, 300)
+  const light = item('l1', 'Aputure', 3000, 100, { category: 'swiatlo' })
+  const gearDays = [day('d1', [['c1', 1], ['l1', 1]])]
+  const typed = project('p1', 'done', { quote: quickQuote(), gearDays })
+  typed.gearEarnedOverride = 800
+  const report = computeGearReport([camera, light], [typed], { now: NOW })
+  assert.equal(roiOf(report, 'c1').clientPaid, 600)
+  assert.equal(roiOf(report, 'l1').clientPaid, 200)
+  typed.gearEarnedOverride = -400
+  assert.equal(roiOf(computeGearReport([camera, light], [typed], { now: NOW }), 'c1').clientPaid, -300)
+})
+
 function near(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} ≠ ${expected}`)
 }

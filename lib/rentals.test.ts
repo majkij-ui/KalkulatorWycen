@@ -73,6 +73,10 @@ test('blok „Wynajem sprzętu": wiersz bez pozycji to wpisana kwota, pozycje po
   assert.equal(block.total, 2400)
   assert.equal(block.overTyped, 0)
 
+  const blankFirst = cost('wynajem', 200)
+  const typedLater = cost('wynajem', 300, { label: 'Wynajem sprzętu', rentalTotal: 700 })
+  assert.equal(rentalBlock([blankFirst, typedLater], DAYS).rest?.id, typedLater.id, 'wiersz z wpisaną kwotą wygrywa z pierwszym')
+
   const empty = rentalBlock([cost('inne', 100)], DAYS)
   assert.equal(empty.rest, null, 'brak wiersza → pole 0 zł')
   assert.equal(empty.typed, 0)
@@ -133,6 +137,7 @@ test('pozycje najpierw wypełniają wpisaną kwotę, potem ją podnoszą (decyzj
   // literówka „4000" i poprawka — wpisana kwota nie rośnie
   edit(prompter.id, 4000)
   assert.equal(rentalBlock(costs, DAYS).total, 4000, 'pozycje ponad kwotę podnoszą sumę')
+  assert.equal(costs[0].unitCost, 0, 'reszta nie schodzi poniżej zera')
   assert.equal(rentalBlock(costs, DAYS).overTyped, 2500)
   edit(prompter.id, 400)
   assert.equal(rentalBlock(costs, DAYS).total, 1500)
@@ -159,6 +164,8 @@ test('bez wiersza „bez szczegółów" (albo odznaczonego) pozycje po prostu si
   const off = cost('wynajem', 1000, { skipped: true })
   const kept = rebalanceRental([off, a], [off, { ...a, unitCost: 600 }], DAYS)
   assert.equal(kept[0].unitCost, 1000, 'odznaczona reszta zostaje nietknięta')
+  const ticked = rebalanceRental([off, a], [{ ...off, skipped: undefined }, { ...a, unitCost: 600 }], DAYS)
+  assert.equal(ticked[0].unitCost, 1000, 'zaznaczenie reszty niczego nie odejmuje')
 
   const day = cost('wynajem', 0, { dayId: 'd1' })
   const rest = cost('wynajem', 1000)
