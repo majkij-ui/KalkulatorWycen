@@ -1677,3 +1677,168 @@ row to company Finanse and the S5 report; the main session merges those.
    (more can be added on the spot). Phases: przed realizacją, na planie, po projekcie.
 6. **Money received:** the amount and date are entered in the Finanse tab and saved as a payment event on the
    timeline. Invoices still decide revenue when there is one.
+
+## 20. U2 as built
+
+*(2026-10-24, branch `claude/u2-realizacja-sprzet`, on top of `v3/project-hub` `ff6289b`.)*
+
+**Decided with M.J. (2026-10-24), after the phase-1 report:**
+1. Gear earned may be **negative**. When rentals exceed the PDF „Sprzęt" row (rolki: 600 − 700 = −100), the amount is
+   split the same way, lowers the items' „Zarobił" and payoff, and is shown plainly as „wynajem > Sprzęt o 100 zł".
+2. The reconciliation reads the price through ONE helper, `quotedPrice` (`lib/realization-summary.ts`). Today it is the
+   chosen variant's PDF total (or the calculator); when merging, the main session points it at U1's approved price.
+   There is a second line „z dosprzedażą / przelewem", based on the Finance revenue.
+3. Listed rental items fill the typed rental total („bez szczegółów") first, then raise it.
+4. No new category. `wynajem` is gear only; its label is now „Wynajem sprzętu" (key unchanged, no line moves).
+5. No data patch. M.J. reviews the projects himself, e.g. M&L Broker's „Rental" 950 zł in „inne".
+
+**Why „Zarobił" was wrong** (old `lib/gear-revenue.ts`, removed):
+- It took the calculator's gear amount × (typed transfer / calculator total) instead of the PDF row: JHJ 5 300 vs PDF
+  3 900; S-AI 7 539 vs 2 600; CIONET wywiady 800 → 1 043.
+- It subtracted the quote's plan rentals, not Realizacja's (rolki: plan 540, actual 700).
+- It paid catalogue gear priced in the quote „exactly", whatever went on set (rolki's drone got 100 without being on the
+  grid; gratis items on set got 0).
+
+**Gear earned** (`lib/gear-earnings.ts`, pure):
+- `pdfGearRow(snapshot)`: the chosen variant's „Sprzęt" row in zł, with the same currency rule as the PDF total
+  (EUR quote: € × the quote's rate; a pre-S3 EUR draft: × the draft rate). Without a PDF draft it is the calculator's
+  gear row (what the PDF would print).
+- `gearEarnings({ quote, costs, gearDays, catalog, override })`:
+  - earned = override (`Project.gearEarnedOverride`, may be negative), else PDF row − Realizacja rental total;
+  - split by catalogue day price × unit-days: grid lines, or the quote's catalogue gear when the grid is empty (gratis
+    lines count, they were on set);
+  - items without a price are listed `noRate` and get nothing; zaplecze and deleted items never count;
+  - nobody to split to → `unassigned`.
+- `equipment-roi` reads it: `ProjectGearSummary.earnings` replaces `revenue` / `clientPaidExact`;
+  `MissingGearProject.earnings`; the report's `unassignedClientPaid` sums `earnings.unassigned`. „Odpracował" is
+  untouched.
+
+**Rentals as one number** (`lib/rentals.ts`, pure):
+- The rental total = counted (ticked, external, live) `wynajem` lines: project-wide and in days.
+- If Realizacja has no saved lines yet (draft), the plan's lines count (`realizationLines`), as in Finance.
+- `rentalBlock` (the fixed „Wynajem sprzętu" block at the top of Koszty projektu):
+  - the „bez szczegółów" line is a project-wide `wynajem` line without a dictionary item that has a typed total, is the
+    plan's „Rental sprzętu", or is labelled „Wynajem sprzętu" / blank; a line with its own label is an item;
+  - the typed total sits on that line (`ProjectCost.rentalTotal`), so the costs are still exactly the sum of the lines;
+  - `setTypedRental` and `rebalanceRental` keep the rest = typed − items (≥ 0). The typed total is the one before the
+    edit, so a typo („4000" fixed to „400") can't raise it. Edits that don't change amounts don't touch the rest, so a
+    plan line is not marked `edited`.
+- Rental dictionary: `rental-items.json` (`lib/rental-types.ts`, `rental-items-store.ts`, `use-rental-items.ts`; in
+  `data.mts` and the start-up backup). It holds only names; the same name (case and diacritics ignored) is the same item;
+  soft delete.
+- `rentedGearReport` feeds the Sprzęt tab: per item — times, days (`rentalDays`; a day line = 1, a project line without
+  days = unknown), spent, last rental (the day's calendar date, else the project date), per year; plus „bez pozycji" so
+  the totals add up. Counts won/done projects.
+- `periodRentals` gives company Finanse and the S5 row: the rentals of projects anchored in the period, on the same
+  basis as their direct costs in the margin ledger (Realizacja; plan where Finance counts the plan).
+
+**Data (additive, optional, no version bump):**
+- `ProjectCost.rentalItemId`, `rentalDays`, `vendor`, `rentalTotal`;
+- `Project.gearEarnedOverride`;
+- the `rental-items.json` collection.
+
+Garbage drops to `undefined`; unknown fields survive. No existing record changes until M.J. edits it.
+
+**Screens:**
+- **Realizacja:**
+  - Summary card on top: „Realizacja razem" (external and own work apart), „Cena (PDF)" (source, € × rate), „Sprzęt
+    zarobił" (with „Zmień": a typed amount, „= cały wiersz Sprzęt — wynajem w osobnym wierszu PDF", „Licz z PDF"), and
+    „Bilans wyceny" with sign and wording, plus the second line „z dosprzedażą / przelewem (X zł): ±Y".
+  - Koszty projektu starts with the „Wynajem sprzętu" block: „Za cały projekt" amount, items, „+ Pozycja z wynajmu"
+    (picker with „Dodaj „X" do wynajmowanego sprzętu"), and the sum of day rentals.
+  - Day rental rows use the same `RentalRow`: picker, amount, a second line with days and rental house. Picking an item
+    keeps the line's description.
+  - Dojazd is one amount: an old km × rate line shows its total, with „z wyceny: 2 500 km × 0,52 zł" on hover; an edit
+    writes 1 × amount.
+  - The gear grid's „Zarobił" tile uses the live quote and costs.
+- **Sprzęt:**
+  - A third tab, „Wynajmowany".
+  - „Zarobił" drops the „~" (it is a defined split now); negative shares show in red.
+  - The payoff bar never draws backwards.
+  - The missing-gear banner shows the waiting „zarobił".
+- **Finanse (company, Projekty tab):** a „Wynajem sprzętu" panel (period figure, % of direct costs, projects, most rented
+  items).
+- **S5 report:** the `metrics[]` row `rentals` „w tym wynajem sprzętu" after „Koszty bezpośrednie", plus a definition.
+
+**Real-life cases → behaviour** (tests in `gear-earnings`, `rentals`, `realization-summary`, `equipment-roi`,
+`period-report`, `quote-currency*`, `quote-margin-line`):
+
+| Case | Behaviour |
+|---|---|
+| Own gear only (CIONET TribesDay II) | PDF Sprzęt 1 350 − 0, split by price × days (RED 400 / 2 030 × 1 350 = 266) |
+| Rentals in the days (rolki, CamCam 700) | one rental total; gear 600 − 700 = −100 split over the grid; „wynajem > Sprzęt o 100 zł"; reconciliation +2 730 |
+| Rental billed as a separate PDF line | „Zmień" → „= cały wiersz Sprzęt" (override); „Licz z PDF" brings back the computed value |
+| Items differ per day (JHJ) | Σ per day of qty × price (Halo 2 × 170 on day 1 only) |
+| Item without a day price | „bez stawki", 0; if every item lacks a price → not assigned |
+| Zaplecze / item deleted from the catalogue | never counts; its share goes to the others |
+| No grid | the quote's catalogue gear (qty × price per quote day); none → not assigned (S-AI 2 600, CIONET wywiady 800) |
+| No PDF draft | calculator gear row (Zabudowy 2 850) |
+| EUR PDF (Tchibo Event) | 260 € × 4,3661 = 1 135 zł; price 1 460 € × 4,3661 = 6 375 zł |
+| Variant swap | follows the chosen variant (`Project.quote`); the override stays, marked „kwota wpisana w projekcie" |
+| Pre-R2 project (JHJ) | rentals = lines as entered (1 500); missing plan lines don't count |
+| Realizacja not started (S-AI) | rentals and totals from the plan (48 480 zł), the same as Finance |
+| Dojazd km × rate (JHJ 2 500 × 0,52) | shows 1 300 zł; untouched lines stay as stored, no banner; an edit writes 1 × amount |
+| Typed total + items | items fill „bez szczegółów" first, then raise the total; deleting an item gives its amount back to the rest |
+| Rented item created on the spot, then picked again | „Sony FX6" created in JHJ, picked on rolki's day line; the Sprzęt tab shows it with the day's calendar date |
+| Rental line unticked / „Moja praca" | not in the rental total |
+| Lost / quote project | shown in Realizacja; not in the Sprzęt stats or Finance |
+
+**Real data (read-only):**
+- The hub folder was read at 14:00 and again at 18:55 (`projects.json` unchanged since 13:37, hash `d66ba159`; nothing
+  was written there).
+- `real-data-check.mts` now also prints gear „Zarobił" / „Odpracował" per item, the rental totals per project and year,
+  and the Realizacja totals. Base `ff6289b` vs this branch: quotes, years, per-project money and Ja lines identical.
+- „Odpracował" identical (26 345).
+- „Zarobił": total 12 767 → 9 895; not assigned 8 583 → 3 400. Per item: RED 2 495 → 2 062, Dron 1 682 → 1 292, Ronin
+  1 620 → 1 268, Halo 1 279 → 790, A7S III 1 176 → 991, Leica 588 → 372, 28-135 547 → 483, NanLite 467 → 251, Sigma
+  464 → 325, Sachtler 350 → 307, Tokina 339 → 253, 60x 314 → 208, 200x 208 → 110, Rode 125 → 80, Viltrox 62 → 58,
+  85mm 47 → 42.
+- Unchanged items: 16-35, Shinobi, A7 III, Tamron, 100-400, Manfrotto, 135GM.
+- Rentals: JHJ 1 500, rolki 700 → 2026: 2 200 zł.
+- Reconciliation: JHJ −2 675 (with extras +1 415), S-AI +16 720 (+29 360), rolki +2 730, M&L Broker +1 670 (+4 690),
+  Tchibo Event +1 841.
+
+**Tests:** 830 (810 before; −10 with `gear-revenue.test.ts`, +30 new). `quote-currency-legacy`'s golden replaces
+`gearRevenue` with the PDF gear row explicitly: `split.sprzetNetto` of the same golden, the EUR draft 260 € × 4,3699.
+45 deliberate mutations across gear-earnings, rentals, realization-summary, realization-costs, equipment-roi and
+period-report: 41 caught at first; the 4 survivors got tests (rest preference, a non-negative rest, ticking the rest,
+the override in the catalogue report) — 45 / 45. `npx tsc --noEmit` clean; `npm run build` passes.
+
+**Verified on the production export:**
+- Setup: `npm run build`, `node scripts/serve-export.mjs 3015`, opened by URL; the served chunk contains „Pozycja z
+  wynajmu". Real data was copied into the empty origin's localStorage from a non-app page and cleared afterwards; the
+  server was stopped.
+- JHJ: card 22 525 (12 425 + 10 100) / 22 250 / 2 400 („Sprzęt 3 900 − wynajem 1 500") / −2 675 („z dosprzedażą /
+  przelewem (26 340 zł): +1 415").
+  - „Sony FX6" created on the spot; 4000 → 400: the total stayed 1 500 (rest 1 100, `rentalTotal` 1 500); Finance costs
+    unchanged.
+  - Override „= cały wiersz Sprzęt" → 3 900 (grid tile too) → „Licz z PDF" removed it.
+  - Dojazd 1 300 with the hint → 1 400 saved as 1 × 1 400.
+- Rolki: −100 „wynajem > Sprzęt o 100 zł", +2 730; FX6 picked on the day line, description kept.
+- S-AI: 2 600 „czeka: zaznacz sprzęt ze stawką", +16 720 / +29 360.
+- M&L Broker: +1 670 / +4 690.
+- Tchibo Event: 6 375 („1460 € × 4,3661"), 1 135, +1 841.
+- Sprzęt → Na plan: Zarobił 9 895, „+3 400 zł nieprzypisane", RED 2 062. Sprzęt → Wynajmowany: 2 200, FX6 1× 1 dzień
+  22.10.2026, bez pozycji 1 500.
+- Finanse 2026: revenue 203 978 (= check), panel „Wynajem sprzętu · 2 200 zł (3 %)"; Raport row „w tym wynajem
+  sprzętu 2 200 zł".
+- Phone width: the card and block fit (343 px). The page is 29 px wider only because of the known top bar. No console
+  errors besides the missing Vercel analytics script.
+- Fixed during the check: picking an item no longer replaces the line's description with the search text.
+
+**Desktop-only checks for the main session** (installed app):
+1. Adding a rented item creates `rental-items.json` in the data folder (with `fs` scope `$APPDATA/**`), and the next
+   start-up backup copies it.
+2. „+ Pozycja z wynajmu" → create „X" → close the window right away: after a restart the line and the dictionary
+   entry are there.
+3. A typed „Sprzęt zarobił" survives a restart (`gearEarnedOverride` in `projects.json`).
+4. `npm run data -- apply --dry-run` accepts a patch touching `rental-items.json` (schema registered).
+
+**Known limits / next:**
+- For U1's merge: point `quotedPrice` at the approved price; the „z dosprzedażą / przelewem" line reads
+  `projectMoney().revenue`, so it follows U1's money-loop changes by itself. Both sessions add a `metrics[]` row and a
+  Finance panel near the same lines.
+- Typing in an item-less rental line edits its description (like a free-text person); searching then leaving without
+  a pick keeps the typed text.
+- Rental days are optional; „Wynajmowany" shows „N× bez dni" for lines without them.
+- `docs/PLAN-GEAR.md` still describes `gear-revenue.ts` (historical).
