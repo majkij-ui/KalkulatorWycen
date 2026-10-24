@@ -154,7 +154,14 @@ function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): QuoteDoc 
   return {
     ...doc,
     // Wycena od zera to nowa wycena: marża jako osobna pozycja (R1, A5).
-    data: { ...defaultQuoteData, clientName: doc.data.clientName, projectName: doc.data.projectName, marginAsLine: true },
+    data: {
+      ...defaultQuoteData,
+      clientName: doc.data.clientName,
+      projectName: doc.data.projectName,
+      marginAsLine: true,
+      // U1: cenę zatwierdził klient — wyczyszczenie kalkulatora jej nie rusza.
+      ...(doc.data.approvedPrice ? { approvedPrice: doc.data.approvedPrice } : {}),
+    },
     pricingConfig,
     marginMultiplier: 1,
   }

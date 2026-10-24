@@ -13,10 +13,15 @@
  * `campaignId`), a gdy jej jeszcze nie ma — szacujemy z budżetu dziennego.
  * Szacunek jest zawsze oznaczony (`estimated`), żeby nie udawał faktu.
  *
+ * Przychód i zysk zleceń (U1, plan §18 U-LISTA): z pętli pieniędzy (`money`,
+ * `useProjectMoney` / `moneyLedger`) — faktury, cena z dosprzedażą, koszty z
+ * Realizacji, jak w Finansach. Bez mapy — plan z `financials` (testy, stare wywołania).
+ *
  * Testy w `marketing-calc.test.ts`.
  */
 
 import { addDays, daysBetween } from './calendar-layout'
+import { moneyOf, type MoneyById } from './client-money'
 import type { Lead } from './marketing-leads'
 import { originForPlatform, type Campaign } from './marketing-types'
 import {
@@ -264,6 +269,8 @@ export function summarizeCampaign(
     /** Wydarzenia (do wykrycia wysłanych wycen). */
     quoteSentProjectIds?: ReadonlySet<string>
     today: string
+    /** Pieniądze projektów z pętli (U1); brak = plan z `financials`. */
+    money?: MoneyById | null
   }
 ): CampaignSummary {
   const { costs, projects, today } = params
@@ -303,11 +310,12 @@ export function summarizeCampaign(
   const quoted = linked.filter(
     (p) => !!p.quote || p.status !== 'quote' || !!params.quoteSentProjectIds?.has(p.id)
   ).length
-  const revenue = won.reduce((s, p) => s + (p.financials?.sumaNetto ?? 0), 0)
-  const profit = won.reduce((s, p) => s + (p.financials?.zysk ?? 0), 0)
+  const known = (p: Project) => moneyOf(p, params.money)
+  const revenue = won.reduce((s, p) => s + (known(p).revenue ?? 0), 0)
+  const profit = won.reduce((s, p) => s + (known(p).profit ?? 0), 0)
   const pipeline = linked
     .filter((p) => p.status === 'quote')
-    .reduce((s, p) => s + (p.financials?.sumaNetto ?? 0), 0)
+    .reduce((s, p) => s + (known(p).revenue ?? 0), 0)
 
   const dailyAverage = window && window.days > 0 ? spend / window.days : null
   const monthlySpend = dailyAverage !== null ? dailyAverage * AVG_DAYS_PER_MONTH : null
@@ -386,8 +394,9 @@ export interface OriginRow {
  * Projekty pogrupowane po pochodzeniu klienta. `year` = rok daty księgowej
  * projektu; `null` = cały czas. Wiersze z listy pochodzeń są zawsze (także
  * puste — widać, czego brakuje), nieznane klucze po nich, „nie ustalono" na końcu.
+ * Kwoty z pętli pieniędzy (`money`, U1); bez mapy — plan z `financials`.
  */
-export function originBreakdown(projects: Project[], year: number | null): OriginRow[] {
+export function originBreakdown(projects: Project[], year: number | null, money?: MoneyById | null): OriginRow[] {
   const rows = new Map<string, OriginRow>()
   const row = (key: string): OriginRow => {
     let existing = rows.get(key)
@@ -416,10 +425,10 @@ export function originBreakdown(projects: Project[], year: number | null): Origi
       r.projectIds.push(p.id)
       if (countsTowardRevenue(p.status)) {
         r.won += 1
-        r.revenue += p.financials?.sumaNetto ?? 0
-        r.profit += p.financials?.zysk ?? 0
+        r.revenue += moneyOf(p, money).revenue ?? 0
+        r.profit += moneyOf(p, money).profit ?? 0
       } else if (p.status === 'quote') {
-        r.pipeline += p.financials?.sumaNetto ?? 0
+        r.pipeline += moneyOf(p, money).revenue ?? 0
       }
     })
 

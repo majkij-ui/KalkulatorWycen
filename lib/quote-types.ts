@@ -245,6 +245,26 @@ export function createProfitCustomItem(section: ProfitSectionKey): ProfitCustomI
   }
 }
 
+/**
+ * U1: zatwierdzona cena zapisana w wycenie WYBRANEGO wariantu (jak kwota
+ * przelewu). Kwota w zł netto; EUR pamięta swoją kwotę i kurs do podpisu.
+ */
+export interface ApprovedPriceRecord {
+  /** Zł netto. */
+  pln: number
+  /**
+   * `pdf` / `calculator` — zamrożona suma PDF (albo kalkulatora, gdy wycena nie
+   * ma szkicu PDF); `typed` — wpisana ręcznie w zakładce Finanse projektu.
+   */
+  source: 'pdf' | 'calculator' | 'typed'
+  /** Kiedy zamrożono albo wpisano (ISO). */
+  at: string
+  /** Kwota w walucie dokumentu (tylko EUR, do podpisu „1 460 € × 4,3661"). */
+  amount?: number
+  currency?: 'PLN' | 'EUR'
+  rate?: number | null
+}
+
 export interface QuoteData {
   /** Nazwa klienta (edytowalna w zakładce "Podgląd i PDF") */
   clientName: string
@@ -324,6 +344,12 @@ export interface QuoteData {
    * `null` = śledź automatycznie sumę netto z kalkulatora; liczba = ręczne nadpisanie.
    */
   profitTransferAmount: number | null
+  /**
+   * U1 (decyzja 18.3/4): zatwierdzona cena — zamrożona przy przyjęciu zlecenia
+   * albo wpisana ręcznie w Finansach projektu. Brak = cena idzie za PDF (albo
+   * kalkulatorem bez szkicu PDF). Czytaj przez `approvedPriceRecord` / `planRevenue`.
+   */
+  approvedPrice?: ApprovedPriceRecord | null
   /** Cena paliwa (zł/l) do wyliczenia realnego kosztu dojazdu. */
   profitFuelPricePerLiter: number
   /** Średnie spalanie (l/100 km) do wyliczenia realnego kosztu dojazdu. */

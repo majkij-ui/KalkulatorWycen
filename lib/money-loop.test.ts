@@ -99,7 +99,11 @@ test('3. dodatek na tej samej fakturze: oczekiwany = plan + dodatek, faktura go 
   assert.equal(m.expected, 11_500)
   assert.equal(m.revenue, 11_500)
   assert.equal(m.revenueBasis, 'invoices')
-  assert.deepEqual(m.extras, [{ day: '2026-09-10', what: 'surówka (materiał źródłowy)', amount: 1_500, number: '3/09' }])
+  assert.deepEqual(
+    m.extras.map(({ id: _id, ...x }) => x),
+    [{ day: '2026-09-10', what: 'surówka (materiał źródłowy)', amount: 1_500, number: '3/09' }]
+  )
+  assert.ok(m.extras[0].id, 'U1: id wydarzenia do edycji w Finansach')
 })
 
 test('4. dodatek na osobnej, późniejszej fakturze: każda faktura w swoim miesiącu, koszty zostają w kotwicy', () => {

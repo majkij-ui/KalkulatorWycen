@@ -503,7 +503,7 @@ test('marketing: wydatek i leady z okresu osobno, od startu do dziś osobno; zle
   assert.match(marketing.tables[1].caption ?? '', /W okresie/)
 })
 
-test('marketing: szacunek z budżetu i przychód z planu ≠ faktura trafiają do „Do wyjaśnienia", nie są rozstrzygane', () => {
+test('marketing: szacunek z budżetu trafia do „Do wyjaśnienia"; przychód zleceń z pętli pieniędzy (U1), jak w Finansach', () => {
   const data = input({
     campaigns: [campaign()],
     projects: [project('won', { date: '2026-08-10', financials: financials(10_000, 0) })],
@@ -520,11 +520,10 @@ test('marketing: szacunek z budżetu i przychód z planu ≠ faktura trafiają d
   assert.ok(report.marketing.campaignSpend > 0)
   const spend = report.notes.find((n) => n.code === 'marketing_spend')!
   assert.equal(spend.kind, 'disagreement')
-  const revenue = report.notes.find((n) => n.code === 'marketing_revenue')!
-  assert.equal(revenue.kind, 'disagreement')
-  assert.match(revenue.text, /plan 10 000 zł, pętla pieniędzy 12 000 zł/)
-  // Raport pokazuje liczbę Marketingu (plan) bez poprawiania jej.
-  near(report.marketing.campaigns[0].inPeriod.revenue, 10_000)
+  // U1: Marketing liczy faktury i dosprzedaż jak Finanse — nie ma już rozjazdu do wyjaśnienia.
+  assert.ok(!report.notes.some((n) => n.code === 'marketing_revenue'))
+  near(report.marketing.campaigns[0].inPeriod.revenue, 12_000)
+  near(report.marketing.campaigns[0].toDate.revenue, 12_000)
   assert.equal(noteLines(report)[0].kind, 'disagreement', 'rozjazdy modułów najpierw')
 })
 
@@ -862,4 +861,44 @@ test('marketing bez kampanii w kosztach firmy, a nie w Marketingu, to rozjazd �
   const note = report.notes.find((n) => n.code === 'marketing_spend')!
   assert.equal(note.kind, 'disagreement')
   assert.match(note.text, /marketing w kosztach firmy 400 zł/)
+})
+
+// ── U1: EBBT i dosprzedaż w raporcie ─────────────────────────────────────────
+
+test('U1: wiersz „EBBT" = W1 − ryczałt − ZUS (ten sam w obu widokach), tuż przed W2; definicja z polem do optymalizacji', () => {
+  const data = input({
+    projects: [project('a', { date: '2026-08-10' }), project('b', { date: '2026-09-10' })],
+    fixedCosts: [fixed('2026-08', 1_000, { type: 'zus', category: 'zus' }), fixed('2026-09', 500, { category: 'software' })],
+    equipment: [gearItem('cam', 36_000, '2026-07-01')],
+  })
+  const spread = buildPeriodReport(data, Q(2026, 3))
+  const cash = buildPeriodReport({ ...data, spread: false }, Q(2026, 3))
+  const ebbt = metric(spread, 'ebbt')
+  near(ebbt.value, 20_000 - 4_000 - 1_700 - 1_000)
+  near(metric(cash, 'ebbt').value, ebbt.value, 'ten sam w obu widokach')
+  assert.ok(metric(spread, 'result').value !== metric(cash, 'result').value, 'W2 zależy od widoku sprzętu')
+  assert.equal(ebbt.group, 'layer2')
+  assert.equal(spread.metrics.findIndex((m) => m.key === 'ebbt') + 1, spread.metrics.findIndex((m) => m.key === 'result'))
+  near(ebbt.pctOfRevenue, (ebbt.value / 20_000) * 100)
+  assert.match(spread.definitions.find((d) => d.key === 'ebbt')!.text, /pole do optymalizacji/)
+  assert.match(reportToMarkdown(spread), /\| EBBT \(W1 − ryczałt − ZUS\) \|/)
+})
+
+test('U1: wiersz „w tym dosprzedaż" — dosprzedaż projektów zakotwiczonych w okresie; `extra.extraSales` projektu', () => {
+  const data = input({
+    projects: [project('a', { date: '2026-08-10' }), project('b', { date: '2026-09-10' }), project('c', { date: '2026-05-10' })],
+    events: [
+      event('a', 'extra_sale', '2026-08-20', { amountNetto: 1_500, category: 'surowe materiały', phase: 'after' }),
+      // c: projekt z maja (kotwica w Q2) — dosprzedaż z sierpnia leży w jego kotwicy, nie w Q3.
+      event('c', 'extra_sale', '2026-08-25', { amountNetto: 900 }),
+    ],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  const row = metric(report, 'extraSales')
+  near(row.value, 1_500)
+  near(row.pctOfRevenue, (1_500 / 21_500) * 100)
+  assert.equal(report.metrics.findIndex((m) => m.key === 'extraSales'), report.metrics.findIndex((m) => m.key === 'revenue') + 1)
+  near(report.projects.find((p) => p.id === 'a')!.extra.extraSales, 1_500)
+  near(report.projects.find((p) => p.id === 'b')!.extra.extraSales, 0)
+  assert.ok(report.definitions.some((d) => d.key === 'extraSales'))
 })

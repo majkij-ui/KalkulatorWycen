@@ -12,6 +12,7 @@
 
 import { clientKey } from './clients'
 import { isGroupScope, scopeKeys, type ClientGroup } from './client-groups'
+import type { ProjectMoney } from './money-loop'
 import { PROJECT_FILTERS, matchesFilter, toYear, type Project, type ProjectFilter } from './project-types'
 
 export interface ProjectListQuery {
@@ -64,6 +65,38 @@ export function projectYears(projects: Pick<Project, 'date'>[]): number[] {
     if (year !== null) years.add(year)
   })
   return [...years].sort((a, b) => b - a)
+}
+
+// ── Kwota w wierszu (U1, U-LISTA) ────────────────────────────────────────────
+
+/**
+ * Kwoty wiersza listy: najlepsza wiedza z pętli pieniędzy (`projectMoney`) —
+ * ta sama co w zakładce Finanse projektu i w Finansach firmy (faktury, cena z
+ * dosprzedażą, koszty z Realizacji), NIGDY zamrożony plan `financials` wprost.
+ * `revenue: null` = nic nie wiadomo: „nie policzono" (jest wycena) albo
+ * „brak wyceny".
+ */
+export interface ListMoney {
+  revenue: number | null
+  /** Zysk netto (po kosztach zewnętrznych i ryczałcie) = „Marża" z Finansów projektu. */
+  profit: number | null
+  /** Podpis zamiast kwoty, gdy `revenue` jest `null`. */
+  missing: 'nie policzono' | 'brak wyceny' | null
+  /** Przychód z faktur / wpłat (fakt), a nie z ceny. */
+  fromInvoices: boolean
+}
+
+export function listMoney(
+  project: Pick<Project, 'quote'>,
+  money: Pick<ProjectMoney, 'revenue' | 'profit' | 'revenueBasis'> | null | undefined
+): ListMoney {
+  const revenue = money?.revenue ?? null
+  return {
+    revenue,
+    profit: revenue === null ? null : (money?.profit ?? null),
+    missing: revenue !== null ? null : project.quote ? 'nie policzono' : 'brak wyceny',
+    fromInvoices: revenue !== null && money?.revenueBasis === 'invoices',
+  }
 }
 
 // ── Zapamiętany wybór ────────────────────────────────────────────────────────

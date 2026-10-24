@@ -404,3 +404,48 @@ test('dodatkowa faktura w następnym roku: przychód w tym roku, koszty zostają
   assert.equal(r.margin, 1_000)
   assert.equal(row(marginSummary(input(projects, { events }), YEAR(2026)), 'a').margin, 8_000)
 })
+
+// ── U1: EBBT (plan §17.2) ────────────────────────────────────────────────────
+
+test('U1 EBBT = W1 − ryczałt − ZUS; taki sam w obu widokach sprzętu; EBBT − wynik = sprzęt + stałe + marketing', () => {
+  const projects = [project('a'), project('b', { date: '2026-08-01', financials: financials(30_000, 5_000) })]
+  const fixedCosts = [
+    fixed('zus', '2026-03', 1_600, { type: 'zus', category: 'zus' }),
+    fixed('adobe', '2026-04', 300, { category: 'software' }),
+    fixed('ads', '2026-05', 700, { type: 'marketing', category: 'marketing' }),
+  ]
+  const equipment = [gear('komodo', 36_000, '2026-01-15')]
+  const spread = marginSummary(input(projects, { fixedCosts, equipment, spread: true }), YEAR(2026))
+  const cash = marginSummary(input(projects, { fixedCosts, equipment, spread: false }), YEAR(2026))
+  const w1 = 40_000 - 7_000
+  const tax = 40_000 * 0.085
+  near(spread.totals.ebbt, w1 - tax - 1_600)
+  near(cash.totals.ebbt, spread.totals.ebbt!, 'ten sam w obu widokach')
+  near(spread.totals.ebbt! - spread.totals.result!, 300 + 700 + spread.company.gear, 'pole do optymalizacji (rozłożony)')
+  near(cash.totals.ebbt! - cash.totals.result!, 300 + 700 + 36_000, 'pole do optymalizacji (w całości)')
+  assert.ok(spread.company.gear < 36_000, 'rozłożony sprzęt jest mniejszy, a EBBT ten sam')
+})
+
+test('U1 EBBT z filtrem klienta: w roku = W1 − podatek − udział w ZUS; poza rokiem — tylko cała firma', () => {
+  const projects = [project('a', { client: 'A' }), project('b', { client: 'B', financials: financials(30_000, 5_000) })]
+  const fixedCosts = [fixed('zus', '2026-05', 2_000, { type: 'zus', category: 'zus' })]
+  const year = marginSummary(input(projects, { fixedCosts, scope: new Set(['a']) }), YEAR(2026))
+  near(year.scoped!.ebbt, 10_000 - 2_000 - 850 - 0.25 * 2_000)
+  near(row(year, 'a').ebbt, 10_000 - 2_000 - 850 - 0.25 * 2_000)
+  near(year.totals.ebbt, 40_000 - 7_000 - 3_400 - 2_000)
+  const month = marginSummary(input(projects, { fixedCosts, scope: new Set(['a']) }), MONTH(2026, 5))
+  assert.equal(month.scoped!.ebbt, null)
+  near(month.totals.ebbt, 40_000 - 7_000 - 3_400 - 2_000)
+  assert.equal(row(month, 'a').ebbt, null)
+})
+
+test('U1 EBBT roku bez przychodu: −ZUS; projekty bez przychodu nie niosą udziału', () => {
+  const s = marginSummary(input([], { fixedCosts: [fixed('zus', '2026-05', 1_000, { type: 'zus', category: 'zus' })] }), YEAR(2026))
+  near(s.totals.ebbt, -1_000)
+  const zero = marginSummary(
+    input([project('a', { financials: financials(0, 500) })], { fixedCosts: [fixed('zus', '2026-05', 1_000, { type: 'zus', category: 'zus' })] }),
+    YEAR(2026)
+  )
+  near(row(zero, 'a').ebbt, -500, 'bez przychodu: W1 − podatek, bez udziału w ZUS')
+  near(zero.totals.ebbt, -1_500)
+})

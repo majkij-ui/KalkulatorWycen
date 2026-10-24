@@ -468,9 +468,11 @@ export const projectFinancialsSchema = z.object({
   /**
    * R2: skąd `sumaNetto` — `transfer` = kwota przelewu wpisana ręcznie (zawiera
    * dosprzedaż), `pdf` = suma PDF wybranego wariantu, `calculator` = kalkulator
-   * (wycena bez szkicu PDF). Brak = plan sprzed R2 (kwota jak dotąd + dosprzedaż).
+   * (wycena bez szkicu PDF), U1: `approved` = zatwierdzona cena (zamrożona albo
+   * wpisana w Finansach). Brak = plan sprzed R2 (kwota jak dotąd + dosprzedaż).
+   * Starsza wersja czyta `approved` jako brak — liczy wtedy jak dawniej (cena + dosprzedaż).
    */
-  revenueSource: z.enum(['transfer', 'pdf', 'calculator']).optional().catch(undefined),
+  revenueSource: z.enum(['transfer', 'approved', 'pdf', 'calculator']).optional().catch(undefined),
 })
 export type ProjectFinancials = z.infer<typeof projectFinancialsSchema>
 
