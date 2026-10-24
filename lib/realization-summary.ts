@@ -75,6 +75,14 @@ export function reconcile(
   }
 }
 
+/** Kwota wpisana po polsku, także ujemna („−100", „-1 200,50"); `null` = puste albo nieczytelne. */
+export function parseSignedAmount(text: string): number | null {
+  const normalized = text.replace(/\s/g, '').replace(/[−–]/g, '-').replace(',', '.').replace(/zł$/i, '')
+  if (!normalized || normalized === '-') return null
+  const value = Number(normalized)
+  return Number.isFinite(value) ? value : null
+}
+
 /** Druga linia bilansu tylko wtedy, gdy kwota z Finansów różni się od ceny (o ≥ 0,50 zł). */
 export function differsFromPrice(price: number, other: number | null | undefined): other is number {
   return typeof other === 'number' && Number.isFinite(other) && Math.abs(other - price) >= 0.5

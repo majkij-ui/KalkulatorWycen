@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { differsFromPrice, quotedPrice, realizationTotals, reconcile } from './realization-summary'
+import { differsFromPrice, parseSignedAmount, quotedPrice, realizationTotals, reconcile } from './realization-summary'
 import { isPlainAmount, plainAmountPatch } from './realization-costs'
 import { costAmount } from './project-costs'
 import { projectSchema, type ProjectCost } from './project-types'
@@ -58,6 +58,15 @@ test('bilans = cena − (zewnętrzne + moja praca + sprzęt), przed podatkiem (J
   assert.equal(reconcile(26340, { external: 12425, own: 10100 }, 2400).balance, 1415, 'z dosprzedażą: na korzyść')
   assert.equal(reconcile(11980, { external: 6050, own: 3300 }, -100).balance, 2730, 'ujemny sprzęt podnosi bilans')
   assert.equal(reconcile(1000, { external: 0, own: 0 }, null).gearEarned, 0)
+})
+
+test('kwota „Sprzęt zarobił" wpisana ręcznie: po polsku, także ujemna', () => {
+  assert.equal(parseSignedAmount('1 200,50'), 1200.5)
+  assert.equal(parseSignedAmount('−100'), -100)
+  assert.equal(parseSignedAmount('-100 zł'), -100)
+  assert.equal(parseSignedAmount(''), null)
+  assert.equal(parseSignedAmount('-'), null)
+  assert.equal(parseSignedAmount('abc'), null)
 })
 
 test('druga linia tylko, gdy kwota z Finansów różni się od ceny', () => {

@@ -81,6 +81,11 @@ test('blok „Wynajem sprzętu": wiersz bez pozycji to wpisana kwota, pozycje po
   const legacy = rentalBlock([cost('wynajem', 1500, { planKey: 'pro:rentalSprzetu' }), cost('wynajem', 300, { label: 'Prompter' })], DAYS)
   assert.equal(legacy.typed, 1800, 'bez wpisanej kwoty: reszta + pozycje — nic się nie zmienia')
   assert.equal(legacy.total, 1800)
+
+  const described = rentalBlock([cost('wynajem', 300, { label: 'Prompter' }), cost('wynajem', 900, { label: '  wynajem SPRZETU ' })], DAYS)
+  assert.equal(described.rest?.label, '  wynajem SPRZETU ', 'opis „Wynajem sprzętu" (bez ogonków i wielkości liter) to reszta')
+  assert.equal(described.items[0].label, 'Prompter', 'własny opis to pozycja, nie reszta')
+  assert.equal(rentalBlock([cost('wynajem', 300, { label: 'Prompter' })], DAYS).rest, null)
 })
 
 test('wpisana kwota: tworzy „Wynajem sprzętu", a przy pozycjach trzyma resztę', () => {
@@ -137,6 +142,12 @@ test('pozycje najpierw wypełniają wpisaną kwotę, potem ją podnoszą (decyzj
   assert.equal(rentalBlock(costs, DAYS).restAmount, 1500)
   assert.equal(costs[0].rentalTotal, undefined, 'bez pozycji wiersz znowu = kwota')
   assert.equal(sum(costs), 1500)
+
+  // opis, dni, wypożyczalnia pozycji: reszta nietknięta (wiersz z planu nie dostaje „zmieniony")
+  const planRest = cost('wynajem', 1500, { planKey: 'pro:rentalSprzetu' })
+  const fx6 = cost('wynajem', 400, { rentalItemId: 'ri-fx6' })
+  const relabelled = rebalanceRental([planRest, fx6], [planRest, { ...fx6, vendor: 'CamCam', rentalDays: 2 }], DAYS)
+  assert.equal(relabelled[0], planRest)
 })
 
 test('bez wiersza „bez szczegółów" (albo odznaczonego) pozycje po prostu się sumują', () => {

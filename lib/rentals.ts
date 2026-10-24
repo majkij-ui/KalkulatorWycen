@@ -90,6 +90,19 @@ export interface RentalBlock {
   overTyped: number
 }
 
+/**
+ * Czy wiersz całego projektu może być „Wynajmem sprzętu" bez szczegółów: bez
+ * pozycji ze słownika i z wpisaną kwotą, z planu („Rental sprzętu") albo
+ * opisany „Wynajem sprzętu" / bez opisu. Wiersz z własnym opisem („Prompter")
+ * to pozycja, nie reszta.
+ */
+function isRestLine(cost: ProjectCost): boolean {
+  if (cost.rentalItemId) return false
+  if (cost.rentalTotal !== undefined || cost.planKey === 'pro:rentalSprzetu') return true
+  const label = rentalNameKey(cost.label)
+  return label === '' || label === rentalNameKey(RENTAL_LINE_LABEL)
+}
+
 function countedAmount(cost: ProjectCost): number {
   return countsAsRental(cost) ? costAmount(cost) : 0
 }
@@ -99,7 +112,7 @@ export function rentalBlock(costs: ProjectCost[], dayIds: Iterable<string>): Ren
   const rentals = liveCosts(costs).filter(isRental)
   const projectLevel = rentals.filter((c) => isProjectLevel(c, days))
   const dayLines = rentals.filter((c) => !isProjectLevel(c, days))
-  const candidates = projectLevel.filter((c) => !c.rentalItemId)
+  const candidates = projectLevel.filter(isRestLine)
   const rest = candidates.find((c) => c.rentalTotal !== undefined) ?? candidates[0] ?? null
   const items = projectLevel.filter((c) => c !== rest)
   const itemsTotal = items.reduce((sum, c) => sum + countedAmount(c), 0)
@@ -175,6 +188,9 @@ export function rebalanceRental(before: ProjectCost[], after: ProjectCost[], day
   if (!restNow || restNow.deletedAt || !countsAsRental(restNow)) return after
   const now = rentalBlock(after, ids)
   if (now.rest?.id !== restNow.id) return after
+  // Opis, dni, wypożyczalnia — pozycje kosztują tyle samo, reszty nie ruszamy
+  // (wiersz z planu nie dostaje znacznika „zmieniony" bez powodu).
+  if (Math.abs(now.itemsTotal - was.itemsTotal) < 1e-9) return after
   const patch = restFields(was.typed, now.itemsTotal)
   return after.map((c) => (c.id === restNow.id ? patchRest(c, patch) : c))
 }
