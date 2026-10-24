@@ -35,7 +35,7 @@ import {
 } from './quote-financials'
 import { blankQuoteSnapshot, isBlankQuoteData } from './project-save'
 import { addVariantPatch, withMarginLine } from './quote-variants'
-import { snapshotGearRevenue } from './gear-revenue'
+import { pdfGearRow } from './gear-earnings'
 import { switchQuoteCurrency } from './quote-currency'
 import { createQuoteCrewLine } from './quote-crew'
 import { DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
@@ -211,10 +211,10 @@ test('plan kosztów i finanse: flaga niczego nie zmienia poza wyglądem', () => 
 test('przychód ze sprzętu (stare pola) w nowej wycenie bez marży — marża nie jest sprzętem', () => {
   const day = { ...createDefaultShootingDay(), id: 'd1', kameraSony: 1 }
   const data = mergeQuoteDataPartial({ isDetailedProdukcja: true, detailedShootingDays: [day] })
-  const old = snapshotGearRevenue({ data, pricingConfig: PRICING, marginMultiplier: 1.2 })!
-  const lined = snapshotGearRevenue({ data: { ...data, marginAsLine: true }, pricingConfig: PRICING, marginMultiplier: 1.2 })!
-  near(old.charged, PRICING.produkcja.kameraSonyMirrorless * 1.2)
-  near(lined.charged, PRICING.produkcja.kameraSonyMirrorless)
+  const old = pdfGearRow({ data, pricingConfig: PRICING, marginMultiplier: 1.2 })!
+  const lined = pdfGearRow({ data: { ...data, marginAsLine: true }, pricingConfig: PRICING, marginMultiplier: 1.2 })!
+  near(old.pln, PRICING.produkcja.kameraSonyMirrorless * 1.2)
+  near(lined.pln, PRICING.produkcja.kameraSonyMirrorless)
 })
 
 // ── Szkice PDF ──────────────────────────────────────────────────────────────

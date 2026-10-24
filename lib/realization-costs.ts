@@ -496,3 +496,19 @@ export function layoutRealization(costs: ProjectCost[], dayIds: string[], quoteD
 
 /** Klucz pozycji ekipy z bazy w dniu wyceny (re-eksport dla testów i ekranów). */
 export { crewLineKey }
+
+// ── Dojazd jedną kwotą (U2, U-DOJAZD) ────────────────────────────────────────
+
+/**
+ * Dojazd (paliwo) to w Realizacji jedna kwota — domyślnie z wyceny, do
+ * poprawienia — a nie km × zł/km. Wiersz z planu zostaje zapisany tak, jak
+ * przyszedł (2 500 km × 0,52 zł), i pokazuje swoją kwotę (1 300 zł), więc nic
+ * się nie zmienia, dopóki kwoty nie poprawisz; poprawka zapisuje 1 × kwota.
+ */
+export function isPlainAmount(cost: Pick<ProjectCost, 'category'>): boolean {
+  return cost.category === 'dojazd'
+}
+
+export function plainAmountPatch(amount: number): Pick<ProjectCost, 'quantity' | 'unitCost'> {
+  return { quantity: 1, unitCost: Math.max(0, Number.isFinite(amount) ? amount : 0) }
+}

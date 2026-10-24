@@ -187,12 +187,12 @@ function MissingGearBanner({
       {open && (
         <div className="border-t border-amber-500/10 px-4 pb-3 pt-2">
           <p className="mb-2 text-xs text-zinc-400">
-            Otwórz projekt i zaznacz sprzęt w jego zakładce Realizacja. Kwota przy projekcie to zapłata klienta za
-            sprzęt wyceniony po staremu, która czeka na przypisanie. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
+            Otwórz projekt i zaznacz sprzęt w jego zakładce Realizacja. Kwota przy projekcie to „zarobił" (wiersz Sprzęt z
+            PDF − wynajem), który czeka na pozycje ze stawką. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
             wyceny.
           </p>
           <ul className="flex flex-col gap-1">
-            {missing.map(({ project, revenue }) => (
+            {missing.map(({ project, earnings }) => (
               <li key={project.id}>
                 <button
                   type="button"
@@ -206,13 +206,13 @@ function MissingGearBanner({
                     {project.client && <span className="text-zinc-500"> · {project.client}</span>}
                   </span>
                   <span className="shrink-0 text-xs tabular-nums text-zinc-400">
-                    {revenue === null
+                    {earnings.earned === null
                       ? 'brak wyceny'
-                      : revenue.unitemized > 0
-                        ? `za sprzęt ${pln(revenue.unitemized)}`
-                        : revenue.itemized > 0
-                          ? 'sprzęt z katalogu w wycenie'
-                          : 'bez sprzętu w wycenie'}
+                      : Math.abs(earnings.unassigned) > 0.5
+                        ? `zarobił ${pln(earnings.unassigned)} — czeka`
+                        : earnings.source === 'quote'
+                          ? 'podzielone wg sprzętu z wyceny'
+                          : 'bez kwoty za sprzęt'}
                   </span>
                   {onOpenProject && (
                     <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />

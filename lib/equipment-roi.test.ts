@@ -189,16 +189,22 @@ test('dorentalowany sprzęt (koszt w zakładce Profit) nie trafia do własnego',
   assert.equal(roi.clientPaid, 1800, '3000 naliczone − 1200 zapłacone rentalowi')
 })
 
-test('bez stawek rentalowych zapłata dzieli się po sztuko-dniach', () => {
+test('U2: pozycje bez stawki rentalowej nic nie dostają; bez żadnej stawki kwota jest nieprzypisana', () => {
   const a = item('a', 'Statyw', 0, 0, { category: 'stabilizacja' })
   const b = item('b', 'Monitor', 0, 0, { category: 'podglad' })
-  const p = project('p1', 'done', {
-    quote: quickQuote(),
-    gearDays: [day('d1', [['a', 2], ['b', 1]])],
-  })
-  const report = computeGearReport([a, b], [p], { now: NOW })
-  assert.equal(roiOf(report, 'a').clientPaid, 2000)
-  assert.equal(roiOf(report, 'b').clientPaid, 1000)
+  const c = item('c', 'FX3', 20000, 500)
+  const none = project('p1', 'done', { quote: quickQuote(), gearDays: [day('d1', [['a', 2], ['b', 1]])] })
+  const report = computeGearReport([a, b, c], [none], { now: NOW })
+  assert.equal(roiOf(report, 'a').clientPaid, 0)
+  assert.equal(roiOf(report, 'b').clientPaid, 0)
+  assert.equal(report.totals.unassignedClientPaid, 3000)
+  assert.deepEqual(summarizeProjectGear(none, [a, b]).earnings.noRate.map((i) => i.id), ['b', 'a'], '„bez stawki", po nazwie')
+
+  const mixed = project('p2', 'done', { quote: quickQuote(), gearDays: [day('d1', [['a', 2], ['c', 1]])] })
+  const withRate = computeGearReport([a, c], [mixed], { now: NOW })
+  assert.equal(roiOf(withRate, 'c').clientPaid, 3000, 'cała kwota idzie do pozycji ze stawką')
+  assert.equal(roiOf(withRate, 'a').clientPaid, 0)
+  assert.equal(withRate.totals.unassignedClientPaid, 0)
 })
 
 test('zapłata bez zaznaczonego sprzętu jest „nieprzypisana", a projekt trafia na listę do uzupełnienia', () => {
@@ -213,8 +219,9 @@ test('zapłata bez zaznaczonego sprzętu jest „nieprzypisana", a projekt trafi
     ['p-retro', 'p-q'],
     'od najnowszego'
   )
-  assert.equal(report.missingGear[0].revenue, null, 'retro bez wyceny: kwota nieznana')
-  assert.equal(report.missingGear[1].revenue?.ownGear, 3000)
+  assert.equal(report.missingGear[0].earnings.earned, null, 'retro bez wyceny: kwota nieznana')
+  assert.equal(report.missingGear[1].earnings.earned, 3000)
+  assert.equal(report.missingGear[1].earnings.unassigned, 3000)
 })
 
 test('pozycja usunięta z katalogu nie zabiera zapłaty pozostałym', () => {
@@ -297,7 +304,7 @@ test('podsumowanie projektu: wartość per dzień, także dla wyceny', () => {
     { dayId: 'd2', rentValue: 500 },
   ])
   assert.equal(summary.rentValue, 1450)
-  assert.equal(summary.revenue, null, 'brak wyceny → nie wiadomo, ile zapłacono')
+  assert.equal(summary.earnings.earned, null, 'brak wyceny → nie wiadomo, ile zapłacono')
 })
 
 test('historia pozycji: tylko zrealizowane projekty, od najnowszego użycia', () => {
@@ -353,7 +360,7 @@ function catalogQuote(gear: { itemId: string; name: string; rate: number; qty: n
   } as unknown as Project['quote']
 }
 
-test('pozycja wyceniona z katalogu zarabia dokładnie, także bez zaznaczenia w Realizacji', () => {
+test('U2: bez siatki w Realizacji — sprzęt z dni wyceny, stawka × dni (gratis też był na planie)', () => {
   const camera = item('c1', 'FX3', 20000, 400)
   const light = item('l1', 'Amaran', 900, 60, { category: 'swiatlo', quantity: 2 })
   const p = project('p1', 'done', {
@@ -365,34 +372,34 @@ test('pozycja wyceniona z katalogu zarabia dokładnie, także bez zaznaczenia w 
   const report = computeGearReport([camera, light], [p], { now: NOW })
   const summary = summarizeProjectGear(p, [camera, light])
 
-  assert.equal(roiOf(report, 'c1').clientPaid, 400)
+  // Wiersz Sprzęt kalkulatora: FX3 400 (Amaran gratis) → 400 zł; wagi 400 i 2 × 60.
+  assert.equal(summary.earnings.source, 'quote')
+  assert.equal(summary.earnings.earned, 400)
+  near(roiOf(report, 'c1').clientPaid, (400 * 400) / 520)
+  near(roiOf(report, 'l1').clientPaid, (400 * 120) / 520)
   assert.equal(roiOf(report, 'c1').rentValue, 0, 'odpracował liczy się z dni Realizacji')
-  assert.equal(roiOf(report, 'l1').clientPaid, 0, 'gratis')
-  assert.equal(summary.clientPaidExact, true)
   assert.equal(report.totals.unassignedClientPaid, 0)
 })
 
-test('wycena mieszana: pozycje katalogu dokładnie, stary sprzęt rozłożony na użyte', () => {
+test('U2: siatka wygrywa ze sprzętem z wyceny; stary sprzęt w wycenie to część wiersza Sprzęt', () => {
   const camera = item('c1', 'FX3', 20000, 400)
   const light = item('l1', 'Aputure', 3000, 200, { category: 'swiatlo' })
   const p = project('p1', 'done', {
     quote: catalogQuote([{ itemId: 'c1', name: 'FX3', rate: 400, qty: 1 }], {}),
     gearDays: [day('d1', [['c1', 1], ['l1', 1]])],
   })
-  // stary sprzęt w tym samym dniu wyceny: światło „standard"
   ;(p.quote as unknown as { data: { detailedShootingDays: { swiatlo: string }[] } }).data.detailedShootingDays[0].swiatlo = 'standard'
   const legacy = DEFAULT_PRICING.produkcja.swiatloStandard
   const summary = summarizeProjectGear(p, [camera, light])
   const paid = (id: string) => summary.items.find((u) => u.itemId === id)?.clientPaid ?? 0
 
-  // reszta (stare światło) dzieli się 400:200 po wartości rentalowej użytych pozycji
-  assert.equal(paid('c1'), 400 + (legacy * 400) / 600)
-  assert.equal(paid('l1'), (legacy * 200) / 600)
-  assert.equal(summary.clientPaidExact, false, 'część to szacunek')
-  assert.equal(summary.clientPaidAssigned, 400 + legacy)
+  assert.equal(summary.earnings.source, 'grid')
+  near(paid('c1'), ((400 + legacy) * 400) / 600)
+  near(paid('l1'), ((400 + legacy) * 200) / 600)
+  near(summary.earnings.assigned, 400 + legacy)
 })
 
-test('pozycja usunięta z katalogu: jej zapłata zostaje nieprzypisana', () => {
+test('U2: pozycja usunięta z katalogu nic nie dostaje — jej część idzie do pozostałych', () => {
   const camera = item('c1', 'FX3', 20000, 400)
   const p = project('p1', 'won', {
     quote: catalogQuote([
@@ -401,6 +408,10 @@ test('pozycja usunięta z katalogu: jej zapłata zostaje nieprzypisana', () => {
     ]),
   })
   const report = computeGearReport([camera], [p], { now: NOW })
-  assert.equal(roiOf(report, 'c1').clientPaid, 400)
-  assert.equal(report.totals.unassignedClientPaid, 150)
+  assert.equal(roiOf(report, 'c1').clientPaid, 550)
+  assert.equal(report.totals.unassignedClientPaid, 0)
 })
+
+function near(actual: number, expected: number) {
+  assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} ≠ ${expected}`)
+}

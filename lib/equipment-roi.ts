@@ -6,10 +6,10 @@
  *  - `rentValue` — ODPRACOWAŁ: ile kosztowałby mnie rental za każdy dzień, w
  *    którym sprzęt pojechał na plan (sztuki × dni × stawka rentalowa). To
  *    wartość dla MNIE, także gdy klient za ten sprzęt nie zapłacił.
- *  - `clientPaid` — ZAROBIŁ: ile realnie zapłacili za niego klienci. Kwota za
- *    sprzęt z wyceny projektu (`gear-revenue.ts`) rozłożona na użyte pozycje
- *    proporcjonalnie do `rentValue`. Do czasu wyceny pozycja po pozycji (G5)
- *    to szacunek.
+ *  - `clientPaid` — ZAROBIŁ (U2, decyzje 2026-10-24): wiersz „Sprzęt" z PDF −
+ *    wynajem z Realizacji (albo kwota wpisana w projekcie), rozdzielony na
+ *    pozycje stawka × dni (`gear-earnings.ts`). Może być ujemny, gdy wynajem
+ *    przekroczył wiersz Sprzęt.
  *
  * Liczymy TYLKO projekty wliczane do wyników (won/done) — wycena, która nie
  * weszła, niczego nie odpracowała. Obie liczby to nie przychód firmy: nie
@@ -18,10 +18,12 @@
  */
 
 import { daysBetween } from './calendar-layout'
-import { projectGearRevenue, type GearRevenue } from './gear-revenue'
+import { gearEarnings, type GearEarnings } from './gear-earnings'
 import { isOnSet, onSetItems } from './gear-backstage'
 import { gearDayDate, hasGearLogged, projectGearDays } from './gear-usage'
 import { gearDaysWithCalendarDates } from './realization-days'
+import { realizationLines } from './rentals'
+import type { FinancialsSource } from './quote-financials'
 import type { TimelineEvent } from './event-types'
 import {
   countsTowardRevenue,
@@ -52,12 +54,8 @@ export interface ProjectGearSummary {
   /** Wartość rentalowa sprzętu w kolejnych dniach (kolejność jak `projectGearDays`). */
   perDay: { dayId: string; rentValue: number }[]
   rentValue: number
-  /** `null` = projekt bez wyceny — nie wiadomo, ile zapłacono za sprzęt. */
-  revenue: GearRevenue | null
-  /** Ile z `revenue.ownGear` przypisano pozycjom (0, gdy nie ma czego obciążyć). */
-  clientPaidAssigned: number
-  /** Cała zapłata za sprzęt pochodzi z pozycji katalogu w wycenie — bez szacunku. */
-  clientPaidExact: boolean
+  /** Ile zarobił sprzęt i jak się dzieli (`gear-earnings.ts`); `earned: null` = projekt bez wyceny. */
+  earnings: GearEarnings
 }
 
 /**
@@ -121,54 +119,39 @@ export function summarizeProjectGear(
     return { dayId: day.id, rentValue: dayValue }
   })
 
-  const revenue = projectGearRevenue(project)
-
-  // Zapłata za pozycje wycenione z katalogu (G5) jest DOKŁADNA i należy do
-  // pozycji także wtedy, gdy nie zaznaczono jej w Realizacji — klient za nią
-  // zapłacił. Pozycja usunięta z katalogu zostaje nieprzypisana.
-  let clientPaidAssigned = 0
-  revenue?.byItem.forEach((amount, itemId) => {
-    const item = byId.get(itemId)
-    if (!item) return
-    const use = uses.get(itemId) ?? {
-      itemId,
-      item,
+  // U2: ile zarobił sprzęt = wiersz Sprzęt z PDF − wynajem z Realizacji (albo
+  // kwota wpisana w projekcie), podzielone stawka × dni między pozycje z
+  // siatki, a bez siatki — z dni wyceny. Pozycja z wyceny, której nie ma w
+  // siatce, dostaje udział tylko wtedy, gdy siatka jest pusta.
+  const earnings = gearEarnings({
+    quote: project.quote as FinancialsSource | null,
+    costs: realizationLines(project),
+    gearDays: days,
+    catalog: byId,
+    override: project.gearEarnedOverride,
+  })
+  earnings.shares.forEach((share) => {
+    const use = uses.get(share.itemId) ?? {
+      itemId: share.itemId,
+      item: share.item,
       daysUsed: 0,
       unitDays: 0,
       rentValue: 0,
       clientPaid: 0,
       dates: [],
     }
-    use.clientPaid += amount
-    uses.set(itemId, use)
-    clientPaidAssigned += amount
+    use.clientPaid += share.earned
+    uses.set(share.itemId, use)
   })
 
   const items = [...uses.values()]
   items.forEach((use) => use.dates.sort())
 
-  // Sprzęt wyceniony po staremu: kwota bez pozycji, rozkładana na sprzęt
-  // użyty w dniach — wagą jest wartość rentalowa, a gdy wszystkie stawki są
-  // puste, sztuko-dni. Pozycje spoza katalogu nic nie dostają.
-  const unitemized = revenue?.unitemized ?? 0
-  const used = items.filter((use) => use.item && use.unitDays > 0)
-  const byValue = used.reduce((sum, use) => sum + use.rentValue, 0)
-  const weightOf = (use: ProjectGearItemUse) => (byValue > 0 ? use.rentValue : use.unitDays)
-  const totalWeight = used.reduce((sum, use) => sum + weightOf(use), 0)
-  if (unitemized > 0 && totalWeight > 0) {
-    used.forEach((use) => {
-      use.clientPaid += (unitemized * weightOf(use)) / totalWeight
-    })
-    clientPaidAssigned += unitemized
-  }
-
   return {
     items,
     perDay,
     rentValue: perDay.reduce((sum, day) => sum + day.rentValue, 0),
-    revenue,
-    clientPaidAssigned,
-    clientPaidExact: !!revenue && revenue.itemized > 0 && revenue.unitemized === 0,
+    earnings,
   }
 }
 
@@ -186,7 +169,7 @@ export interface EquipmentRoi {
   unitDays: number
   /** Odpracował. */
   rentValue: number
-  /** Zarobił (szacunek do czasu G5). */
+  /** Zarobił (U2: wiersz Sprzęt − wynajem, podzielony stawka × dni; może być ujemny). */
   clientPaid: number
   /** `rentValue` / zainwestowane × 100; `null` bez ceny zakupu. */
   rentValuePct: number | null
@@ -216,8 +199,8 @@ export interface GearReportTotals {
   rentValue: number
   clientPaid: number
   /**
-   * Zapłata klientów za sprzęt w zrealizowanych projektach, w których nie
-   * zaznaczono żadnego sprzętu z katalogu — nie ma jej komu przypisać.
+   * „Zarobił" projektów, w których nie ma na kogo go podzielić (brak sprzętu
+   * w siatce i w wycenie albo same pozycje bez stawki).
    */
   unassignedClientPaid: number
   rentValuePct: number | null
@@ -232,7 +215,8 @@ export interface GearReportTotals {
 
 export interface MissingGearProject {
   project: Project
-  revenue: GearRevenue | null
+  /** Ile zarobił sprzęt w tym projekcie (czeka na pozycje). */
+  earnings: GearEarnings
 }
 
 export interface GearReport {
@@ -288,13 +272,9 @@ export function computeGearReport(
 
   projects.forEach((project) => {
     if (!countsTowardRevenue(project.status)) return
-    if (!hasGearLogged(project)) {
-      missingGear.push({ project, revenue: projectGearRevenue(project) })
-    }
     const summary = summarizeProjectGear(project, byId, { events: options.events })
-    if (summary.revenue) {
-      unassignedClientPaid += summary.revenue.ownGear - summary.clientPaidAssigned
-    }
+    if (!hasGearLogged(project)) missingGear.push({ project, earnings: summary.earnings })
+    unassignedClientPaid += summary.earnings.unassigned
     summary.items.forEach((use) => {
       if (!use.item) return
       const entry = acc.get(use.itemId) ?? {

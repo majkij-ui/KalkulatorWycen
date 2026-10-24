@@ -18,6 +18,7 @@ import { EQUIPMENT_FILE } from './equipment-catalog'
 import { GEAR_KITS_FILE } from './gear-kits'
 import { CREW_FILE, CREW_ROLES_FILE } from './crew-store'
 import { CLIENT_GROUPS_FILE } from './client-groups-store'
+import { RENTAL_ITEMS_FILE } from './rental-items-store'
 import { CALL_SHEETS_FILE } from './call-sheets-store'
 import { INBOX_DECISIONS_FILE } from './inbox-types'
 import { COMPANY_FILE } from './company-settings-core'
@@ -34,6 +35,7 @@ test('kopia obejmuje każdy plik danych huba', () => {
     CREW_FILE,
     CREW_ROLES_FILE,
     CLIENT_GROUPS_FILE,
+    RENTAL_ITEMS_FILE,
     CALL_SHEETS_FILE,
     INBOX_DECISIONS_FILE,
     COMPANY_FILE,

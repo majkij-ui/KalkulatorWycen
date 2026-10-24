@@ -18,7 +18,8 @@ import {
 } from './quote-currency'
 import { computeSnapshotFinancials, computeQuoteTotals, mergeQuoteDataPartial, quoteViews } from './quote-financials'
 import { planFromQuote, plannedCrew } from './realization-plan'
-import { snapshotGearRevenue } from './gear-revenue'
+import { gearEarnings, pdfGearRow } from './gear-earnings'
+import { realizationLines } from './rentals'
 import { DEFAULT_PRICING } from './pricing-config'
 import { formatCurrency } from './quote-calc'
 import type { QuoteData } from './quote-types'
@@ -245,7 +246,7 @@ test('wycena w EUR z kwotą przelewu: przelew (zł) zastępuje sumę × kurs, ja
   assert.equal(f.sumaNetto, 9000)
 })
 
-test('sprzęt w wycenie EUR: zapłata za pozycje z katalogu w zł po kursie, wypożyczalnia jako koszt w zł', () => {
+test('sprzęt w wycenie EUR: wiersz Sprzęt w zł po kursie, wypożyczalnia jako koszt w zł (U2)', () => {
   const snapshot = {
     data: {
       currency: 'EUR',
@@ -259,12 +260,17 @@ test('sprzęt w wycenie EUR: zapłata za pozycje z katalogu w zł po kursie, wyp
     pricingConfig: DEFAULT_PRICING,
     marginMultiplier: 1,
   }
-  const gear = snapshotGearRevenue(snapshot)!
-  // FX3: 400 zł → 100 €, rabat 50 % → 50 € → 200 zł. Wypożyczalnia 100 € → koszt 400 zł.
-  assert.equal(gear.byItem.get('fx3'), 200)
-  assert.equal(gear.charged, (50 + 100) * 4)
-  assert.equal(gear.rentedIn, 400)
-  assert.equal(gear.unitemized, 0)
+  // Bez szkicu PDF: wiersz Sprzęt kalkulatora. FX3: 400 zł → 100 €, rabat 50 % → 50 €; wypożyczalnia 100 €.
+  const row = pdfGearRow(snapshot)!
+  assert.deepEqual(row, { pln: (50 + 100) * 4, amount: 150, currency: 'EUR', rate: 4, source: 'calculator' })
+  // Realizacja jeszcze pusta: wynajem z planu (100 € → koszt 400 zł); zostaje 200 zł dla FX3.
+  const costs = realizationLines({ costs: [], quote: snapshot })
+  const fx3 = { id: 'fx3', name: 'FX3', category: 'kamery', purchasePrice: 0, rentalDayRate: 400, purchaseDate: '', notes: '' }
+  const earnings = gearEarnings({ quote: snapshot, costs, gearDays: [], catalog: new Map([['fx3', fx3]]) })
+  assert.equal(earnings.rentals, 400)
+  assert.equal(earnings.earned, 200)
+  assert.equal(earnings.source, 'quote')
+  assert.equal(earnings.shares[0].earned, 200)
 })
 
 test('etykiety: „zł" po polsku, „PLN" po angielsku, „€" w obu; zapis jak dotychczasowy w zł', () => {

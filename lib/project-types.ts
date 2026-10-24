@@ -313,7 +313,8 @@ export type CostCategory = (typeof COST_CATEGORIES)[number]
 
 export const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
   ekipa: 'Ekipa',
-  wynajem: 'Wynajem (sprzęt, studio, lokacja)',
+  // U2: tylko sprzęt (studio i lokacja to osobne koszty) — klucz bez zmian.
+  wynajem: 'Wynajem sprzętu',
   dojazd: 'Dojazd',
   catering: 'Catering',
   nocleg: 'Nocleg',
@@ -372,6 +373,22 @@ export const projectCostSchema = z
     ownWork: z.literal(true).optional().catch(undefined),
     /** R2: zmieniony ręcznie po przyjściu z planu — zmiany wyceny go nie ruszają. */
     edited: z.literal(true).optional().catch(undefined),
+    /**
+     * U2 (§17.1): wynajmowana pozycja ze słownika (`rental-items.json`) —
+     * tylko przy wierszach `wynajem`. Brak = wynajem bez szczegółów.
+     */
+    rentalItemId: z.string().min(1).optional().catch(undefined),
+    /** U2: ile dni trwał wynajem (opcjonalnie; wiersz dnia bez pola = 1 dzień). */
+    rentalDays: z.number().finite().positive().optional().catch(undefined),
+    /** U2: wypożyczalnia („CamCam"). */
+    vendor: z.string().optional().catch(undefined),
+    /**
+     * U2: wpisana kwota „Wynajem sprzętu" za cały projekt — tylko na wierszu
+     * „bez szczegółów". Pozycje z wynajmu najpierw wypełniają tę kwotę, potem
+     * ją podnoszą; wiersz trzyma resztę (`rentals.ts`), więc suma kosztów to
+     * zawsze suma wierszy.
+     */
+    rentalTotal: z.number().finite().nonnegative().optional().catch(undefined),
     createdAt: z.string().optional().catch(undefined),
     /** Miękkie usunięcie (ISO); „Cofnij" przywraca pozycje o tym samym znaczniku. */
     deletedAt: z.string().optional().catch(undefined),
@@ -574,6 +591,12 @@ export const projectSchema = z
      * wiersze). Brak przy wierszach = koszty wpisane przed R2, liczone jak dotąd.
      */
     costsFromQuoteAt: z.string().optional().catch(undefined),
+    /**
+     * U2 (decyzja 18.3/1): ile zarobił mój sprzęt w tym projekcie, wpisane
+     * ręcznie (np. wynajem w osobnym wierszu PDF). Brak = wiersz „Sprzęt" z PDF
+     * − wynajem z Realizacji (`gear-earnings.ts`). Może być ujemne.
+     */
+    gearEarnedOverride: z.number().finite().optional().catch(undefined),
     /** Wnioski / lessons learned z projektu. */
     notes: z.string().catch(''),
     /**
