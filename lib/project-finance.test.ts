@@ -182,6 +182,13 @@ test('U1 EUR (Tchibo Event): cena zamrożona w zł z kwotą i kursem; zmiana kur
   assert.equal(moved.money.revenue, 1460 * 4.3661, 'przychód z zatwierdzonej ceny, nie z nowego kursu')
 })
 
+test('U1 kwota wpisana przed U1 porównuje się z ZATWIERDZONĄ ceną + dosprzedażą, nie z PDF na żywo', () => {
+  const quote = live({ profitTransferAmount: 80440, approvedPrice: frozen(60000) }, pdf({ ekipa: 67800 }))
+  const view = projectFinanceView(project({ status: 'done' }), quote, [ev('extra_sale', '2026-10-01', { amountNetto: 400 })], TODAY)
+  assert.deepEqual(view.transfer, { typed: 80440, expected: 60400, gap: 20040 })
+  assert.equal(view.due, 60400)
+})
+
 test('U1 kwota przelewu wpisana przed U1 wygrywa z zatwierdzoną ceną (S-AI zamrożone 67 800)', () => {
   const view = projectFinanceView(project({ status: 'done' }), live({ profitTransferAmount: 80440, approvedPrice: frozen(67800) }, pdf({ ekipa: 43500, postprodukcja: 24300 })), [], TODAY)
   assert.equal(view.money.revenue, 80440)
@@ -229,6 +236,9 @@ test('U1 faktura bez kwoty (S-AI) bierze kwotę wpłaty; porównanie z kwotą wp
   const filled = [events[0], { ...events[1], data: { amount: 80440 } }]
   const after = projectFinanceView(project({ status: 'done' }), quote, filled, TODAY)
   assert.deepEqual([after.money.revenue, after.money.revenueBasis, after.received.base, after.received.gap], [80440, 'invoices', 80440, null])
+  assert.equal(after.received.invoiceDecides, false, 'faktura bez kwoty — decyduje wpłata')
+  const more = projectFinanceView(project({ status: 'done' }), quote, [events[0], { ...events[1], data: { amount: 81000 } }], TODAY)
+  assert.equal(more.received.gap, 560, 'wpłata ponad wpisaną kwotę — propozycja dosprzedaży')
   assert.equal(after.money.anchor, '2026-06-24', 'kotwica dalej w dacie faktury')
 })
 

@@ -42,7 +42,7 @@ import {
   type QuoteMoney,
 } from './quote-currency'
 import { PriceDisplayProvider } from './price-display'
-import { blankDoc, docFromSnapshot, docToSnapshot, type QuoteDoc } from './quote-documents'
+import { blankDoc, clearedDoc, docFromSnapshot, docToSnapshot, type QuoteDoc } from './quote-documents'
 import { hasAlternatives, listVariants, parseDocId } from './quote-variants'
 import type { QuoteSnapshot } from './quote-library'
 import { useProjectHub } from './project-hub-context'
@@ -144,28 +144,6 @@ interface QuoteContextValue {
 }
 
 const QuoteContext = createContext<QuoteContextValue | null>(null)
-
-/**
- * Wycena od zera z zachowaniem tego, dla kogo jest (klient i nazwa projektu na
- * PDF). Szkic PDF zostaje jak dawniej: jego teksty nie są częścią kalkulatora,
- * a ceny pokaże ostrzeżenie „Ceny w PDF różnią się".
- */
-function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): QuoteDoc {
-  return {
-    ...doc,
-    // Wycena od zera to nowa wycena: marża jako osobna pozycja (R1, A5).
-    data: {
-      ...defaultQuoteData,
-      clientName: doc.data.clientName,
-      projectName: doc.data.projectName,
-      marginAsLine: true,
-      // U1: cenę zatwierdził klient — wyczyszczenie kalkulatora jej nie rusza.
-      ...(doc.data.approvedPrice ? { approvedPrice: doc.data.approvedPrice } : {}),
-    },
-    pricingConfig,
-    marginMultiplier: 1,
-  }
-}
 
 /** Domyślny cennik użytkownika, odświeżany po „Zapisz stawki jako domyślne". */
 function useDefaultPricing(): PricingConfigShape | null {

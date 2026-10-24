@@ -67,6 +67,11 @@ test('U-LISTA: bez kwoty — „nie policzono" (jest wycena) / „brak wyceny"; 
   const retro = project('retro', { financials: financials(9180, 0) })
   const [money] = moneyLedger([retro], [ev('retro', 'invoice_sent', '2026-03-26', { amountNetto: 9180 })], TODAY)
   assert.deepEqual([listMoney(retro, money).revenue, listMoney(retro, money).fromInvoices], [9180, true])
+  // Faktura wyższa niż plan (zrealizowany): lista pokazuje fakturę, nie plan.
+  const higher = project('h', { financials: financials(10000, 0) })
+  const [h] = moneyLedger([higher], [ev('h', 'invoice_sent', '2026-08-01', { amountNetto: 12000 })], TODAY)
+  assert.equal(listMoney(higher, h).revenue, 12000)
+  assert.equal(h.expected, 10000)
 })
 
 const campaign = campaignSchema.parse({ id: 'c1', name: 'B2B', platform: 'google_ads', startDate: '2026-04-09', endDate: '2026-07-07', budgets: [{ from: '2026-04-09', daily: 75 }] })

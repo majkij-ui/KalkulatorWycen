@@ -102,6 +102,7 @@ test('zepsuty zapis ceny = brak (cena idzie za PDF); EUR pamięta kwotę i kurs'
     rate: 4.3661,
   })
   assert.deepEqual(approvedPriceRecord({ pln: 10, source: 'pdf', at: AT, currency: 'EUR' }), { pln: 10, source: 'pdf', at: AT }, 'EUR bez kwoty — tylko zł')
+  assert.deepEqual(approvedPriceRecord({ pln: 10, source: 'pdf', at: AT, amount: 5, rate: 4 }), { pln: 10, source: 'pdf', at: AT }, 'kwota bez EUR — tylko zł')
   const broken = revenueOf(snap({ approvedPrice: { pln: 'dużo' } as never }, pdf({ ekipa: 5000 })))
   assert.deepEqual([broken.source, broken.pln], ['pdf', 5000])
   assert.deepEqual(typedApprovedPrice(12500, AT), { pln: 12500, source: 'typed', at: AT })

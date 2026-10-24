@@ -900,5 +900,12 @@ test('U1: wiersz „w tym dosprzedaż" — dosprzedaż projektów zakotwiczonych
   assert.equal(report.metrics.findIndex((m) => m.key === 'extraSales'), report.metrics.findIndex((m) => m.key === 'revenue') + 1)
   near(report.projects.find((p) => p.id === 'a')!.extra.extraSales, 1_500)
   near(report.projects.find((p) => p.id === 'b')!.extra.extraSales, 0)
+  // Projekt zakotwiczony wcześniej, z fakturą w okresie: część przychodu tu, dosprzedaż w kotwicy.
+  const late = buildPeriodReport(
+    input({ projects: [project('d', { date: '2026-05-10' })], events: [invoice('d', '2026-05-12', 6_000), invoice('d', '2026-08-12', 4_000), event('d', 'extra_sale', '2026-05-20', { amountNetto: 700 })] }),
+    Q(2026, 3)
+  )
+  assert.equal(late.projects.find((p) => p.id === 'd')!.extra.extraSales, null)
+  near(metric(late, 'extraSales').value, 0)
   assert.ok(report.definitions.some((d) => d.key === 'extraSales'))
 })
