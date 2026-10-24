@@ -19,8 +19,12 @@
  *     wierszy = wynik roku.
  *  - MARŻA PRODUCENCKA (R2) = warstwa 1 − ryczałt − wartość mojej pracy, per
  *    projekt (po podatku, jak w zakładce Finanse projektu); dla firmy to suma
- *    wierszy. Wynikiem firmy zostaje warstwa 2. Kolejne liczby z tych samych
- *    składników (np. EBBT, plan §17.2) dopisuje się do `MarginTotals`.
+ *    wierszy. Wynikiem firmy zostaje warstwa 2.
+ *  - EBBT (U1, plan §17.2, „earnings before bad things") = warstwa 1 − ryczałt
+ *    − ZUS: bez wszystkiego, co M.J. mógłby w teorii pominąć (sprzęt,
+ *    subskrypcje i inne koszty stałe, marketing). Ten sam w obu widokach
+ *    sprzętu. EBBT − wynik firmy = pole do optymalizacji. Z filtrem klienta —
+ *    tylko w widoku roku (udział w ZUS wg udziału w przychodzie, jak warstwa 2).
  *  - Przełącznik „Rozłóż duże zakupy sprzętu" zmienia sprzęt, więc każdą
  *    liczbę warstwy 2 (także per projekt).
  *  - Okres, który się jeszcze nie skończył, jest „wstępnie": koszty firmy do
@@ -83,6 +87,8 @@ export interface ProjectMargin {
   producerMargin: number
   /** Udział w przychodzie roku (0–1); `null` poza widokiem roku. */
   share: number | null
+  /** U1: EBBT projektu = warstwa 1 − podatek − udział w ZUS; `null` poza widokiem roku. */
+  ebbt: number | null
   /** Przypisane koszty firmy bez podatku; `null` poza widokiem roku. */
   overhead: number | null
   /** Warstwa 2 projektu; `null` poza widokiem roku. */
@@ -103,6 +109,8 @@ export interface MarginTotals {
   overhead: number | null
   /** Warstwa 2; dla całej firmy zawsze, dla zawężenia tylko w roku. */
   result: number | null
+  /** U1: EBBT = warstwa 1 − ryczałt − ZUS; dla całej firmy zawsze, dla zawężenia tylko w roku. */
+  ebbt: number | null
 }
 
 export interface MarginSummary {
@@ -187,6 +195,7 @@ function totalsOf(rows: ProjectMargin[], perProject: boolean): MarginTotals {
     producerMargin: sum(rows.map((r) => r.producerMargin)),
     overhead: perProject ? sum(rows.map((r) => r.overhead ?? 0)) : null,
     result: perProject ? sum(rows.map((r) => r.result ?? 0)) : null,
+    ebbt: perProject ? sum(rows.map((r) => r.ebbt ?? 0)) : null,
   }
 }
 
@@ -213,6 +222,7 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
       ownWork,
       producerMargin: row.revenue - costs - tax - ownWork,
       share: null,
+      ebbt: null,
       overhead: null,
       result: null,
     }
@@ -227,12 +237,14 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
       r.share = Math.max(0, r.revenue) / revenueTotal
       r.overhead = r.share * company.overhead
       r.result = r.margin - r.tax - r.overhead
+      r.ebbt = r.margin - r.tax - r.share * company.zus
     })
   } else if (perProject) {
     all.forEach((r) => {
       r.share = 0
       r.overhead = 0
       r.result = r.margin - r.tax
+      r.ebbt = r.margin - r.tax
     })
   }
 
@@ -241,6 +253,7 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
     ...totalsAll,
     overhead: company.overhead,
     result: totalsAll.margin - company.total,
+    ebbt: totalsAll.margin - company.tax - company.zus,
   }
   const scope = input.scope ?? null
   const projects = (scope ? all.filter((r) => scope.has(r.money.id)) : all).sort((a, b) =>

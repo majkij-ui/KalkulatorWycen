@@ -15,7 +15,7 @@ function cost(category: string, amount: number, extra: Partial<ProjectCost> = {}
 
 const QUICK = { dniZdjeciowe: 2, wielkoscEkipy: 1, klasaSprzetu: 'standard' }
 
-test('cena do bilansu: suma PDF wybranego wariantu, bez szkicu — kalkulator, EUR × kurs wyceny', () => {
+test('cena do bilansu: zatwierdzona cena (U1) — przelew → zapisana cena → PDF → kalkulator, EUR × kurs wyceny', () => {
   const pdf = quotedPrice({
     data: QUICK,
     marginMultiplier: 1,
@@ -25,7 +25,17 @@ test('cena do bilansu: suma PDF wybranego wariantu, bez szkicu — kalkulator, E
   assert.equal(pdf.pln, 22250)
   const calc = quotedPrice({ data: QUICK, marginMultiplier: 1 } as FinancialsSource)!
   assert.equal(calc.source, 'calculator')
-  assert.equal(calc.pln, calc.calculatorPln)
+  assert.equal(calc.pln, calc.live.calculatorPln)
+  const approved = quotedPrice({
+    data: { ...QUICK, approvedPrice: { pln: 21000, source: 'typed', at: '2026-10-24' } },
+    marginMultiplier: 1,
+    pdfDraft: { currency: 'PLN', rows: { ekipa: { cenaNetto: 20000 }, sprzet: { cenaNetto: 2250 } } },
+  } as FinancialsSource)!
+  assert.equal(approved.source, 'approved')
+  assert.equal(approved.pln, 21000, 'zapisana zatwierdzona cena wygrywa z PDF')
+  const transfer = quotedPrice({ data: { ...QUICK, profitTransferAmount: 26340 }, marginMultiplier: 1 } as FinancialsSource)!
+  assert.equal(transfer.source, 'transfer')
+  assert.equal(transfer.pln, 26340)
   const eur = quotedPrice({
     data: { ...QUICK, currency: 'EUR', exchangeRate: 4.3661 },
     marginMultiplier: 1,

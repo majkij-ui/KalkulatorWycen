@@ -15,20 +15,18 @@
  * Realizacji.
  */
 
-import { approvedPrice, resolveSnapshot, type ApprovedPrice, type FinancialsSource } from './quote-financials'
+import { snapshotPlanRevenue, type FinancialsSource, type PlanRevenue } from './quote-financials'
 import { costAmount, isOwnWork, liveCosts } from './project-costs'
 import type { ProjectCost } from './project-types'
 
 /**
- * Cena, z którą porównuje bilans — JEDNO miejsce do podmiany. Dziś: suma PDF
- * wybranego wariantu, a bez szkicu PDF — kalkulator (R2, `approvedPrice`).
- * Przy scalaniu z U1 (zatwierdzona cena w wycenie: wpisany przelew →
- * zatwierdzona cena → PDF → kalkulator) wystarczy zmienić tę funkcję.
+ * Cena, z którą porównuje bilans — „Zatwierdzona cena" (decyzja M.J.
+ * 2026-10-24): JEDNA kolejność przychodu planu z U1 (`planRevenue`): kwota
+ * przelewu wpisana ręcznie → zatwierdzona cena → suma PDF wybranego wariantu
+ * → kalkulator. Jedno miejsce — bilans nie liczy ceny po swojemu.
  */
-export function quotedPrice(snapshot: FinancialsSource | null | undefined): ApprovedPrice | null {
-  const resolved = resolveSnapshot(snapshot)
-  if (!resolved) return null
-  return approvedPrice(resolved.data, resolved.pricing, resolved.margin, snapshot?.pdfDraft)
+export function quotedPrice(snapshot: FinancialsSource | null | undefined): PlanRevenue | null {
+  return snapshotPlanRevenue(snapshot)
 }
 
 export interface RealizationTotals {

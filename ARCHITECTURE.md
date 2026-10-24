@@ -28,6 +28,7 @@ read–change–write queue per file, defensive parsing — an unreadable record
 | `gear-kits.json` | `gearKitSchema` (project-types) | gear kits |
 | `crew.json`, `crew-roles.json` | `crewMemberSchema`, `crewRoleSchema` (crew-types) | people (what I pay) and roles (what the client pays) |
 | `client-groups.json` | `clientGroupSchema` (client-groups) | groups of client keys, counted as one client |
+| `rental-items.json` | `rentalItemSchema` (rental-types) | names of rented gear (U2); amounts live on the `wynajem` cost lines |
 | `call-sheets.json` | `callSheetSchema` (call-sheet-types) | call sheet per realisation day (`dayId`) |
 | `inbox-decisions.json` | `inboxDecisionSchema` (inbox-types) | what was accepted/rejected in Skrzynka |
 | `company.json` | `companySchema` (company-settings-core) | one record `id: "company"`: PDF texts, portfolio catalogue, default price list; reserved `name`, `contact`, `defaultTaxRatePercent`, `defaultCurrency` (F1) |
@@ -61,9 +62,9 @@ synchronous. Providers: `ProjectHubProvider` → `QuoteProvider` → equipment, 
 
 - **Pure modules in `lib/`** (no React, no Tauri, tested with `node --test`): schemas (`*-types.ts`),
   calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`, `margin-ledger`,
-  `gear-costs`,
+  `gear-costs`, `gear-earnings`, `rentals`, `realization-summary`,
   `subscriptions`, `client-money`, `client-stats`, `crew-rates`, `gear-usage`, `equipment-roi`,
-  `thread-stats`, `realization-plan`, `realization-costs`, `project-finance`, `period-report`), decisions (`project-save`, `quote-documents`, `inbox`,
+  `thread-stats`, `realization-plan`, `realization-costs`, `project-finance`, `period-report`, `extra-sales`), decisions (`project-save`, `approved-price`, `quote-documents`, `inbox`,
   `inbox-validate`, `auto-backup`, `company-settings-core`). Put every rule here, with a test.
 - **Stores** (`*-store.ts`, `project-library.ts`, `equipment-catalog.ts`, `company-settings.ts`):
   file/localStorage IO through `createCollectionStore` only.
@@ -139,6 +140,32 @@ number of an existing project silently: list what moves and let M.J. confirm.
   „Sprzęt spoza katalogu" (`category: 'gear'`) counts in full, minus `catalogueItemIds` it covered.
   The S5 period report (`period-report.ts`, Finanse → „Raport") calls `marginSummary` for every money number and
   re-adds nothing; where two modules disagree it lists the difference in „Do wyjaśnienia".
+- **U1 (plan §19) — approved price, extra sales, EBBT, one money source for every screen.**
+  - Plan revenue has ONE order, in ONE function: `planRevenue` / `snapshotPlanRevenue` (`quote-financials.ts`) —
+    typed transfer → approved price → the chosen variant's PDF → calculator. Anything that needs „the price" calls it.
+  - The approved price (`QuoteData.approvedPrice`, read via `approvedPriceRecord`) follows the PDF while the project is
+    a quote and freezes on acceptance (status → won / done, `statusChangePatch` in `approved-price.ts`) and when a
+    variant is chosen on an accepted project; after that a PDF change only shows „PDF: X zł · Odśwież". It can be typed
+    in the project Finanse tab. `financials.revenueSource` = `approved`.
+  - Extra sales are `extra_sale` events with `category` (free text: seeds + used, no file) and `phase`
+    (`extra-sales.ts`, stats per period by anchor). Money received = `invoice_paid` with a NET `amount` (invoices with
+    an amount still decide; without an invoice T6 anchors the project on the payment day).
+  - EBBT = W1 − ryczałt − ZUS (`MarginTotals.ebbt`), the same in both gear views; EBBT − result = room to optimise.
+  - **Every screen that shows a project's money reads the money loop** (`useProjectMoney` / `moneyLedger` → `listMoney`,
+    `moneyOf`), never `Project.financials` directly: the project list, Klienci, Finance quotes, Marketing ROAS and
+    origins, the pipeline. `financials` is read directly only as the plan itself (variant comparison, import question).
+  - The PDF editor is the project tab „PDF" (`QuotePdfView`), not a calculator sub-tab.
+- **U2 (plan §20) — Realizacja total, gear earnings, rentals as one number.**
+  - The **rental total** of a project = its counted external `wynajem` lines in Realizacja (project-wide and in
+    days; the plan's lines while Realizacja is unsaved) — `rentals.ts`. Gear earnings, the Sprzęt „Wynajmowany" tab,
+    company Finanse and the S5 row all read it. A typed „Wynajem sprzętu" total sits on its line (`rentalTotal`);
+    listed items fill it first, then raise it, so the costs stay the sum of the lines.
+  - **Gear earned** (`gear-earnings.ts`) = the chosen variant's PDF „Sprzęt" row in zł (calculator row without a
+    draft) − the rental total, or `Project.gearEarnedOverride`; it may be negative. It is split by day price ×
+    unit-days over the Realizacja grid (else the quote's catalogue gear); zaplecze and unpriced items get nothing.
+    This is „Zarobił" and the payoff in `equipment-roi`; „Odpracował" is separate.
+  - The Realizacja reconciliation (`realization-summary.ts`) = `quotedPrice` (→ `snapshotPlanRevenue`) − (external
+    costs + own work + gear earned), before tax; a second line compares the money loop's revenue.
 
 ## Adding a collection
 

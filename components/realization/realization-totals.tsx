@@ -2,15 +2,15 @@
 
 /**
  * Suma Realizacji na górze zakładki (U2, U-SUMA; decyzje M.J. 2026-10-24):
- * Realizacja razem (koszty zewnętrzne i moja praca osobno), cena (PDF
- * wybranego wariantu), ile zarobił sprzęt i bilans wyceny = cena − (koszty
+ * Realizacja razem (koszty zewnętrzne i moja praca osobno), zatwierdzona cena (`quotedPrice`, U1: przelew → cena → PDF
+ * → kalkulator), ile zarobił sprzęt i bilans wyceny = cena − (koszty
  * zewnętrzne + moja praca + sprzęt), przed podatkiem. Druga linia: to samo
  * względem kwoty z Finansów (z dosprzedażą / przelewem / fakturami).
  * Liczby z `realization-summary.ts` i `gear-earnings.ts`; tu tylko układ.
  */
 
 import { useState } from 'react'
-import type { ApprovedPrice } from '@/lib/quote-financials'
+import type { PlanRevenue } from '@/lib/quote-financials'
 import type { GearEarnings } from '@/lib/gear-earnings'
 import { parseSignedAmount, type Reconciliation, type RealizationTotals } from '@/lib/realization-summary'
 import { mono, pln } from '@/components/calendar/calendar-bits'
@@ -24,12 +24,30 @@ export function signedPln(amount: number): string {
   return `${rounded > 0 ? '+' : '−'}${pln(Math.abs(rounded))}`
 }
 
-function priceSource(price: ApprovedPrice): string {
-  const euro =
-    price.currency === 'EUR' && price.rate
-      ? ` · ${price.amount.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} € × ${price.rate.toLocaleString('pl-PL', { maximumFractionDigits: 4 })}`
+const SOURCE_LABELS: Record<PlanRevenue['source'], string> = {
+  transfer: 'kwota przelewu wpisana ręcznie',
+  approved: 'zatwierdzona cena',
+  pdf: 'suma PDF wybranego wariantu',
+  calculator: 'kalkulator (bez szkicu PDF)',
+}
+
+function priceSource(price: PlanRevenue): string {
+  const euroOf = (amount: number | undefined, rate: number | null | undefined) =>
+    amount !== undefined && rate
+      ? ` · ${amount.toLocaleString('pl-PL', { maximumFractionDigits: 2 })} € × ${rate.toLocaleString('pl-PL', { maximumFractionDigits: 4 })}`
       : ''
-  return `${price.source === 'pdf' ? 'suma PDF wybranego wariantu' : 'kalkulator (bez szkicu PDF)'}${euro}`
+  const euro =
+    price.source === 'transfer'
+      ? ''
+      : price.source === 'approved'
+        ? price.frozen?.currency === 'EUR'
+          ? euroOf(price.frozen.amount, price.frozen.rate)
+          : ''
+        : price.live.currency === 'EUR'
+          ? euroOf(price.live.amount, price.live.rate)
+          : ''
+  const pdf = price.source !== 'pdf' && price.source !== 'calculator' && Math.abs(price.live.pln - price.pln) >= 0.5 ? ` · PDF ${pln(price.live.pln)}` : ''
+  return `${SOURCE_LABELS[price.source]}${euro}${pdf}`
 }
 
 export interface FinanceComparison {
@@ -58,7 +76,7 @@ export function RealizationTotalsCard({
   onOverride,
 }: {
   totals: RealizationTotals
-  price: ApprovedPrice | null
+  price: PlanRevenue | null
   earnings: GearEarnings
   reconciliation: Reconciliation | null
   finance: FinanceComparison | null
@@ -92,7 +110,7 @@ export function RealizationTotalsCard({
           </div>
         </Tile>
 
-        <Tile label="Cena (PDF)">
+        <Tile label="Zatwierdzona cena">
           {price ? (
             <>
               <div className="text-lg font-bold text-white" style={mono}>

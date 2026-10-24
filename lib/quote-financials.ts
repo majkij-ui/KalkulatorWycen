@@ -9,7 +9,7 @@
  * — i da się to pokryć testami.
  */
 
-import { defaultQuoteData, type LocalPdfState, type QuoteData, type ShootingDay } from './quote-types'
+import { defaultQuoteData, type ApprovedPriceRecord, type LocalPdfState, type QuoteData, type ShootingDay } from './quote-types'
 import { DEFAULT_EXCHANGE_RATE, pdfRowsTotal } from './pdf-draft'
 import { migratePricingConfig, DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
 import { getBreakdownWithPricing, getTotals, type LineItemRow, type PhaseBreakdown } from './quote-calc'
@@ -261,25 +261,106 @@ export function approvedPrice(data: QuoteData, pricing: PricingConfigShape, marg
   }
 }
 
+// ── Zatwierdzona cena (U1, decyzja 18.3/4) ───────────────────────────────────
+
+const PRICE_SOURCES = ['pdf', 'calculator', 'typed'] as const
+
 /**
- * Plan wyceny w PLN: przychód, koszty, moja praca, zysk. Przychód (R2, C1) =
- * kwota przelewu wpisana ręcznie, a bez niej zatwierdzona cena — suma PDF albo
- * kalkulator. `sumaNettoPln` zostaje netto KALKULATORA (sprzęt, porównania).
+ * Zapisana zatwierdzona cena albo `null` (brak / zepsuty zapis — wtedy cena
+ * idzie za PDF). Nigdy nie rzuca; nie zmienia danych.
+ */
+export function approvedPriceRecord(raw: unknown): ApprovedPriceRecord | null {
+  if (!isRecord(raw)) return null
+  const pln = raw.pln
+  if (typeof pln !== 'number' || !Number.isFinite(pln) || pln < 0) return null
+  const source = PRICE_SOURCES.find((s) => s === raw.source)
+  if (!source) return null
+  const record: ApprovedPriceRecord = { pln, source, at: typeof raw.at === 'string' ? raw.at : '' }
+  if (raw.currency === 'EUR' && typeof raw.amount === 'number' && Number.isFinite(raw.amount)) {
+    record.currency = 'EUR'
+    record.amount = raw.amount
+    record.rate = typeof raw.rate === 'number' && raw.rate > 0 ? raw.rate : null
+  }
+  return record
+}
+
+/** Zamrożenie ceny z PDF (albo kalkulatora bez szkicu): „Odśwież" i przyjęcie zlecenia. */
+export function freezeApprovedPrice(price: ApprovedPrice, at: string): ApprovedPriceRecord {
+  return {
+    pln: price.pln,
+    source: price.source,
+    at,
+    ...(price.currency === 'EUR' ? { amount: price.amount, currency: 'EUR' as const, rate: price.rate } : {}),
+  }
+}
+
+/** Cena wpisana ręcznie w Finansach projektu (zł netto). */
+export function typedApprovedPrice(pln: number, at: string): ApprovedPriceRecord {
+  return { pln, source: 'typed', at }
+}
+
+/**
+ * Skąd przychód planu: `transfer` — kwota przelewu wpisana ręcznie (R2, cały
+ * przelew z dosprzedażą), `approved` — zatwierdzona cena (U1), `pdf` / `calculator`
+ * — cena na żywo z PDF wybranego wariantu albo z kalkulatora bez szkicu PDF.
+ */
+export type PlanRevenueSource = 'transfer' | 'approved' | 'pdf' | 'calculator'
+
+export interface PlanRevenue {
+  /** Przychód planu w zł netto. */
+  pln: number
+  source: PlanRevenueSource
+  /** Kwota przelewu wpisana ręcznie (R2); `null` = brak. */
+  typedTransfer: number | null
+  /** Zapisana zatwierdzona cena; `null` = cena idzie za PDF / kalkulatorem. */
+  frozen: ApprovedPriceRecord | null
+  /** Zatwierdzona cena w zł: zapisana, a bez niej PDF / kalkulator na żywo. */
+  approvedPln: number
+  /** PDF (albo kalkulator bez szkicu PDF) na żywo — do „PDF: X zł · Odśwież". */
+  live: ApprovedPrice
+}
+
+/**
+ * JEDNO miejsce kolejności przychodu planu (U1): kwota przelewu wpisana ręcznie
+ * → zatwierdzona cena → suma PDF wybranego wariantu → kalkulator. Czytają to
+ * plan (`financials`), zakładka Finanse projektu i rozliczenie w Realizacji.
+ */
+export function planRevenue(data: QuoteData, pricing: PricingConfigShape, margin: number, pdfDraft?: unknown): PlanRevenue {
+  const live = approvedPrice(data, pricing, margin, pdfDraft)
+  const frozen = approvedPriceRecord(data.approvedPrice)
+  const typed =
+    typeof data.profitTransferAmount === 'number' && Number.isFinite(data.profitTransferAmount) ? data.profitTransferAmount : null
+  const approvedPln = frozen?.pln ?? live.pln
+  if (typed !== null) return { pln: typed, source: 'transfer', typedTransfer: typed, frozen, approvedPln, live }
+  return { pln: approvedPln, source: frozen ? 'approved' : live.source, typedTransfer: null, frozen, approvedPln, live }
+}
+
+/** `planRevenue` z migawki wyceny (dane, cennik, marża, szkic PDF); `null` = brak danych wyceny. */
+export function snapshotPlanRevenue(snapshot: FinancialsSource | null | undefined): PlanRevenue | null {
+  const resolved = resolveSnapshot(snapshot)
+  return resolved ? planRevenue(resolved.data, resolved.pricing, resolved.margin, snapshot?.pdfDraft) : null
+}
+
+/**
+ * Plan wyceny w PLN: przychód, koszty, moja praca, zysk. Przychód = `planRevenue`
+ * (kwota przelewu → zatwierdzona cena → PDF → kalkulator). `sumaNettoPln` zostaje
+ * netto KALKULATORA (sprzęt, porównania).
  */
 export function quotePlnPlan(data: QuoteData, pricing: PricingConfigShape, margin: number, pdfDraft?: unknown) {
   const views = quoteViews(data, pricing)
   const totals = computeQuoteTotals(views.client.data, margin, views.client.pricing)
   const sumaNettoPln = toPln(totals.sumaNetto, views.money)
-  const approved = approvedPrice(data, pricing, margin, pdfDraft)
+  const revenue = planRevenue(data, pricing, margin, pdfDraft)
+  const approved = revenue.live
   const profit = resolveProfitSections(views.cost, pricing, computeTotalCrewDays(data))
-  const typed = data.profitTransferAmount
-  const revenueSource: 'transfer' | 'pdf' | 'calculator' = typed != null ? 'transfer' : approved.source
-  const summary = computeProfitSummary(typed ?? approved.pln, data.profitTaxRatePercent, profit.totalCost)
+  const revenueSource = revenue.source
+  const summary = computeProfitSummary(revenue.pln, data.profitTaxRatePercent, profit.totalCost)
   return {
     views,
     totals,
     sumaNettoPln,
     approved,
+    revenue,
     revenueSource,
     sections: profit.sections,
     totalCost: profit.totalCost,

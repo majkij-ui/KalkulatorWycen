@@ -52,9 +52,10 @@ export function countsTowardRevenue(status: ProjectStatus): boolean {
 /**
  * Zakładki otwartego projektu (T3). Klucze na stałe, etykiety w interfejsie:
  * `sprzet` to od T5a zakładka „Realizacja" (dni, sprzęt, ekipa, koszty), `finanse`
- * (R2) — cena z PDF, przelew i marże projektu.
+ * (R2) — cena, dosprzedaż, wpłaty i marże projektu, `pdf` (U1) — edytor PDF
+ * oglądanego wariantu (wcześniej karta kalkulatora).
  */
-export const PROJECT_TABS = ['os', 'wycena', 'sprzet', 'finanse', 'notatki'] as const
+export const PROJECT_TABS = ['os', 'wycena', 'pdf', 'sprzet', 'finanse', 'notatki'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /**
@@ -485,9 +486,11 @@ export const projectFinancialsSchema = z.object({
   /**
    * R2: skąd `sumaNetto` — `transfer` = kwota przelewu wpisana ręcznie (zawiera
    * dosprzedaż), `pdf` = suma PDF wybranego wariantu, `calculator` = kalkulator
-   * (wycena bez szkicu PDF). Brak = plan sprzed R2 (kwota jak dotąd + dosprzedaż).
+   * (wycena bez szkicu PDF), U1: `approved` = zatwierdzona cena (zamrożona albo
+   * wpisana w Finansach). Brak = plan sprzed R2 (kwota jak dotąd + dosprzedaż).
+   * Starsza wersja czyta `approved` jako brak — liczy wtedy jak dawniej (cena + dosprzedaż).
    */
-  revenueSource: z.enum(['transfer', 'pdf', 'calculator']).optional().catch(undefined),
+  revenueSource: z.enum(['transfer', 'approved', 'pdf', 'calculator']).optional().catch(undefined),
 })
 export type ProjectFinancials = z.infer<typeof projectFinancialsSchema>
 

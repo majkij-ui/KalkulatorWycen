@@ -53,6 +53,7 @@ import type { Campaign } from './marketing-types'
 import { companyTaxRate, marginSummary, type MarginInput, type MarginSummary, type ProjectMargin } from './margin-ledger'
 import { invoiceAmount, moneyLedger, openInvoices, paymentDays, type ProjectMoney } from './money-loop'
 import { formatDate } from './money-loop-labels'
+import { extraSaleStats } from './extra-sales'
 import { quoteMoney } from './quote-currency'
 import { periodRentals } from './rentals'
 import {
@@ -558,6 +559,16 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
       text: 'Suma wierszy „Wynajem sprzętu" w Realizacji projektów okresu (na cały projekt i w dniach), a gdzie Finanse liczą plan — z planu. Część kosztów bezpośrednich, nie dodatkowy koszt.',
     },
     {
+      key: 'ebbt',
+      label: 'EBBT („earnings before bad things")',
+      text: 'W1 − ryczałt − ZUS: wynik przed wszystkim, co da się w teorii pominąć (sprzęt, subskrypcje i inne koszty stałe, marketing). Ten sam w obu widokach sprzętu. EBBT − W2 = pole do optymalizacji firmy.',
+    },
+    {
+      key: 'extraSales',
+      label: 'Dosprzedaż',
+      text: 'Sprzedaż ponad zatwierdzoną cenę (wydarzenia „Sprzedaż dodatkowa") w projektach zakotwiczonych w okresie — część przychodu, nie osobny przychód.',
+    },
+    {
       key: 'gearView',
       label: 'Widok sprzętu',
       text: `${view.gearLabel} — ${view.description}. Przełącznik „Rozłóż duże zakupy sprzętu" zmienia koszty firmy i W2; W1 się nie zmienia.`,
@@ -661,7 +672,8 @@ function reportProject(
     overhead: r2n(row.overhead),
     result: r2n(row.result),
     // R2: marża producencka (po podatku, minus moja praca); `null` = „brak kwoty".
-    extra: { producerMargin: row.known ? r2(row.producerMargin) : null },
+    // U1: dosprzedaż projektu (tylko zakotwiczonego w okresie, jak koszty).
+    extra: { producerMargin: row.known ? r2(row.producerMargin) : null, extraSales: row.anchored ? r2(row.money.extrasTotal) : null },
   }
 }
 
@@ -733,7 +745,6 @@ function buildMarketing(
   const knownCampaigns = new Set(input.campaigns.map((c) => c.id))
   const campaigns: ReportCampaign[] = []
   let campaignSpend = 0
-  const revenueDiffs: string[] = []
   const estimated: string[] = []
 
   const ordered = [...input.campaigns].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name, 'pl'))
@@ -744,6 +755,7 @@ function buildMarketing(
       projects: input.projects,
       quoteSentProjectIds,
       today: input.today,
+      money: ledgerById,
     })
     campaignSpend += clipped.spend
     if (clipped.spend === 0 && clipped.leads.total === 0) return
@@ -753,6 +765,7 @@ function buildMarketing(
       projects: input.projects,
       quoteSentProjectIds,
       today: input.today,
+      money: ledgerById,
     })
     campaigns.push({
       id: campaign.id,
@@ -764,23 +777,9 @@ function buildMarketing(
       inPeriod: campaignPeriodPart(clipped),
     })
     clipped.estimatedMonths.forEach((month) => estimated.push(`${campaign.name}: ${month}`))
-    // Marketing liczy przychód zleceń z planu z wyceny; pętla pieniędzy z faktur.
-    new Map([...clipped.projects.won, ...toDate.projects.won].map((p) => [p.id, p])).forEach((project) => {
-      const loop = ledgerById.get(project.id)?.revenue
-      const plan = project.financials?.sumaNetto ?? 0
-      if (typeof loop === 'number' && Math.abs(loop - plan) > EPS) {
-        revenueDiffs.push(`${project.name} (plan ${zl(plan)}, pętla pieniędzy ${zl(loop)})`)
-      }
-    })
+    // U1: Marketing liczy przychód zleceń z pętli pieniędzy, jak Finanse — dawnej
+    // uwagi „ROAS z planu, Finanse z faktur" (`marketing_revenue`) już nie ma.
   })
-
-  if (revenueDiffs.length > 0) {
-    notes.push({
-      kind: 'disagreement',
-      code: 'marketing_revenue',
-      text: `ROAS w Marketingu liczy przychód z planu z wyceny, a Finanse z faktur i dodatków; różnią się dla: ${revenueDiffs.join('; ')}.`,
-    })
-  }
   if (estimated.length > 0 || Math.abs(campaignSpend - ledgerMarketing) > EPS) {
     const why = estimated.length > 0 ? ` Szacunek z budżetu (brak odczytu z panelu): ${estimated.join(', ')}.` : ''
     notes.push({
@@ -1054,6 +1053,10 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
   const metrics: ReportMetric[] = [
     metricRow('projects', 'Projekty (liczba)', 'projects', current.projects.length, prevHasData ? previous.projects.length : null, { unit: 'count' }),
     metricRow('revenue', 'Przychód netto', 'layer1', revenue, before((s) => s.totals.revenue)),
+    // U1: dosprzedaż projektów okresu (zakotwiczonych) — część przychodu.
+    metricRow('extraSales', 'w tym dosprzedaż', 'layer1', extraSaleStats(current.projects).total, before((s) => extraSaleStats(s.projects).total), {
+      pctOfRevenue: pctOf(extraSaleStats(current.projects).total, revenue),
+    }),
     metricRow('directCosts', 'Koszty bezpośrednie', 'layer1', current.totals.costs, before((s) => s.totals.costs)),
     // U2 (§17.1): wynajem sprzętu — jedna liczba projektu, część kosztów bezpośrednich.
     metricRow('rentals', 'w tym wynajem sprzętu', 'layer1', periodRentals(current.projects, projectsById).total, before((s) => periodRentals(s.projects, projectsById).total)),
@@ -1071,6 +1074,10 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     metricRow('marketing', 'Marketing', 'costs', current.company.marketing, before((s) => s.company.marketing)),
     metricRow('gear', 'Sprzęt', 'costs', current.company.gear, before((s) => s.company.gear)),
     metricRow('companyCosts', 'Koszty firmy razem', 'costs', current.company.total, before((s) => s.company.total)),
+    // U1 (§17.2): EBBT = W1 − ryczałt − ZUS; ten sam w obu widokach sprzętu.
+    metricRow('ebbt', 'EBBT (W1 − ryczałt − ZUS)', 'layer2', current.totals.ebbt ?? 0, before((s) => s.totals.ebbt ?? 0), {
+      pctOfRevenue: pctOf(current.totals.ebbt ?? 0, revenue),
+    }),
     metricRow('result', 'Wynik po kosztach firmy (W2)', 'layer2', current.totals.result ?? 0, before((s) => s.totals.result ?? 0), {
       emphasis: true,
       pctOfRevenue: pctOf(current.totals.result ?? 0, revenue),
@@ -1255,7 +1262,7 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     notes.push({ kind: 'info', code: 'no_previous', text: `${prev.reason} Porównanie pominięte.` })
   }
 
-  const pipeline = summarizePeriod(projects, [], periodDef)
+  const pipeline = summarizePeriod(projects, [], periodDef, ledgerById)
   const alternativeCompany = other.company
   return {
     version: 1,

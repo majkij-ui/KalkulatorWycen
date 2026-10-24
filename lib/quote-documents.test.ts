@@ -38,6 +38,7 @@ globals.window = globals
 
 import {
   blankDoc,
+  clearedDoc,
   createQuoteDocumentStore,
   docFromProject,
   docFromSnapshot,
@@ -228,6 +229,17 @@ test('pusta wycena: klient projektu, mój domyślny cennik (bez niego fabryczny)
   assert.equal(doc.marginMultiplier, 1)
   assert.equal(doc.pdfDraft, null)
   assert.deepEqual(blankDoc('', null).pricingConfig, DEFAULT_PRICING)
+})
+
+test('U1: „Wyczyść" / „Wyzeruj" zerują kalkulator, a zatwierdzona cena i szkic PDF zostają', () => {
+  const approvedPrice = { pln: 22250, source: 'pdf' as const, at: '2026-10-24T10:00:00.000Z' }
+  const doc: QuoteDoc = { ...blankDoc('JHJ', null), data: { ...mergeQuoteDataPartial({ dniDokumentacji: 3, clientName: 'JHJ', projectName: 'Film' }), approvedPrice }, pdfDraft: { rows: {} }, marginMultiplier: 1.2 }
+  const cleared = clearedDoc(doc, MY_DEFAULT)
+  assert.deepEqual(cleared.data.approvedPrice, approvedPrice)
+  assert.deepEqual([cleared.data.dniDokumentacji, cleared.data.clientName, cleared.data.projectName, cleared.marginMultiplier], [0, 'JHJ', 'Film', 1])
+  assert.equal(cleared.pricingConfig, MY_DEFAULT)
+  assert.equal(cleared.pdfDraft, doc.pdfDraft)
+  assert.equal('approvedPrice' in clearedDoc(blankDoc('', null), MY_DEFAULT).data, false, 'bez ceny — nic nie dopisuje')
 })
 
 // ── Magazyn ──────────────────────────────────────────────────────────────────

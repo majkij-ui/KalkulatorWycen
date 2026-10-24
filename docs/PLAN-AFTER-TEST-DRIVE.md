@@ -1678,16 +1678,179 @@ row to company Finanse and the S5 report; the main session merges those.
 6. **Money received:** the amount and date are entered in the Finanse tab and saved as a payment event on the
    timeline. Invoices still decide revenue when there is one.
 
+## 19. U1 as built
+
+*(2026-10-24, branch `claude/u1-pdf-finanse`, on top of `v3/project-hub` `ff6289b`; ran beside U2.)*
+
+**Decided with M.J. (2026-10-24), after the phase-1 report — all as recommended:** (1) the approved price freezes when a
+project goes to W realizacji / Zrealizowany and when a variant is chosen on an accepted project; the 11 accepted projects
+get today's PDF total by a patch, so nothing moves; (2) the „Kwota finalnego przelewu" input is replaced by a read-out
+„cena + dosprzedaż" and „Wpłynęło na konto" (amount + date → payment event); a payment above price + extras offers „Zapisz
+różnicę jako dosprzedaż"; typed transfers already saved (S-AI 80,440, CIONET wywiady 3,260) keep counting; (3) T6 stays: a
+payment without an invoice anchors the project on the payment date; the amount on the account is NET; (4) Marketing ROAS
+and „Pochodzenie klientów" move onto the money loop; (5) the stuck price was JHJ „and some others"; the list numbers after
+the fix make sense to him.
+
+**Why the price looked stuck (phase-1 finding).** The project Finanse tab already followed the chosen variant's PDF live
+(checked on the export: JHJ PDF +500 → Finanse 22,250 → 22,750 at once). It looked stuck when another variant's PDF was
+edited (Finanse counts the chosen one; Wycena remembers the viewed variant — Morris & Lloyd rolki ✓A / B), when a typed
+transfer or an invoice decided revenue (S-AI 80,440 vs PDF 67,800; JHJ and M&L Broker until 23/24.10), when a retro
+project's PDF edit waited for the import question (Finanse kept „Projekt bez wyceny" with nothing editable — YoPro), and
+on the project list (saved plan, U-LISTA). The price itself could not be typed anywhere. All four now have an answer:
+the variant note (PDF and Finanse tabs), the frozen price with „PDF: X zł · Odśwież" and „Zmień", the pending-import
+sentence, and the list on the money loop.
+
+**Data (additive, optional, no version bump).**
+- `QuoteData.approvedPrice?: { pln, source: 'pdf' | 'calculator' | 'typed', at, amount?, currency?, rate? }` in the chosen
+  variant's quote (like `profitTransferAmount`); read only through `approvedPriceRecord` (a broken record = none). An older
+  build keeps the field (data passthrough) and prices from the PDF as before.
+- `ProjectFinancials.revenueSource` gains `approved`; an older build reads it as „missing" and adds extras as before
+  (`isTypedTransfer` stays false — the approved price is not a transfer).
+- `extra_sale.data.category?` (free text) and `phase?` (`before` / `on_set` / `after`; any other value reads as none);
+  `what` is the note. No category file: the list is the three seeds (dodatkowa produkcja, dodatkowa postprodukcja, surowe
+  materiały) plus every category already used, case- and space-insensitive (`extra-sales.ts`). The calendar form gets a
+  „Kategoria" field with the seeds as suggestions.
+- Payments from the Finanse tab are ordinary `invoice_paid` events with `data.amount` (net); a payment ticked without an
+  amount gets its amount filled in the same event.
+
+**Money.**
+- **One function for plan revenue**: `planRevenue` / `snapshotPlanRevenue` (`quote-financials.ts`): typed transfer →
+  approved price → the chosen variant's PDF → calculator. `quotePlnPlan`, `financials`, the project Finanse tab and (after
+  merge) U2's Realizacja reconciliation read it.
+- `approved-price.ts`: `statusChangePatch` (quote / lost → won / done freezes the chosen variant's PDF — or calculator —
+  total and recomputes `financials`; the revenue number does not change), `withFrozenPrice`, `withoutApprovedPrice`. The hub
+  flushes the project's quote documents before a status change, so the freeze sees what is on screen. `chooseVariantPlan`
+  freezes the new variant's price on an accepted project; a variant that already has its price keeps it, so „Cofnij"
+  returns to the cent. „+ Wariant" (copy) drops the price; „Wyczyść" / „Wyzeruj" keep it (`clearedDoc`, now in
+  `quote-documents.ts`).
+- Project Finanse (`project-finance.ts`): price state `live` (quote / lost: follows the PDF), `frozen`, `typed`; `pdfDiff`
+  from 0.50 zł; `typedPrice` (equal to the PDF = freeze on an accepted project, back to live on a quote), `refreshedPrice`;
+  `due` = price + extras; the legacy transfer with its gap; `received` = payments, whether an invoice decides (an issued
+  invoice with its own amount), the gap above the base (typed transfer, else price + extras) and the shortfall.
+- **EBBT** (`margin-ledger.ts`, §17.2) = W1 − ryczałt − ZUS on `MarginTotals.ebbt` (company always; a client filter only in
+  the year view, with its revenue share of ZUS) and `ProjectMargin.ebbt` (year view). The same in both gear views.
+- **U-LISTA**: `listMoney` (`project-list.ts`) — the list shows the money loop's revenue and profit; Klienci rows of quotes
+  and lost projects, the Finance „Wyceny (niewliczone)" list, the „w wycenach X" tile and the report's „Wyceny w toku"
+  (`summarizePeriod(…, money)`), Marketing ROAS / profit / pipeline (`summarizeCampaign({ money })`) and „Pochodzenie
+  klientów" (`originBreakdown(…, money)`) all read the loop. `useProjectMoney` uses the company tax rate like Finance. The
+  report's „ROAS z planu" disagreement (`marketing_revenue`) is gone — there is nothing left to disagree about.
+- Stay on the plan by design: the variant comparison „Zysk (plan)" and the choose dialog, the header's import question.
+
+**Screens.**
+- **Project tab „PDF"** between Wycena and Realizacja: the variant pills (the same viewed variant as Wycena) and the PDF
+  editor of that variant (`QuotePdfView`: `QuoteDocScope` + `PodgladPdfTab` keyed `docId:docEpoch`); the calculator
+  sub-tab is gone. Autosave, the project flushes, „Pobierz PDF" and „Wycena wysłana" are the same code. The header talks
+  about the viewed variant on Wycena and PDF. A non-chosen variant says „Ten wariant nie jest wybrany do rozliczeń —
+  Finanse projektu liczą wariant A"; Finanse says the same when another variant is being viewed.
+- **Project Finanse**: „Zatwierdzona cena" (on a quote „Cena (jeszcze nie zatwierdzona)") with „Zmień" (typed, Enter /
+  Escape), the source line (frozen date, PDF / calculator, € × rate), „PDF: X zł (±d) · Odśwież"; „Dosprzedaż" (list with
+  category, phase, date, note, amount; add / edit / delete with „Cofnij"; category picker with „+ Nowa kategoria"); „Do
+  zapłaty (cena + dosprzedaż)"; a legacy typed transfer with „Zapisz różnicę jako dosprzedaż" and „Usuń"; „Wpłynęło na
+  konto" (payments, fill an amount-less one, „+ Wpłata" net + date with the anchor sentence, the gap button, the
+  shortfall); the R2 tiles, breakdown and plan-vs-Realizacja table unchanged.
+- **Company Finanse**: tiles in a 3 × 2 grid with **EBBT** next to the result („pole do optymalizacji X zł — sprzęt,
+  subskrypcje i stałe, marketing", „taki sam w obu widokach sprzętu"); a **Dosprzedaż** panel (how often, average per
+  project with extras, total, by category and by phase). Report: metrics rows `extraSales` („w tym dosprzedaż", after
+  revenue) and `ebbt` (before W2), definitions, `extra.extraSales` on project rows (anchored projects only).
+
+**Real-life cases, as built** (tests in `approved-price.test.ts`, `project-finance.test.ts`, `extra-sales.test.ts`,
+`u1-money.test.ts`, `margin-ledger.test.ts`, `period-report.test.ts`, `quote-documents.test.ts`):
+
+| Case | Behaviour |
+|---|---|
+| PDF changed after approval | JHJ stays 22,250 with „PDF: 22,750 zł (+500 zł) · Odśwież"; revenue 26,340 until „Odśwież" (→ 26,840) |
+| Typed price | Morris 12,500: counts, „Wpisana ręcznie", „PDF: 11,980 (−520) · Odśwież"; equal to the PDF = a freeze (accepted) / back to live (quote) |
+| Variant swap on an accepted project | B's PDF frozen (10,300); „Cofnij" back to A's own price, financials to the cent; on a quote nothing freezes |
+| EUR | Tchibo 1,460 € × 4.3661 = 6,374.51 zł frozen with amount and rate; a new rate shows „PDF: X zł · Odśwież"; revenue stays |
+| No PDF draft | Zabudowy, Solvo ×2, Event after movie: the calculator total freezes the same way |
+| Retro import, no quote | read-only „z importu", invoices decide; a PDF edit waiting for „Zastąp" is named in Finanse |
+| Extra sale with / without category, each phase | from the list or new; phases przed realizacją / na planie / po projekcie; old ones „bez kategorii · bez fazy"; amounts and revenue as before |
+| Payment, invoice with amount | the invoice decides; the payment only pays it; no gap offer |
+| Payment, invoice without amount (S-AI, CIONET wywiady, M&L Broker) | the payment's amount becomes the invoice amount; anchor stays the invoice date |
+| Payment, no invoice | revenue = payment on the payment day (T6), anchor moves there; above price + extras → „Zapisz różnicę jako dosprzedaż" (same number after); lower → „O X zł mniej"; W realizacji and lower → plan, „wpłynęło X z Y" |
+| Typed transfer before R2 (S-AI 80,440) | still the whole transfer; price frozen at 67,800 separately; gap 12,640 → extra sale or „Usuń" |
+| Lost project | numbers greyed, „nie wchodzą do Finansów firmy"; price not frozen; not in the extra-sale stats |
+| List vs Finanse | the list = the project Finanse tab for every project (6 rows move, below) |
+| EBBT | W1 − ryczałt − ZUS, same in both gear views; client filter only in the year view |
+
+**Real data (read-only; `projects.json` 13:37 and `events.json` 13:33 of 24.10, unchanged through the session — read at
+14:00 and 18:51, hashes `2b3e2662` / `2e768f13` at the end).** `real-data-check.mts` (now also printing the list figure,
+the price, extras with category / phase, EBBT in both gear views and the extra-sale stats), base `ff6289b` vs branch: all
+15 quotes' computed and stored financials identical, 2026 identical (revenue 203,977.74, tax 16,483.86, costs 78,995,
+project profit 108,498.88), every project's best-known revenue, costs, profit, own work and producer margin identical. Only
+the list display moves, as confirmed:
+
+| Project | List before | List after (= Finanse) |
+|---|---|---|
+| JHJ — Film na 25lecie | 22,250 / zysk 7,934 | 26,340 / 11,676 |
+| M&L Broker — Pakiet Reels | 13,180 / 4,750 | 16,200 / 7,513 |
+| CIONET TribesDay II | 8,200 / 6,003 | 9,400 / 7,101 |
+| Event after movie — Tribes Day | 7,810 / 96 | 7,810 / 5,946 (z faktur) |
+| Morris & Lloyd — rolki | 11,980 / 5,662 | 11,980 / 4,912 |
+| Zabudowy Warszawa | 10,050 / 9,050 | 10,050 / 10,050 |
+
+Marketing (confirmed move): the spring B2B campaign's won revenue 115,870 → 122,980 (JHJ +4,090, M&L Broker +3,020),
+profit +6,505; „Pochodzenie": Google Ads +7,110 / +6,505, Powracający +1,200 / +6,198, Polecenie zysk +1,000. 2026 EBBT
+90,894.68 zł (45 % of revenue) in both views; result 28,668 (spread) / 56,807 (cash) → room to optimise 62,227 / 34,088.
+Extra sales 2026: 3 of 23 counted projects (13 %), 8,310 zł, 2,770 average, all „bez kategorii".
+
+**Data patch for the main session** (hub closed, regenerate first — M.J. edits live):
+`node --import ./scripts/register-ts.mjs scripts/u1-approved-price-patch.mts > imports/2026-10-24-u1-approved-price.json`,
+check the list it prints (expected 11: Morris rolki 11,980, Tchibo Event 6,374.51, Solvo Grodzisk 1,800, CIONET TribesDay
+II 8,200, Solvo CeZ 4,200, CIONET wywiady 3,260, M&L Broker 13,180, Event after movie 7,810, JHJ 22,250, Zabudowy 10,050,
+S-AI 67,800 — none „POMINIĘTY"), `npm run data -- apply imports/2026-10-24-u1-approved-price.json --dry-run`, then without
+`--dry-run`. It sets `quote` (the raw snapshot + `data.approvedPrice`) and `financials` (same numbers, `revenueSource`
+`approved` / `transfer`). Simulated on a scratch copy with `npm run data -- apply --dir`: „11 zmienione", the check
+identical before / after except `revenueSource`; the committed file is a fresh read (dry run on the real folder:
+„11 zmienione", nothing written). Without the patch those projects keep following their PDF until „Odśwież" / „Zmień".
+
+**Tests:** 848 (810 before; +38: `approved-price` 10, `project-finance` 20 (rewritten, R2 cases kept), `extra-sales` 6,
+`u1-money` 4, `margin-ledger` +3, `period-report` +2 (the marketing case rewritten), `quote-documents` +1; `money-loop` and
+`quote-variants` adjusted — an extra sale carries its id; the swap test runs on a quote, the accepted case has its own).
+51 deliberate mutations across quote-financials, approved-price, quote-variants, project-finance, extra-sales,
+margin-ledger, period-report, marketing-calc, finance-calc, project-list, money-loop, event-kinds and quote-documents: 45
+caught at first; the 6 survivors (EUR record without the currency, the legacy transfer vs the approved price, an invoice
+without amount, extras of a project anchored earlier, the list from invoices, „Wyczyść" keeping the price) got tests —
+51 / 51. `npx tsc --noEmit` clean; `npm run build` passes.
+
+**Verified on the production export** (`npm run build`, `node scripts/serve-export.mjs 3014`, opened by URL, build checked
+by its strings; the real data with the patch simulated copied into the page's localStorage, restored afterwards to the
+empty origin from a non-app page): the list shows the six rows above; JHJ Finanse 22,250 „Zatwierdzona 24.10.2026 z PDF",
+26,340; PDF tab „Inne" 0 → 500 saved, Finanse „PDF: 22 750 zł (+500 zł) · Odśwież", revenue unchanged; „Odśwież" →
+22,750 / 26,840, „Cofnij" restored the record exactly; „Zmień" 23,000 → „Wpisana ręcznie", „PDF: 22 750 zł (−250 zł)";
+the 4,090 extra edited to a new category „licencja" + „po projekcie" (amount unchanged); a payment 27,000 on 10.09 →
+„z wpłat" 27,000, „Wpłynęło o 660 zł więcej…", saved as an extra sale → still 27,000; company Finanse EBBT tile with „pole
+do optymalizacji 62 227 zł", Dosprzedaż panel by category and phase; Raport rows „w tym dosprzedaż" and „EBBT"; Marketing
+B2B „3 zlecenia" from the loop; Morris rolki PDF tab on B → the variant note, Finanse „oglądasz wariant B — Finanse liczą
+wariant A"; CIONET Gala → W realizacji froze 7,840 (`revenueSource: approved`). Phone width: Finanse tab wraps, no element
+wider than the screen (the page is 29 px wider only because of the known top bar). No console errors besides the missing
+Vercel analytics script. The browser pane was shared with U2 (its own tab on port 3015) — nothing of it was touched.
+
+**Desktop-only checks for the main session** (installed app, after the patch):
+1. JHJ → PDF tab: change a row, close the window right away (red button) — after restart the PDF has the edit, Finanse shows
+   „PDF: X zł · Odśwież" and the list still 26,340.
+2. „Pobierz PDF" from the new PDF tab on Morris rolki B: native dialog „… (wariant B).pdf", then „Wycena wysłana" with version B.
+3. „+ Wpłata" in Finanse writes an `invoice_paid` with `data.amount` into `events.json`; filling an amount-less payment
+   changes that event only.
+4. A quote set to W realizacji gets `quote.data.approvedPrice` in `projects.json` (and survives a restart).
+
+**Known limits / next:**
+- A retro project without a quote cannot get a typed price (there is no quote to hold it); its invoices decide anyway.
+- Moving an accepted project back to Wycena keeps its frozen price (shown with „Za PDF" to follow the PDF again).
+- The category list has no rename / delete (a category is text on each event; edit the sales to rename one).
+- Payment amounts are net by decision; a VAT-invoiced job is entered net like its invoice.
+
 ## 20. U2 as built
 
-*(2026-10-24, branch `claude/u2-realizacja-sprzet`, on top of `v3/project-hub` `ff6289b`.)*
+*(2026-10-24, branch `claude/u2-realizacja-sprzet`: built on `v3/project-hub` `ff6289b`, then merged with U1 at
+`a9aa3f4`.)*
 
 **Decided with M.J. (2026-10-24), after the phase-1 report:**
 1. Gear earned may be **negative**. When rentals exceed the PDF „Sprzęt" row (rolki: 600 − 700 = −100), the amount is
    split the same way, lowers the items' „Zarobił" and payoff, and is shown plainly as „wynajem > Sprzęt o 100 zł".
-2. The reconciliation reads the price through ONE helper, `quotedPrice` (`lib/realization-summary.ts`). Today it is the
-   chosen variant's PDF total (or the calculator); when merging, the main session points it at U1's approved price.
-   There is a second line „z dosprzedażą / przelewem", based on the Finance revenue.
+2. The reconciliation reads the „Zatwierdzona cena" through ONE helper, `quotedPrice` (`lib/realization-summary.ts`),
+   which calls U1's `snapshotPlanRevenue` (typed transfer → approved price → PDF → calculator). There is a second line
+   „z dosprzedażą / przelewem", based on the Finance revenue.
 3. Listed rental items fill the typed rental total („bez szczegółów") first, then raise it.
 4. No new category. `wynajem` is gear only; its label is now „Wynajem sprzętu" (key unchanged, no line moves).
 5. No data patch. M.J. reviews the projects himself, e.g. M&L Broker's „Rental" 950 zł in „inne".
@@ -1741,7 +1904,8 @@ Garbage drops to `undefined`; unknown fields survive. No existing record changes
 
 **Screens:**
 - **Realizacja:**
-  - Summary card on top: „Realizacja razem" (external and own work apart), „Cena (PDF)" (source, € × rate), „Sprzęt
+  - Summary card on top: „Realizacja razem" (external and own work apart), „Zatwierdzona cena" (its source, € × rate,
+    „PDF X zł" when it differs), „Sprzęt
     zarobił" (with „Zmień": a typed amount, „= cały wiersz Sprzęt — wynajem w osobnym wierszu PDF", „Licz z PDF"), and
     „Bilans wyceny" with sign and wording, plus the second line „z dosprzedażą / przelewem (X zł): ±Y".
   - Koszty projektu starts with the „Wynajem sprzętu" block: „Za cały projekt" amount, items, „+ Pozycja z wynajmu"
@@ -1795,10 +1959,14 @@ Garbage drops to `undefined`; unknown fields survive. No existing record changes
   85mm 47 → 42.
 - Unchanged items: 16-35, Shinobi, A7 III, Tamron, 100-400, Manfrotto, 135GM.
 - Rentals: JHJ 1 500, rolki 700 → 2026: 2 200 zł.
-- Reconciliation: JHJ −2 675 (with extras +1 415), S-AI +16 720 (+29 360), rolki +2 730, M&L Broker +1 670 (+4 690),
-  Tchibo Event +1 841.
+- Reconciliation: JHJ −2 675 (with extras +1 415), S-AI +29 360 (its typed transfer 80 440 is the price; PDF
+  67 800), rolki +2 730, M&L Broker +1 670 (+4 690), Tchibo Event +1 841. U1's approved-price patch is not applied
+  yet; once prices freeze, the reconciliation follows them.
+- After the U1 merge: the check against `a9aa3f4` (fresh read 19:09, data unchanged since 13:37) again shows quotes,
+  years (with U1's ledger EBBT and extra-sale stats), per-project money and Ja lines identical; only gear moves.
 
-**Tests:** 830 (810 before; −10 with `gear-revenue.test.ts`, +30 new). `quote-currency-legacy`'s golden replaces
+**Tests:** 830 on `ff6289b` (810 before; −10 with `gear-revenue.test.ts`, +30 new); 868 after the U1 merge
+(`quotedPrice` tests now cover the typed transfer and a frozen approved price). `quote-currency-legacy`'s golden replaces
 `gearRevenue` with the PDF gear row explicitly: `split.sprzetNetto` of the same golden, the EUR draft 260 € × 4,3699.
 45 deliberate mutations across gear-earnings, rentals, realization-summary, realization-costs, equipment-roi and
 period-report: 41 caught at first; the 4 survivors got tests (rest preference, a non-negative rest, ticking the rest,
@@ -1808,6 +1976,9 @@ the override in the catalogue report) — 45 / 45. `npx tsc --noEmit` clean; `np
 - Setup: `npm run build`, `node scripts/serve-export.mjs 3015`, opened by URL; the served chunk contains „Pozycja z
   wynajmu". Real data was copied into the empty origin's localStorage from a non-app page and cleared afterwards; the
   server was stopped.
+- After the merge, rebuilt and checked again: JHJ „Zatwierdzona cena 22 250", S-AI „80 440 · kwota przelewu wpisana
+  ręcznie · PDF 67 800" → +29 360, Tchibo Event 6 375 („1460 € × 4,3661"), rolki +2 730. Company Finanse shows
+  Płatności, Dosprzedaż (U1), Wynajem sprzętu, Sprzęt w kosztach firmy; EBBT present.
 - JHJ: card 22 525 (12 425 + 10 100) / 22 250 / 2 400 („Sprzęt 3 900 − wynajem 1 500") / −2 675 („z dosprzedażą /
   przelewem (26 340 zł): +1 415").
   - „Sony FX6" created on the spot; 4000 → 400: the total stayed 1 500 (rest 1 100, `rentalTotal` 1 500); Finance costs
@@ -1815,7 +1986,7 @@ the override in the catalogue report) — 45 / 45. `npx tsc --noEmit` clean; `np
   - Override „= cały wiersz Sprzęt" → 3 900 (grid tile too) → „Licz z PDF" removed it.
   - Dojazd 1 300 with the hint → 1 400 saved as 1 × 1 400.
 - Rolki: −100 „wynajem > Sprzęt o 100 zł", +2 730; FX6 picked on the day line, description kept.
-- S-AI: 2 600 „czeka: zaznacz sprzęt ze stawką", +16 720 / +29 360.
+- S-AI (before the merge, PDF price): 2 600 „czeka: zaznacz sprzęt ze stawką", +16 720 / +29 360.
 - M&L Broker: +1 670 / +4 690.
 - Tchibo Event: 6 375 („1460 € × 4,3661"), 1 135, +1 841.
 - Sprzęt → Na plan: Zarobił 9 895, „+3 400 zł nieprzypisane", RED 2 062. Sprzęt → Wynajmowany: 2 200, FX6 1× 1 dzień
@@ -1835,9 +2006,9 @@ the override in the catalogue report) — 45 / 45. `npx tsc --noEmit` clean; `np
 4. `npm run data -- apply --dry-run` accepts a patch touching `rental-items.json` (schema registered).
 
 **Known limits / next:**
-- For U1's merge: point `quotedPrice` at the approved price; the „z dosprzedażą / przelewem" line reads
-  `projectMoney().revenue`, so it follows U1's money-loop changes by itself. Both sessions add a `metrics[]` row and a
-  Finance panel near the same lines.
+- Merged with U1: `quotedPrice` → `snapshotPlanRevenue`; the „z dosprzedażą / przelewem" line reads
+  `projectMoney().revenue`. Company Finanse keeps U1's Dosprzedaż panel and EBBT; the S5 report keeps U1's rows (`w tym
+  dosprzedaż`, EBBT) next to `w tym wynajem sprzętu`, and both definitions.
 - Typing in an item-less rental line edits its description (like a free-text person); searching then leaving without
   a pick keeps the typed text.
 - Rental days are optional; „Wynajmowany" shows „N× bez dni" for lines without them.

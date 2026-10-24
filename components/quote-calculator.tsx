@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ClipboardList, Clapperboard, Scissors, PlusCircle, FileDown } from 'lucide-react'
+import { ClipboardList, Clapperboard, Scissors, PlusCircle } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StickyHeader } from '@/components/sticky-header'
 import { PreprodukcjaTab } from '@/components/tabs/preprodukcja'
@@ -15,14 +15,14 @@ import { currencyUnit } from '@/lib/quote-currency'
 import { QuoteVariantsBar } from '@/components/projects/quote-variants-bar'
 import type { Project } from '@/lib/project-types'
 
-export type CalculatorTab = 'preprodukcja' | 'produkcja' | 'postprodukcja' | 'dodatkowe' | 'podglad'
+// U1 (U-PDF): PDF to osobna zakładka projektu („PDF", `QuotePdfView`), nie karta kalkulatora.
+export type CalculatorTab = 'preprodukcja' | 'produkcja' | 'postprodukcja' | 'dodatkowe'
 
 const tabs: { value: CalculatorTab; label: string; icon: typeof ClipboardList }[] = [
   { value: 'preprodukcja', label: 'Preprodukcja', icon: ClipboardList },
   { value: 'produkcja', label: 'Produkcja', icon: Clapperboard },
   { value: 'postprodukcja', label: 'Postprodukcja', icon: Scissors },
   { value: 'dodatkowe', label: 'Dodatkowe', icon: PlusCircle },
-  { value: 'podglad', label: 'Podglad i PDF', icon: FileDown },
 ]
 
 const CATEGORY_TO_TAB: Record<string, CalculatorTab> = {
@@ -74,6 +74,47 @@ export function QuoteCalculatorView({
   return docId ? <QuoteDocScope docId={docId}>{calculator}</QuoteDocScope> : calculator
 }
 
+/**
+ * Zakładka projektu „PDF" (U1, U-PDF): edytor PDF oglądanego wariantu z
+ * pigułkami wariantów (każdy wariant ma swój PDF). Ten sam dokument wyceny co
+ * kalkulator (`QuoteDocScope`), więc autozapis, zapis przy wyjściu, „Pobierz PDF"
+ * i „Wycena wysłana" działają jak dotąd. Zakładka PDF montuje się od nowa przy
+ * innym wariancie albo wycenie podmienionej w całości (`docId:docEpoch`).
+ */
+export function QuotePdfView({
+  project,
+  docId,
+  variantId,
+  onSelectVariant,
+  chosenLabel,
+}: {
+  project: Project
+  docId: string
+  variantId: string
+  onSelectVariant: (variantId: string) => void
+  /** Etykieta wybranego wariantu, gdy oglądany wariant NIE jest wybrany do rozliczeń. */
+  chosenLabel?: string | null
+}) {
+  return (
+    <QuoteDocScope docId={docId}>
+      <main className="relative mx-auto max-w-4xl px-4 py-6">
+        <QuoteVariantsBar project={project} selectedId={variantId} onSelect={onSelectVariant} />
+        {chosenLabel && (
+          <p className="mb-4 text-xs text-amber-200/80">
+            Ten wariant nie jest wybrany do rozliczeń — Finanse projektu liczą wariant {chosenLabel}.
+          </p>
+        )}
+        <PdfBody />
+      </main>
+    </QuoteDocScope>
+  )
+}
+
+function PdfBody() {
+  const { docEpoch, docId } = useQuote()
+  return <PodgladPdfTab key={`${docId ?? ''}:${docEpoch}`} />
+}
+
 function CalculatorBody({
   initialTab,
   onTabChange,
@@ -88,7 +129,7 @@ function CalculatorBody({
     setActiveTabState(next as CalculatorTab)
     onTabChange?.(next as CalculatorTab)
   }
-  const { breakdown, money, docEpoch, docId } = useQuote()
+  const { breakdown, money } = useQuote()
 
   const phaseNetMap: Partial<Record<CalculatorTab, number>> = {}
   for (const phase of breakdown) {
@@ -151,10 +192,6 @@ function CalculatorBody({
                 </TabsContent>
                 <TabsContent value="dodatkowe" className="mt-0">
                   <DodatkoweTab />
-                </TabsContent>
-                <TabsContent value="podglad" className="mt-0">
-                  {/* Inny wariant albo wycena podmieniona w całości (import z pliku, zmiana z zewnątrz) — PDF od nowa. */}
-                  <PodgladPdfTab key={`${docId ?? ''}:${docEpoch}`} />
                 </TabsContent>
               </motion.div>
             </AnimatePresence>
