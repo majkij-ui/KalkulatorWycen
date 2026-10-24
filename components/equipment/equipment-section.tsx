@@ -5,8 +5,9 @@
  *
  * Dwie liczby na pozycję (plan G, decyzja 3):
  *  - Odpracował: ile kosztowałby rental za każdy dzień, w którym był na planie,
- *  - Zarobił: ile zapłacili za niego klienci. Dokładnie dla sprzętu wycenionego
- *    z katalogu (G5), szacunek dla wycen po staremu.
+ *  - Zarobił (U2): jego część wiersza „Sprzęt" z PDF po odjęciu wynajmu,
+ *    dzielona stawka × dni (`gear-earnings.ts`); może być ujemna.
+ * Trzecia zakładka „Wynajmowany" (U2, §17.1): co wypożyczam, jak często, za ile.
  * Klik w pozycję otwiera panel z edycją, statystykami i historią projektów.
  * Samo zaznaczanie sprzętu dzieje się w zakładce Realizacja projektu; daty
  * dni pochodzą z kalendarza.
@@ -26,6 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { EquipmentItemSheet, formatPayoff } from './equipment-item-sheet'
 import { BackstagePanel } from './backstage-panel'
+import { RentedGearPanel } from './rented-gear-panel'
 import { GearKitsPanel } from './gear-kits-panel'
 
 function pln(amount: number): string {
@@ -45,6 +47,7 @@ function normalize(text: string): string {
 const TABS = [
   { value: 'plan', label: 'Na plan' },
   { value: 'zaplecze', label: 'Zaplecze i drobiazgi' },
+  { value: 'wynajmowany', label: 'Wynajmowany' },
 ] as const
 type EquipmentTab = (typeof TABS)[number]['value']
 
@@ -79,7 +82,7 @@ function PayoffBar({ roi }: { roi: EquipmentRoi }) {
     return <div className="text-[11px] text-zinc-600">brak ceny zakupu</div>
   }
   const rent = Math.min(100, roi.rentValuePct)
-  const client = Math.min(100, roi.clientPaidPct ?? 0)
+  const client = Math.max(0, Math.min(100, roi.clientPaidPct ?? 0))
   return (
     <div>
       <div
@@ -149,7 +152,7 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
 
       <div className="w-28 shrink-0 text-right tabular-nums">
         <div className="text-sm font-semibold text-zinc-100">{pln(roi.rentValue)}</div>
-        <div className="text-xs text-zinc-500">~{pln(roi.clientPaid)}</div>
+        <div className={`text-xs ${roi.clientPaid < 0 ? 'text-red-300/80' : 'text-zinc-500'}`}>{pln(roi.clientPaid)}</div>
       </div>
 
       <div className="w-32 shrink-0">
@@ -282,15 +285,15 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         <h1 className="text-2xl font-bold tracking-tight text-white">Sprzęt</h1>
         <p className="mt-1 max-w-2xl text-sm text-zinc-500">
           Twój sprzęt i to, jak na siebie zarabia. <span className="text-zinc-300">Odpracował</span>: ile
-          kosztowałby rental za każdy dzień na planie. <span className="text-zinc-300">Zarobił</span>: ile zapłacili
-          za niego klienci (z wycen: dokładnie dla sprzętu z katalogu, szacunek dla starszych). Liczą się projekty
-          w realizacji i zrealizowane.
+          kosztowałby rental za każdy dzień na planie. <span className="text-zinc-300">Zarobił</span>: jego część
+          wiersza „Sprzęt" z PDF po odjęciu wynajmu, dzielona stawka × dni na planie (gdy wynajem był droższy niż
+          wiersz Sprzęt — ujemna). Liczą się projekty w realizacji i zrealizowane.
         </p>
       </header>
 
       <div role="tablist" aria-label="Rodzaj sprzętu" className="mb-5 flex gap-1 border-b border-white/5">
         {TABS.map(({ value, label }) => {
-          const count = value === 'plan' ? items.length : invested.backstageCount
+          const count = value === 'plan' ? items.length : value === 'zaplecze' ? invested.backstageCount : null
           return (
             <button
               key={value}
@@ -307,13 +310,17 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
               }`}
             >
               {label}
-              <span className="ml-1.5 text-xs tabular-nums text-zinc-600">{count}</span>
+              {count !== null && <span className="ml-1.5 text-xs tabular-nums text-zinc-600">{count}</span>}
             </button>
           )
         })}
       </div>
 
       <div role="tabpanel" id="equipment-tabpanel" aria-labelledby={`equipment-tab-${tab}`}>
+      {tab === 'wynajmowany' ? (
+        <RentedGearPanel onOpenProject={onOpenProject} />
+      ) : (
+      <>
       {allItems.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile
@@ -364,15 +371,15 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           />
           <Tile
             label="Zarobił"
-            value={`~${pln(totals.clientPaid)}`}
+            value={pln(totals.clientPaid)}
             good={totals.clientPaid > 0}
             lines={[
               totals.clientPaidPct === null
-                ? 'szacunek z wycen'
+                ? 'Sprzęt z PDF − wynajem'
                 : `${Math.round(totals.clientPaidPct)}% zainwestowanego`,
               `spłacone: ${totals.paidOffByClientsCount}`,
             ]}
-            warn={totals.unassignedClientPaid > 0 ? `+${pln(totals.unassignedClientPaid)} nieprzypisane` : undefined}
+            warn={Math.abs(totals.unassignedClientPaid) > 0.5 ? `${totals.unassignedClientPaid > 0 ? '+' : ''}${pln(totals.unassignedClientPaid)} nieprzypisane` : undefined}
           />
           <Tile label="Nieużywane" value={String(totals.unusedCount)} lines={['aktywne pozycje bez dnia na planie']} />
           </>
@@ -459,7 +466,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
                       : SORTS.find((s) => s.value === sort)?.label}
                   </h2>
                   <div className="hidden text-[10px] uppercase tracking-wide text-zinc-600 sm:block">
-                    odpracował / <span className="text-zinc-500">~zarobił</span>
+                    odpracował / <span className="text-zinc-500">zarobił</span>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -474,6 +481,8 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
       )}
 
       {items.length > 0 && <GearKitsPanel />}
+      </>
+      )}
       </>
       )}
       </div>

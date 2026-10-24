@@ -301,10 +301,10 @@ type StatsProject = Pick<Project, 'id' | 'name' | 'status' | 'date' | 'costs' | 
  * sprzętu). `dayDates` = data dnia realizacji (np. z kalendarza); bez niej
  * data zapisana w dniu, a na końcu data projektu.
  */
-export function rentedGearReport(
-  projects: StatsProject[],
+export function rentedGearReport<P extends StatsProject>(
+  projects: P[],
   dictionary: RentalItem[],
-  dayDates: (project: StatsProject) => Map<string, string> = (project) =>
+  dayDates: (project: P) => Map<string, string> = (project) =>
     new Map((project.gearDays ?? []).filter((d) => d.date).map((d) => [d.id, d.date]))
 ): RentedGearReport {
   const byId = new Map(dictionary.map((item) => [item.id, item]))
