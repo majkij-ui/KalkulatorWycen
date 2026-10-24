@@ -71,6 +71,7 @@ import { plural } from '@/lib/pl-plural'
 import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
+import { ExtraSalesPanel } from './extra-sales-panel'
 import { GearCostsPanel } from './gear-costs-panel'
 import { PaymentsPanel, PlanVsActual } from './money-loop-panels'
 import { ReportTab } from './report-tab'
@@ -307,6 +308,7 @@ function KpiTiles({
   const { money, company, totals, scoped, perProject, provisional } = summary
   const view = scoped ?? totals
   const result = scoped ? scoped.result : totals.result
+  const ebbt = scoped ? scoped.ebbt : totals.ebbt
   const negative = result !== null && result < 0
   const tone =
     result === null || Math.abs(result) < 0.5
@@ -320,7 +322,7 @@ function KpiTiles({
   const planMargin = money.plan.revenue - money.plan.costs
   const gearView = summary.spread ? 'sprzęt rozłożony' : 'sprzęt w całości'
   return (
-    <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
         <div className="text-[11px] uppercase tracking-wide text-zinc-500">Przychód netto</div>
         <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.revenue)}</div>
@@ -414,7 +416,34 @@ function KpiTiles({
           </div>
         )}
       </button>
-      <div className={`col-span-2 rounded-xl border p-4 lg:col-span-1 ${tone.box}`}>
+      {/* U1 (§17.2): EBBT obok wyniku — to samo w obu widokach sprzętu; różnica = pole do optymalizacji. */}
+      <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
+        <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+          EBBT
+          {provisional && <Provisional />}
+        </div>
+        {ebbt === null ? (
+          <>
+            <div className="mt-1 text-xl font-bold text-zinc-500">—</div>
+            <div className="mt-1 text-xs text-zinc-500">dla klienta tylko w widoku roku · cała firma {pln(totals.ebbt ?? 0)}</div>
+          </>
+        ) : (
+          <>
+            <div className={`mt-1 tabular-nums text-xl font-bold ${ebbt < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>{pln(ebbt)}</div>
+            <div className="mt-1 text-xs text-zinc-500">
+              marża − podatek {pln(view.tax)} − ZUS {pln(view.margin - view.tax - ebbt)}
+              {view.revenue > 0 && ` · ${pctOf(ebbt, view.revenue)}`}
+            </div>
+            {result !== null && (
+              <div className="mt-0.5 text-xs text-sky-300/80">
+                pole do optymalizacji {pln(ebbt - result)} — sprzęt, subskrypcje i stałe, marketing
+              </div>
+            )}
+            <div className="mt-0.5 text-xs text-zinc-500">przed „złymi rzeczami" · taki sam w obu widokach sprzętu</div>
+          </>
+        )}
+      </div>
+      <div className={`rounded-xl border p-4 ${tone.box}`}>
         <div className="text-[11px] uppercase tracking-wide text-zinc-400">
           Wynik po kosztach firmy
           {provisional && <Provisional />}
@@ -746,6 +775,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
 
   // Pieniądze projektów liczone raz; okresy i wykres tylko je dzielą.
   const ledger = useMemo(() => moneyLedger(projects, events, today, taxRate), [projects, events, today, taxRate])
+  const ledgerById = useMemo(() => new Map(ledger.map((m) => [m.id, m])), [ledger])
   // Koszty stałe roku: ręczne + raty subskrypcji (bez podwójnego liczenia).
   const yearCosts: EffectiveFixedCost[] = useMemo(
     () => fixedCostsInYear(fixed.costs, subs.subscriptions, period.year),
@@ -812,7 +842,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     [yearCosts, currentMonth, period]
   )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
-  const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period), [projects, period])
+  const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period, ledgerById), [projects, period, ledgerById])
   const pipeline = useMemo(
     () =>
       projects.filter(
@@ -842,8 +872,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
           <p className="mt-1 text-sm text-zinc-500">
             {tab === 'projects' ? (
               <>
-                Marża na realizacji = przychód − koszty bezpośrednie, przed podatkiem. Wynik po kosztach firmy = marża −
-                podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing. Przychód z faktur (w miesiącu wystawienia), a
+                Marża na realizacji = przychód − koszty bezpośrednie, przed podatkiem. EBBT = marża − podatek − ZUS. Wynik po
+                kosztach firmy = marża − podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing. Przychód z faktur (w miesiącu wystawienia), a
                 gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich brak — z planu. Wyceny nie wchodzą do wyniku.
               </>
             ) : tab === 'fixed' ? (
@@ -901,8 +931,10 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             projectsById={projectsById}
             openByProject={openByProject}
             pipeline={pipeline}
+            moneyById={ledgerById}
             onOpenProject={onOpenProject}
           />
+          <ExtraSalesPanel summary={margin} periodLabel={periodLabel(period)} scoped={!!scopeIds} />
           <GearCostsPanel gear={margin.gear} periodLabel={periodLabel(period)} />
         </>
       ) : tab === 'report' ? (

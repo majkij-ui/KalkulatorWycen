@@ -88,9 +88,9 @@ function ContactCard({ stats }: { stats: ClientStats }) {
 
 function ProjectRow({ project, money, onOpen }: { project: Project; money?: MoneyById | null; onOpen?: () => void }) {
   const counts = countsTowardRevenue(project.status)
-  // Zlecenie: najlepsza wiedza (faktury albo plan); wycena i nieprzyjęta — kwota z wyceny.
-  const known = counts ? moneyOf(project, money) : null
-  const value = counts ? (known?.revenue ?? undefined) : project.financials?.sumaNetto
+  // Najlepsza wiedza z pętli pieniędzy (U1, U-LISTA) — także wycena i nieprzyjęta (cena + dosprzedaż).
+  const known = moneyOf(project, money)
+  const value = known.revenue ?? undefined
   return (
     <button
       type="button"

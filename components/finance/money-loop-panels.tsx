@@ -121,6 +121,7 @@ export function PlanVsActual({
   projectsById,
   openByProject,
   pipeline,
+  moneyById,
   onOpenProject,
 }: {
   summary: MarginSummary
@@ -128,6 +129,8 @@ export function PlanVsActual({
   openByProject: Map<string, OpenInvoice[]>
   /** Wyceny okresu — pokazywane szaro, poza wynikiem. */
   pipeline: Project[]
+  /** U1: pieniądze projektów z pętli — kwota wyceny jak w Finansach projektu. */
+  moneyById: ReadonlyMap<string, { revenue: number | null }>
   onOpenProject: (id: string) => void
 }) {
   const rows = summary.projects.filter((row) => projectsById.has(row.money.id))
@@ -191,7 +194,10 @@ export function PlanVsActual({
                 <span className="min-w-0 flex-1 truncate text-sm text-zinc-400">{p.name || 'Bez nazwy'}</span>
                 <ProjectStatusBadge status={p.status} />
                 <span className="w-24 shrink-0 text-right tabular-nums text-xs text-zinc-500">
-                  {p.financials ? pln(p.financials.sumaNetto) : 'nie policzono'}
+                  {(() => {
+                    const value = moneyById.get(p.id)?.revenue ?? null
+                    return value === null ? (p.quote ? 'nie policzono' : 'brak wyceny') : pln(value)
+                  })()}
                 </span>
                 <ArrowRight className="size-3.5 shrink-0 text-zinc-700 transition-colors group-hover:text-zinc-300" />
               </button>
