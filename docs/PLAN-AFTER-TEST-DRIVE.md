@@ -1607,3 +1607,57 @@ every other place reads.
 One session after R2 is merged („F2 Wynajem i EBBT"): the Realizacja line and items, the rental dictionary, the
 Sprzęt section, Finanse stats, the payoff denominator, the EBBT tile and the report row. It builds on R2's cost
 model (`Project.costs` with `planKey`, `skipped`, `ownWork`).
+
+## 18. Small fixes to make the hub usable *(M.J. feedback 2026-10-24)*
+
+### 18.1 Items
+- **U-PDF:** the PDF editor becomes its own project tab „PDF", between Wycena and Realizacja (with the variant
+  pills, since each variant has its own PDF). Today it is a sub-tab inside the calculator.
+- **U-SUMA:** Realizacja gets a total at the top (all categories together; today there are only per-category
+  totals). Next to it:
+  - the PDF total;
+  - what the gear earned (from the PDF);
+  - the reconciliation = PDF − (Realizacja total + gear earned): quoted in M.J.'s favour or against him.
+
+  It never reconciles exactly. Pricing his own work as he feels it should be priced shows whether he misquoted.
+- **U-GEAR — „ile zarobił" (gear) is wrong.**
+  - What a job's gear earned = the PDF's „Sprzęt" row (what the client was charged for his gear).
+  - It is split between the catalogue items used on that job, in proportion to their day rental prices. Example:
+    1,000 zł, items at 70 and 30 zł / day → 700 and 300.
+  - Shown per item in the Sprzęt section (left menu). Payoff (earned back vs purchase price) follows from the
+    same numbers. „Ile odpracował" works and stays.
+- **U-DOJAZD:** in Realizacja „Koszty projektu", fuel / travel is one plain amount (default from the quote,
+  editable), not km × zł/km.
+- **U-CENA (project Finanse tab):** „Zatwierdzona cena" can be refreshed from the PDF with a button („Odśwież z
+  PDF") and edited by hand (an override, when there's no time to change the PDF). Today it looks stuck: the PDF
+  changes, the old number stays, and it can't be edited.
+- **U-DOSPRZEDAŻ:** more control over extra sales.
+  - Each extra sale gets a category (picked from a list or created on the spot, like a new person or role), a
+    phase (before / on set / after the project), an amount and a note.
+  - The Finanse tab lets him state directly: the final price, the money that reached his account, and the extra
+    sale(s) with their category — so the numbers are right without massaging the rest of the hub.
+  - Company Finanse: how often he upsells, average amount when it happens, by category and phase; plus an S5
+    report row.
+- **U-LISTA — bug:** the project list reads the frozen plan (`Project.financials`), while the project Finanse tab
+  reads the money loop. JHJ, 24.10:
+  - the list shows 22,250 zł / zysk 7,934;
+  - Finanse shows 26,340 zł (PDF 22,250 + extra sales 4,090) / zysk 11,676 (Realizacja costs 12,425, own work
+    10,100, marża producencka 1,576 = 6 %).
+
+  Fix: every screen that shows a project's money reads the money loop (`projectMoney`), never `financials`
+  directly. Audit the other readers.
+- **Old quotes:** no special work. M.J. will revisit them; it is enough that every number can be overridden
+  (U-CENA, U-DOSPRZEDAŻ, Realizacja lines).
+- **Planned in §17, joins these sessions:** rentals as one number (§17.1, belongs with U-GEAR / U-SUMA) and EBBT
+  (§17.2, belongs with company Finanse).
+
+### 18.2 Sessions
+| Session | Model | Contents | Runs with |
+|---|---|---|---|
+| **U1 Projekt: PDF i Finanse** | Opus | U-PDF, U-CENA, U-DOSPRZEDAŻ (incl. company stats and the report row), U-LISTA, EBBT (§17.2) | U2 |
+| **U2 Realizacja i sprzęt** | Opus | U-SUMA, U-GEAR, U-DOJAZD, rentals (§17.1) incl. the Sprzęt „Wynajmowany sprzęt" section and one rental figure in company Finanse | U1 |
+
+U1 owns the project tab bar, the PDF placement, the project Finanse tab, the project list, the money loop's
+extra sales and the margin ledger (EBBT). U2 owns components/realization/*, the gear catalogue and payoff
+(`equipment-roi`, `gear-usage`) and the rental data. Both only read the PDF draft (`pdf-draft`). Both may add a
+row to company Finanse and the S5 report; the main session merges those.
