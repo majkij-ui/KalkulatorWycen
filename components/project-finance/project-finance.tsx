@@ -1,23 +1,30 @@
 'use client'
 
 /**
- * Zakładka „Finanse" projektu (R2, plan §13.1 C1–C4): zatwierdzona cena z PDF,
- * kwota finalnego przelewu, zysk netto (marża), ryczałt, koszty, marża
- * producencka i plan a Realizacja wg kategorii. Liczby: `lib/project-finance.ts`
- * (ta sama pętla pieniędzy co Finanse firmy); tu tylko układ i pola.
+ * Zakładka „Finanse" projektu (R2, plan §13.1 C1–C4; U1, plan §18 U-CENA i
+ * U-DOSPRZEDAŻ): zatwierdzona cena (zamrożona przy przyjęciu, „PDF: X zł ·
+ * Odśwież", wpisywana ręcznie), dosprzedaż z kategorią i fazą, „Do zapłaty",
+ * „Wpłynęło na konto", zysk netto (marża), ryczałt, koszty, marża producencka i
+ * plan a Realizacja wg kategorii. Liczby: `lib/project-finance.ts` (ta sama pętla
+ * pieniędzy co Finanse firmy); tu tylko układ i pola.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, RotateCcw } from 'lucide-react'
+import { ChevronDown, Pencil, RotateCcw } from 'lucide-react'
 import { useEvents } from '@/lib/events-context'
 import { createEvent } from '@/lib/events-store'
 import { parseAmount } from '@/lib/event-draft'
+import { editedExtraSaleData, extraSaleCategories, extraSaleData } from '@/lib/extra-sales'
 import { formatRate } from '@/lib/quote-currency'
-import { useProjectHub } from '@/lib/project-hub-context'
+import { useProjectHub, useQuoteDocState } from '@/lib/project-hub-context'
 import { useQuote } from '@/lib/quote-context'
 import { costCategoryLabel, countsTowardRevenue, toDateKey, type Project } from '@/lib/project-types'
-import { gapAsExtraSale, projectFinanceView, revenueSourceText } from '@/lib/project-finance'
+import { gapAsExtraSale, projectFinanceView, refreshedPrice, revenueSourceText, typedPrice, type PaymentRow } from '@/lib/project-finance'
+import type { ApprovedPriceRecord } from '@/lib/quote-types'
+import type { ExtraSale } from '@/lib/money-loop'
 import { archivo, mono, pln } from '@/components/calendar/calendar-bits'
+import { ExtraSalesSection, type ExtraSaleInput } from './extra-sales'
+import { PaymentsSection } from './payments'
 
 function pct(value: number | null): string {
   if (value === null) return '—'
@@ -38,40 +45,41 @@ function eur(amount: number): string {
   return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} €`
 }
 
-function dateText(day: string): string {
-  const [y, m, d] = day.split('-')
-  return d ? `${d}.${m}.${y}` : day
+function dateText(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  return d ? `${d}.${m}.${y}` : iso
 }
 
 const fieldClass =
-  'h-9 w-36 rounded-md border border-white/10 bg-black/40 px-2 text-right text-base tabular-nums text-zinc-100 outline-none focus:border-white/30'
+  'h-10 w-44 rounded-md border border-white/15 bg-black/40 px-2 text-right text-2xl font-bold tabular-nums text-zinc-100 outline-none focus:border-white/40'
 
-/** Pole kwoty po polsku; `null` w danych = pole pokazuje wartość domyślną. */
-function TransferInput({ value, onCommit, label }: { value: number; onCommit: (value: number) => void; label: string }) {
+/** Pole ceny: Enter / wyjście zatwierdza, Escape anuluje. */
+function PriceInput({ value, onCommit, onCancel }: { value: number; onCommit: (value: number) => void; onCancel: () => void }) {
   const format = (n: number) => (Math.round(n * 100) / 100).toLocaleString('pl-PL', { maximumFractionDigits: 2, useGrouping: false })
   const [text, setText] = useState(() => format(value))
-  const focused = useRef(false)
-  useEffect(() => {
-    if (!focused.current) setText(format(value))
-  }, [value])
+  const done = useRef(false)
+  const commit = () => {
+    if (done.current) return
+    done.current = true
+    const parsed = parseAmount(text)
+    if (parsed === undefined || Math.abs(parsed - value) < 0.005) onCancel()
+    else onCommit(parsed)
+  }
   return (
     <input
+      autoFocus
       inputMode="decimal"
-      aria-label={label}
+      aria-label="Zatwierdzona cena (zł netto)"
       value={text}
-      onFocus={(e) => {
-        focused.current = true
-        e.target.select()
-      }}
+      onFocus={(e) => e.target.select()}
       onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        focused.current = false
-        const parsed = parseAmount(text)
-        if (parsed === undefined || Math.abs(parsed - value) < 0.005) setText(format(value))
-        else onCommit(parsed)
-      }}
+      onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') {
+          done.current = true
+          onCancel()
+        }
       }}
       className={fieldClass}
       style={mono}
@@ -93,42 +101,85 @@ function Row({ label, value, strong = false, muted = false, children }: { label:
   )
 }
 
-export function ProjectFinance({ project }: { project: Project }) {
-  const { allEvents, save: saveEvent, remove: removeEvent } = useEvents()
+type Notice = { message: string; undo?: () => void | Promise<void> }
+
+export function ProjectFinance({ project, viewedVariant }: { project: Project; viewedVariant?: { label: string; chosenLabel: string } | null }) {
+  const { allEvents, save: saveEvent, remove: removeEvent, restore: restoreEvent } = useEvents()
   const { data, pricingConfig, marginMultiplier, pdfDraft, updateField, variantLabel } = useQuote()
   const { projects } = useProjectHub()
+  const docState = useQuoteDocState(project.id)
   const latest = projects.find((p) => p.id === project.id) ?? project
   const today = toDateKey(new Date())
   const live = useMemo(() => ({ data, pricingConfig, marginMultiplier, pdfDraft }), [data, pricingConfig, marginMultiplier, pdfDraft])
   const view = useMemo(() => projectFinanceView(latest, live, allEvents, today), [latest, live, allEvents, today])
-  const [notice, setNotice] = useState<{ message: string; undo?: () => void | Promise<void> } | null>(null)
+  const categories = useMemo(
+    () => extraSaleCategories(allEvents.filter((e) => e.kind === 'extra_sale' && !e.deletedAt).map((e) => ({ category: typeof e.data?.category === 'string' ? e.data.category : undefined }))),
+    [allEvents]
+  )
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [showCategories, setShowCategories] = useState(false)
+  const [editingPrice, setEditingPrice] = useState(false)
 
-  const { money, approved, transfer, plan } = view
+  const { money, price, transfer, plan, received } = view
   const counts = countsTowardRevenue(latest.status)
   const revenue = money.revenue
-  const extra = gapAsExtraSale(transfer)
+  const pendingImport = docState?.status === 'needs-confirmation'
+  const hasInvoices = money.invoices.some((i) => i.state !== 'planned')
 
-  const saveGap = async () => {
-    if (!extra) return
-    const typedBefore = transfer?.typed ?? null
-    const event = createEvent({ kind: 'extra_sale', start: today, projectId: project.id, data: { what: extra.what, amountNetto: extra.amountNetto } })
+  const setPrice = (next: ApprovedPriceRecord | null, message: string) => {
+    const before = data.approvedPrice ?? null
+    updateField('approvedPrice', next)
+    setNotice({ message, undo: () => updateField('approvedPrice', before) })
+  }
+
+  const saveExtra = async (amountNetto: number, what: string, message: string, afterSave?: () => void, undoExtra?: () => void) => {
+    const event = createEvent({ kind: 'extra_sale', start: today, projectId: project.id, data: { what, amountNetto } })
     await saveEvent(event)
-    updateField('profitTransferAmount', null)
+    afterSave?.()
     setNotice({
-      message: `Zapisano dosprzedaż ${pln(extra.amountNetto)} na osi projektu; kwota przelewu liczy się teraz z ceny i dosprzedaży (bez zmiany).`,
+      message,
       undo: async () => {
         await removeEvent(event.id)
-        updateField('profitTransferAmount', typedBefore)
+        undoExtra?.()
       },
     })
+  }
+
+  const legacyGap = gapAsExtraSale(transfer?.gap)
+  const paymentGap = gapAsExtraSale(received.gap)
+
+  const addExtra = async (input: ExtraSaleInput) => {
+    const event = createEvent({ kind: 'extra_sale', start: input.day, projectId: project.id, data: extraSaleData(input) })
+    await saveEvent(event)
+    setNotice({ message: `Dodano dosprzedaż ${pln(input.amountNetto)} na osi projektu.`, undo: () => removeEvent(event.id) })
+  }
+  const editExtra = async (id: string, input: ExtraSaleInput) => {
+    const event = allEvents.find((e) => e.id === id)
+    if (!event) return
+    await saveEvent({ ...event, start: input.day, data: editedExtraSaleData(event.data, input), updatedAt: new Date().toISOString() })
+    setNotice({ message: 'Zapisano dosprzedaż.', undo: () => saveEvent(event) })
+  }
+  const removeExtra = async (extra: ExtraSale) => {
+    await removeEvent(extra.id)
+    setNotice({ message: `Usunięto dosprzedaż ${extra.amount === null ? '' : pln(extra.amount)}.`, undo: () => restoreEvent(extra.id) })
+  }
+  const addPayment = async (amount: number, day: string) => {
+    const event = createEvent({ kind: 'invoice_paid', start: day, projectId: project.id, data: { amount: Math.round(amount * 100) / 100 } })
+    await saveEvent(event)
+    setNotice({ message: `Zapisano wpłatę ${pln(amount)} z ${dateText(day)} na osi projektu.`, undo: () => removeEvent(event.id) })
+  }
+  const fillPayment = async (payment: PaymentRow, amount: number) => {
+    const event = allEvents.find((e) => e.id === payment.id)
+    if (!event) return
+    await saveEvent({ ...event, data: { ...(event.data ?? {}), amount: Math.round(amount * 100) / 100 }, updatedAt: new Date().toISOString() })
+    setNotice({ message: `Wpłata z ${dateText(payment.day)}: ${pln(amount)}.`, undo: () => saveEvent(event) })
   }
 
   const statusNote =
     latest.status === 'lost'
       ? 'Projekt nieprzyjęty — te liczby nie wchodzą do Finansów firmy.'
       : latest.status === 'quote'
-        ? 'Wycena — do Finansów firmy wejdzie po akceptacji (W realizacji).'
+        ? 'Wycena — do Finansów firmy wejdzie po akceptacji (W realizacji); wtedy cena się zatwierdzi.'
         : null
 
   const costsText =
@@ -140,6 +191,23 @@ export function ProjectFinance({ project }: { project: Project }) {
           ? 'z planu'
           : 'brak kosztów'
 
+  const record = price?.record ?? null
+  const priceSource = !price
+    ? null
+    : price.state === 'typed'
+      ? `Wpisana ręcznie ${dateText(record!.at)}`
+      : price.state === 'frozen'
+        ? `Zatwierdzona ${record!.at ? dateText(record!.at) : ''} ${record!.source === 'calculator' ? 'z kalkulatora' : 'z PDF'}`.replace('  ', ' ')
+        : price.live.source === 'pdf'
+          ? 'Suma netto z PDF — idzie za PDF, dopóki zlecenie nie jest przyjęte'
+          : 'Z kalkulatora — PDF jeszcze nie edytowany'
+  const priceEur =
+    record?.currency === 'EUR' && record.amount !== undefined && record.rate
+      ? ` · ${eur(record.amount)} × kurs ${formatRate(record.rate)}`
+      : !record && price?.live.currency === 'EUR' && price.live.rate
+        ? ` · ${eur(price.live.amount)} × kurs ${formatRate(price.live.rate)}`
+        : ''
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6">
       <header className="space-y-1">
@@ -147,10 +215,15 @@ export function ProjectFinance({ project }: { project: Project }) {
           Finanse projektu
         </h2>
         <p className="max-w-2xl text-xs text-zinc-500">
-          Cena to PDF{variantLabel ? ` (wariant ${variantLabel})` : ''}, przychód to przelew z dosprzedażą, a gdy są faktury —
-          faktury. Koszty z Realizacji, a dopóki jej nie ma — z planu.
+          Cena to PDF{variantLabel ? ` (wariant ${variantLabel})` : ''}, zatwierdzona przy przyjęciu zlecenia. Przychód to cena z dosprzedażą, a gdy
+          są faktury albo wpłaty bez faktury — one. Koszty z Realizacji, a dopóki jej nie ma — z planu.
           {statusNote ? ` ${statusNote}` : ''}
         </p>
+        {viewedVariant && (
+          <p className="max-w-2xl text-xs text-amber-200/80">
+            W Wycenie i PDF oglądasz wariant {viewedVariant.label} — Finanse liczą wariant {viewedVariant.chosenLabel}, wybrany do rozliczeń.
+          </p>
+        )}
       </header>
 
       {notice && (
@@ -175,96 +248,164 @@ export function ProjectFinance({ project }: { project: Project }) {
         </div>
       )}
 
-      {/* C1 — cena i przelew */}
-      <section aria-label="Cena i przelew" className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 sm:p-5">
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Zatwierdzona cena</div>
-        {approved ? (
-          <>
-            <div className="mt-1 text-4xl font-bold text-white" style={mono}>
-              {pln(approved.pln)}
-            </div>
-            <p className="mt-1 text-xs text-zinc-500">
-              {approved.source === 'pdf' ? 'Suma netto z PDF' : 'Z kalkulatora — PDF jeszcze nie edytowany'}
-              {approved.currency === 'EUR' && approved.rate
-                ? ` · ${eur(approved.amount)} × kurs ${formatRate(approved.rate)}`
-                : ''}
-              {approved.source === 'pdf' && Math.abs(approved.pln - approved.calculatorPln) >= 0.5
-                ? ` · kalkulator ${pln(approved.calculatorPln)} (różnica to normalne — liczy się PDF)`
-                : ''}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="mt-1 text-4xl font-bold text-white" style={mono}>
-              {view.imported === null ? '—' : pln(view.imported)}
-            </div>
-            <p className="mt-1 text-xs text-zinc-500">Projekt bez wyceny — przychód z importu.</p>
-          </>
-        )}
-
-        {transfer && (
-          <div className="mt-4 space-y-2 border-t border-white/5 pt-4">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="text-sm text-zinc-300">Kwota finalnego przelewu</span>
-              <TransferInput
-                value={transfer.shown}
-                label="Kwota finalnego przelewu (zł netto)"
-                onCommit={(next) => updateField('profitTransferAmount', Math.abs(next - transfer.expected) < 0.005 ? null : next)}
-              />
-              <span className="text-xs text-zinc-500">zł netto</span>
-              {transfer.typed !== null && (
+      {/* Cena, dosprzedaż, do zapłaty, wpłaty */}
+      <section aria-label="Cena i przelew" className="space-y-5 rounded-xl border border-white/10 bg-zinc-900/40 p-4 sm:p-5">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">{counts || !price ? 'Zatwierdzona cena' : 'Cena (jeszcze nie zatwierdzona)'}</div>
+          {price ? (
+            <>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                {editingPrice ? (
+                  <PriceInput
+                    value={price.pln}
+                    onCancel={() => setEditingPrice(false)}
+                    onCommit={(next) => {
+                      setEditingPrice(false)
+                      const at = new Date().toISOString()
+                      setPrice(typedPrice(next, price.live, counts, at), `Cena: ${pln(next)}. Przychód i zysk liczą się od niej.`)
+                    }}
+                  />
+                ) : (
+                  <span className="text-4xl font-bold text-white" style={mono}>
+                    {pln(price.pln)}
+                  </span>
+                )}
+                {!editingPrice && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingPrice(true)}
+                    aria-label="Wpisz cenę ręcznie"
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
+                  >
+                    <Pencil className="size-3.5" />
+                    Zmień
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">
+                {priceSource}
+                {priceEur}
+                {price.state === 'live' && price.live.source === 'pdf' && Math.abs(price.live.pln - price.live.calculatorPln) >= 0.5
+                  ? ` · kalkulator ${pln(price.live.calculatorPln)} (różnica to normalne — liczy się PDF)`
+                  : ''}
+              </p>
+              {price.pdfDiff !== null && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-amber-200/90">
+                    {price.live.source === 'pdf' ? 'PDF' : 'Kalkulator'}: {pln(price.live.pln)} ({signedPln(price.pdfDiff)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = refreshedPrice(price.live, counts, new Date().toISOString())
+                      setPrice(next, `Cena odświeżona z ${price.live.source === 'pdf' ? 'PDF' : 'kalkulatora'}: ${pln(price.live.pln)}.`)
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 font-medium text-zinc-100 hover:bg-white/5"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Odśwież
+                  </button>
+                </div>
+              )}
+              {!counts && price.state !== 'live' && price.pdfDiff === null && (
                 <button
                   type="button"
-                  onClick={() => updateField('profitTransferAmount', null)}
-                  title={`Z ceny i dosprzedaży: ${pln(transfer.expected)}`}
-                  aria-label="Kwota z ceny i dosprzedaży"
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
+                  onClick={() => setPrice(null, 'Cena znowu idzie za PDF.')}
+                  className="mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
                 >
                   <RotateCcw className="size-3.5" />
-                  z ceny
+                  Za PDF
                 </button>
               )}
-            </div>
-            <p className="text-xs text-zinc-500">
-              {transfer.typed === null
-                ? `= zatwierdzona cena${view.extrasTotal > 0 ? ` + dosprzedaż ${pln(view.extrasTotal)}` : ''}. Wpisz inną kwotę, jeśli przelew się różni.`
-                : `Wpisana ręcznie. Cena${view.extrasTotal > 0 ? ' z dosprzedażą' : ''}: ${pln(transfer.expected)}.`}
-            </p>
-            {transfer.gap !== null && transfer.gap > 0 && extra && (
-              <button
-                type="button"
-                onClick={() => void saveGap()}
-                className="inline-flex h-8 items-center rounded-md border border-white/10 px-2.5 text-xs font-medium text-zinc-200 hover:bg-white/5"
-              >
-                Zapisz różnicę jako dosprzedaż (+{pln(extra.amountNetto)})
-              </button>
-            )}
-            {transfer.gap !== null && transfer.gap < 0 && (
-              <p className="text-xs text-amber-200/80">
-                O {pln(-transfer.gap)} mniej niż cena{view.extrasTotal > 0 ? ' z dosprzedażą' : ''} — liczy się wpisana kwota.
+            </>
+          ) : (
+            <>
+              <div className="mt-1 text-4xl font-bold text-white" style={mono}>
+                {view.imported === null ? '—' : pln(view.imported)}
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">
+                {pendingImport
+                  ? 'Wycena czeka na decyzję w nagłówku („Zastąp" / „Cofnij zmiany") — do tego czasu liczy się kwota z importu, a zmiany w PDF nie są zapisane.'
+                  : 'Projekt bez wyceny — przychód z importu (a gdy są faktury — z faktur).'}
               </p>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
 
-        {view.extras.length > 0 && (
-          <ul className="mt-3 space-y-0.5 text-xs text-zinc-400">
-            {view.extras.map((x, i) => (
-              <li key={`${x.day}-${i}`}>
-                Dosprzedaż {dateText(x.day)}: {x.what || 'bez opisu'} — {x.amount === null ? 'bez kwoty' : pln(x.amount)}
-              </li>
-            ))}
-          </ul>
-        )}
+        <ExtraSalesSection extras={view.extras} categories={categories} today={today} onAdd={addExtra} onEdit={editExtra} onRemove={removeExtra} />
+
+        <div className="border-t border-white/5 pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm text-zinc-300">Do zapłaty <span className="text-xs text-zinc-500">(cena + dosprzedaż)</span></span>
+            <span className="text-xl font-semibold text-white" style={mono}>
+              {view.due === null ? '—' : pln(view.due)}
+            </span>
+          </div>
+          {transfer && (
+            <div className="mt-2 space-y-1.5 rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-zinc-400">
+              <p>
+                Kwota przelewu wpisana ręcznie (przed zmianą): <span className="font-semibold text-zinc-100" style={mono}>{pln(transfer.typed)}</span> — liczy
+                się jako cały przelew
+                {transfer.gap !== null && transfer.gap < 0 ? `, o ${pln(-transfer.gap)} mniej niż cena z dosprzedażą` : ''}.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {legacyGap && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const typedBefore = transfer.typed
+                      void saveExtra(
+                        legacyGap.amountNetto,
+                        legacyGap.what,
+                        `Zapisano dosprzedaż ${pln(legacyGap.amountNetto)} na osi projektu; kwota przelewu liczy się teraz z ceny i dosprzedaży (bez zmiany). Nadaj jej kategorię.`,
+                        () => updateField('profitTransferAmount', null),
+                        () => updateField('profitTransferAmount', typedBefore)
+                      )
+                    }}
+                    className="inline-flex h-7 items-center rounded-md border border-white/10 px-2 font-medium text-zinc-200 hover:bg-white/5"
+                  >
+                    Zapisz różnicę jako dosprzedaż (+{pln(legacyGap.amountNetto)})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const typedBefore = transfer.typed
+                    updateField('profitTransferAmount', null)
+                    setNotice({
+                      message: `Usunięto wpisaną kwotę przelewu; liczy się cena + dosprzedaż (${pln(transfer.expected)}).`,
+                      undo: () => updateField('profitTransferAmount', typedBefore),
+                    })
+                  }}
+                  className="inline-flex h-7 items-center rounded-md px-2 text-zinc-400 hover:bg-white/5 hover:text-white"
+                >
+                  Usuń (liczy się {pln(transfer.expected)})
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <PaymentsSection
+          received={received}
+          baseLabel={transfer ? 'wpisana kwota przelewu' : 'cena + dosprzedaż'}
+          hasInvoices={hasInvoices}
+          today={today}
+          onAdd={addPayment}
+          onFill={fillPayment}
+          onGapAsExtraSale={async () => {
+            if (!paymentGap) return
+            await saveExtra(paymentGap.amountNetto, paymentGap.what, `Zapisano dosprzedaż ${pln(paymentGap.amountNetto)} (różnica we wpłacie). Nadaj jej kategorię.`)
+          }}
+        />
+
         {money.invoicesWithoutAmount > 0 && money.invoiced === null && (
-          <p className="mt-3 text-xs text-zinc-400">
-            Faktura bez kwoty — dopóki jej nie uzupełnisz, liczy się kwota przelewu.
-          </p>
+          <p className="text-xs text-zinc-400">Faktura bez kwoty — dopóki jej nie uzupełnisz (albo kwoty wpłaty), liczy się cena z dosprzedażą.</p>
         )}
-        {money.invoiced !== null && (
-          <p className="mt-3 text-xs text-zinc-400">
+        {money.invoiced !== null && hasInvoices && (
+          <p className="text-xs text-zinc-400">
             Faktury: {pln(money.invoiced)}
-            {money.revenueBasis === 'invoices' ? ' — w Finansach liczą się faktury.' : ` z ${pln(money.expected ?? 0)} — dopóki projekt trwa, liczy się kwota przelewu.`}
+            {money.revenueBasis === 'invoices' ? ' — w Finansach liczą się faktury.' : ` z ${pln(money.expected ?? 0)} — dopóki projekt trwa, liczy się cena z dosprzedażą.`}
           </p>
         )}
       </section>
