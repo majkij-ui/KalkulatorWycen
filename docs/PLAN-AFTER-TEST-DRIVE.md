@@ -1661,3 +1661,19 @@ U1 owns the project tab bar, the PDF placement, the project Finanse tab, the pro
 extra sales and the margin ledger (EBBT). U2 owns components/realization/*, the gear catalogue and payoff
 (`equipment-roi`, `gear-usage`) and the rental data. Both only read the PDF draft (`pdf-draft`). Both may add a
 row to company Finanse and the S5 report; the main session merges those.
+
+### 18.3 Decisions (M.J. 2026-10-24)
+1. **What a job's gear earned** = the PDF's „Sprzęt" total − the Realizacja rental total (category `wynajem`),
+   by default. Sometimes M.J. bills a rental as a separate line, so the PDF gear row already shows only his own
+   gear; for that he can override the figure per project.
+2. **Split between items:** day rental price × days on set. Items come from the Realizacja gear grid, else the
+   quote's gear. Items without a day price are listed „bez stawki" and get nothing. Zaplecze never counts.
+3. **Reconciliation in Realizacja** = PDF total − (external costs + own work + gear earned), before tax.
+   + = quoted in his favour, − = against him. The „Koordynacja i produkcja" line is part of the PDF, so it counts
+   in his favour.
+4. **Zatwierdzona cena** stays as approved. When the PDF differs it shows „PDF: X zł · Odśwież"; it can also be
+   typed by hand.
+5. **Extra-sale categories to start with:** dodatkowa produkcja, dodatkowa postprodukcja, surowe materiały
+   (more can be added on the spot). Phases: przed realizacją, na planie, po projekcie.
+6. **Money received:** the amount and date are entered in the Finanse tab and saved as a payment event on the
+   timeline. Invoices still decide revenue when there is one.
