@@ -65,13 +65,23 @@ export function isTypedTransfer(project: Pick<MoneyProject, 'financials' | 'quot
 }
 
 export interface ExtraSale {
+  /** Id wydarzenia `extra_sale` (edycja w Finansach projektu). */
+  id: string
   day: string
+  /** Notatka („co sprzedane"). */
   what: string
   /** `null` = dodatek bez kwoty (nie wchodzi do sum). */
   amount: number | null
   /** Numer faktury, na której jest dodatek; brak = jeszcze bez faktury albo nie wpisano. */
   number?: string
+  /** U1: kategoria (tekst z listy albo nowa); brak = „bez kategorii". */
+  category?: string
+  /** U1: kiedy sprzedane; brak = „bez fazy". */
+  phase?: ExtraSalePhase
 }
+
+/** U1: przed realizacją / na planie / po projekcie. Klucze na stałe. */
+export type ExtraSalePhase = 'before' | 'on_set' | 'after'
 
 /**
  * Dlaczego przychód jest wg planu albo czego brakuje:
@@ -169,14 +179,19 @@ const textField = (data: Record<string, unknown>, key: string): string | undefin
 function extrasOf(events: MoneyEvent[]): ExtraSale[] {
   return events
     .filter((e) => e.kind === 'extra_sale' && !e.deletedAt && isEventDate(e.start))
-    .map((e) => {
+    .map((e): ExtraSale => {
       const data = eventData(e)
       const number = textField(data, 'number')
+      const category = textField(data, 'category')
+      const phase = data.phase as ExtraSalePhase | undefined
       return {
+        id: e.id,
         day: dayKey(e.start),
         what: textField(data, 'what') ?? '',
         amount: typeof data.amountNetto === 'number' ? data.amountNetto : null,
         ...(number ? { number } : {}),
+        ...(category ? { category } : {}),
+        ...(phase ? { phase } : {}),
       }
     })
     .sort((a, b) => a.day.localeCompare(b.day))

@@ -12,7 +12,7 @@
  */
 
 import { crewLineKey, isRentalCostKey, resolveProfitSections, type ProfitLine } from './profit-calc'
-import { quotePlnPlan, quoteViews, resolveSnapshot, computeTotalCrewDays, type FinancialsSource } from './quote-financials'
+import { quotePlnPlan, quoteViews, resolveSnapshot, computeTotalCrewDays, type FinancialsSource, type PlanRevenueSource } from './quote-financials'
 import { isBlankQuoteData } from './project-save'
 import { actualCostsByCategory, compareCategories, makeCost, costsOfDay, isCrew, totalActualCosts, totalOwnWork } from './project-costs'
 import type { Project, ProjectCost, ProjectFinancials } from './project-types'
@@ -30,7 +30,7 @@ export interface PlanFigures {
    * R2: skąd przychód — `transfer` (wpisany ręcznie, zawiera dosprzedaż), `pdf`,
    * `calculator`; `null` = plan sprzed R2 albo import (przychód + dosprzedaż jak dotąd).
    */
-  revenueSource: 'transfer' | 'pdf' | 'calculator' | null
+  revenueSource: PlanRevenueSource | null
   taxRatePercent: number
   tax: number
   /** Koszty zewnętrzne (bez mojej pracy). */

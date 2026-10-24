@@ -19,12 +19,13 @@
  * Moduł czysty — bez Reacta i Tauri; testy w `quote-variants.test.ts`.
  */
 
+import { withFrozenPrice, withoutApprovedPrice } from './approved-price'
 import { pdfRowsTotal } from './pdf-draft'
 import { blankQuoteSnapshot, clientAfterSave } from './project-save'
 import { computeQuoteTotals, computeSnapshotFinancials, computeTotalCrewDays, resolveSnapshot, quoteViews } from './quote-financials'
 import { quoteGearFigures } from './quote-gear'
 import { toPln, type QuoteCurrency } from './quote-currency'
-import type { Project, ProjectFinancials, QuoteVariant } from './project-types'
+import { countsTowardRevenue, type Project, type ProjectFinancials, type QuoteVariant } from './project-types'
 import type { TimelineEvent } from './event-types'
 import type { QuoteSnapshot } from './quote-library'
 import type { LocalPdfState, QuoteData } from './quote-types'
@@ -150,7 +151,8 @@ export function addVariantPatch(
   const variant: QuoteVariant = {
     id: params.id,
     label: params.label?.trim() || nextVariantLabel(allLabels(project)),
-    snapshot: withMarginLine(params.snapshot),
+    // U1: kopia nie bierze zatwierdzonej ceny — nowy wariant ma cenę z własnego PDF.
+    snapshot: withMarginLine(withoutApprovedPrice(params.snapshot)),
     createdAt: at,
     updatedAt: at,
   }
@@ -251,9 +253,12 @@ export function chooseVariantPlan(project: Project, variantId: string, now: Date
   const quoteVariants = [...others]
   quoteVariants.splice(Math.min(position, quoteVariants.length), 0, demoted)
 
-  const snapshot: QuoteSnapshot =
+  const chosen: QuoteSnapshot =
     (target.snapshot as QuoteSnapshot | null) ??
     ({ version: 2, savedAt: at, ...blankQuoteSnapshot(project.client), pdfDraft: null } as QuoteSnapshot)
+  // U1: w przyjętym zleceniu klient przyjął cenę nowego wariantu — zamrażamy ją
+  // (wariant z już zapisaną ceną ją zachowuje, więc „Cofnij" wraca co do grosza).
+  const snapshot = countsTowardRevenue(project.status) ? withFrozenPrice(chosen, at) : chosen
   // Te same reguły co zapis wyceny: finanse z kalkulatora, klient projektu (albo z wyceny, gdy pusty).
   const after = computeSnapshotFinancials(snapshot, now)
   const client = clientAfterSave(project, snapshot)

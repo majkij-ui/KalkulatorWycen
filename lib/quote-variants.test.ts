@@ -207,8 +207,9 @@ test('usunięcie: wybranego nie wolno; wariant miękko, „Cofnij" przywraca; be
 })
 
 test('„Wybrany do rozliczeń": migawki zamieniają się, finanse z B, „Cofnij" wraca do A co do grosza', () => {
+  // Wycena (nieprzyjęta): migawki zamieniają się bez zmian. Przyjęte zlecenie: test U1 niżej.
   const p = quoted('p1', A, {
-    status: 'won',
+    status: 'quote',
     quoteVariants: [variant('qv-b', 'B', B), variant('qv-c', 'C', C)],
   })
   const plan = chooseVariantPlan(p, 'qv-b', NOW)

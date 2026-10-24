@@ -9,6 +9,7 @@
  *   firma    → zysk projektów MINUS koszty stałe okresu (ZUS, marketing, inne)
  */
 
+import { moneyOf, type MoneyById } from './client-money'
 import { fixedCostCategory, type CostCategory } from './fixed-cost-categories'
 import type { FixedCost, FixedCostType, Project } from './project-types'
 import { countsTowardRevenue, isLiveFixedCost, toMonthKey, toQuarter, toYear } from './project-types'
@@ -151,7 +152,9 @@ export function summarizeFixedCosts(costs: FixedCost[], period: Period): FixedCo
 export function summarizePeriod(
   projects: Project[],
   fixedCosts: FixedCost[],
-  period: Period
+  period: Period,
+  /** U1: wartość wycen z pętli pieniędzy (plan + dosprzedaż); brak = plan z `financials`. */
+  money?: MoneyById | null
 ): PeriodSummary {
   const inPeriod = projects.filter((p) => isInPeriod(p.date, period))
   const realized = inPeriod.filter((p) => countsTowardRevenue(p.status))
@@ -171,7 +174,7 @@ export function summarizePeriod(
     projectProfit += f.zysk
   })
 
-  const pipelineValue = quotes.reduce((sum, p) => sum + (p.financials?.sumaNetto ?? 0), 0)
+  const pipelineValue = quotes.reduce((sum, p) => sum + (moneyOf(p, money).revenue ?? 0), 0)
   const fixed = summarizeFixedCosts(fixedCosts, period)
   const netResult = projectProfit - fixed.total
 

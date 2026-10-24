@@ -63,7 +63,7 @@ synchronous. Providers: `ProjectHubProvider` → `QuoteProvider` → equipment, 
   calculations (`quote-calc`, `quote-financials`, `profit-calc`, `finance-calc`, `money-loop`, `margin-ledger`,
   `gear-costs`,
   `subscriptions`, `client-money`, `client-stats`, `crew-rates`, `gear-usage`, `equipment-roi`,
-  `thread-stats`, `realization-plan`, `realization-costs`, `project-finance`, `period-report`), decisions (`project-save`, `quote-documents`, `inbox`,
+  `thread-stats`, `realization-plan`, `realization-costs`, `project-finance`, `period-report`, `extra-sales`), decisions (`project-save`, `approved-price`, `quote-documents`, `inbox`,
   `inbox-validate`, `auto-backup`, `company-settings-core`). Put every rule here, with a test.
 - **Stores** (`*-store.ts`, `project-library.ts`, `equipment-catalog.ts`, `company-settings.ts`):
   file/localStorage IO through `createCollectionStore` only.
@@ -139,6 +139,21 @@ number of an existing project silently: list what moves and let M.J. confirm.
   „Sprzęt spoza katalogu" (`category: 'gear'`) counts in full, minus `catalogueItemIds` it covered.
   The S5 period report (`period-report.ts`, Finanse → „Raport") calls `marginSummary` for every money number and
   re-adds nothing; where two modules disagree it lists the difference in „Do wyjaśnienia".
+- **U1 (plan §19) — approved price, extra sales, EBBT, one money source for every screen.**
+  - Plan revenue has ONE order, in ONE function: `planRevenue` / `snapshotPlanRevenue` (`quote-financials.ts`) —
+    typed transfer → approved price → the chosen variant's PDF → calculator. Anything that needs „the price" calls it.
+  - The approved price (`QuoteData.approvedPrice`, read via `approvedPriceRecord`) follows the PDF while the project is
+    a quote and freezes on acceptance (status → won / done, `statusChangePatch` in `approved-price.ts`) and when a
+    variant is chosen on an accepted project; after that a PDF change only shows „PDF: X zł · Odśwież". It can be typed
+    in the project Finanse tab. `financials.revenueSource` = `approved`.
+  - Extra sales are `extra_sale` events with `category` (free text: seeds + used, no file) and `phase`
+    (`extra-sales.ts`, stats per period by anchor). Money received = `invoice_paid` with a NET `amount` (invoices with
+    an amount still decide; without an invoice T6 anchors the project on the payment day).
+  - EBBT = W1 − ryczałt − ZUS (`MarginTotals.ebbt`), the same in both gear views; EBBT − result = room to optimise.
+  - **Every screen that shows a project's money reads the money loop** (`useProjectMoney` / `moneyLedger` → `listMoney`,
+    `moneyOf`), never `Project.financials` directly: the project list, Klienci, Finance quotes, Marketing ROAS and
+    origins, the pipeline. `financials` is read directly only as the plan itself (variant comparison, import question).
+  - The PDF editor is the project tab „PDF" (`QuotePdfView`), not a calculator sub-tab.
 
 ## Adding a collection
 

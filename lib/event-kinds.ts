@@ -236,8 +236,24 @@ export const EVENT_KINDS: EventKind[] = [
     group: 'pieniadze',
     range: false,
     scope: 'project',
-    data: z.object({ what: text, amountNetto: amount, number: text }).passthrough(),
+    // U1: `category` (dowolny tekst: z listy albo nowa, `extra-sales.ts`) i `phase`
+    // (klucze `before` / `on_set` / `after`); `what` to notatka. Brak = „bez kategorii".
+    data: z
+      .object({
+        what: text,
+        amountNetto: amount,
+        number: text,
+        category: text,
+        phase: z.enum(['before', 'on_set', 'after']).optional().catch(undefined),
+      })
+      .passthrough(),
     fields: [
+      {
+        key: 'category',
+        label: 'Kategoria',
+        type: 'text',
+        suggestions: ['dodatkowa produkcja', 'dodatkowa postprodukcja', 'surowe materiały'],
+      },
       {
         key: 'what',
         label: 'Co sprzedane',

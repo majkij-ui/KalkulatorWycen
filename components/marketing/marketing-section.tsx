@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Loader2, Megaphone, Plus } from 'lucide-react'
 import { useEvents } from '@/lib/events-context'
 import { todayKey, useProjectHub } from '@/lib/project-hub-context'
+import { useProjectMoney } from '@/lib/use-project-money'
 import { leadsFromEvents, patchLeadEvent, type Lead } from '@/lib/marketing-leads'
 import {
   campaignActiveOn,
@@ -73,12 +74,14 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
     () => new Set(events.filter((e) => e.kind === 'quote_sent' && e.projectId).map((e) => e.projectId as string)),
     [events]
   )
+  // U1: przychód i zysk zleceń z pętli pieniędzy — jak w Finansach.
+  const money = useProjectMoney()
   const summary = useMemo(
     () =>
       current
-        ? summarizeCampaign(current, { costs: fixed.costs, leads, projects, quoteSentProjectIds, today })
+        ? summarizeCampaign(current, { costs: fixed.costs, leads, projects, quoteSentProjectIds, today, money })
         : null,
-    [current, fixed.costs, leads, projects, quoteSentProjectIds, today]
+    [current, fixed.costs, leads, projects, quoteSentProjectIds, today, money]
   )
 
   const adsSpendForYear = (year: number | null) =>
@@ -217,6 +220,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           />
 
           <OriginsPanel
+            money={money}
             projects={projects}
             adsSpendForYear={adsSpendForYear}
             onSetOrigin={(id, origin) => void updateProject(id, { leadSource: origin })}

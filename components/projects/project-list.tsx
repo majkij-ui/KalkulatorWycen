@@ -6,7 +6,9 @@
  * Chronologicznie (najnowsze u góry), ze statusem oznaczonym kolorem i trzema
  * filtrami z notatek: wszystko / tylko projekty / tylko wyceny. Nieprzyjęte
  * wyceny są domyślnie ukryte (przełącznik obok filtrów), a gdy są widoczne,
- * ich kwoty są szare — nie liczą się do wyników firmy. Do tego klient albo
+ * ich kwoty są szare — nie liczą się do wyników firmy. Kwota i zysk wiersza to
+ * najlepsza wiedza z pętli pieniędzy (U1, U-LISTA: `listMoney`) — te same co w
+ * zakładce Finanse projektu, nie zamrożony plan. Do tego klient albo
  * grupa klientów (S2) z przychodem — najlepsza wiedza z pętli pieniędzy, jak
  * w Finansach — i rok; wybór zapamiętuje się między uruchomieniami.
  *
@@ -27,7 +29,8 @@ import {
 } from '@/lib/project-types'
 import { clientDirectory, scopeRevenue } from '@/lib/clients'
 import { clientScope, groupDirectory } from '@/lib/client-groups'
-import { filterProjectList, lostInScope, projectYears } from '@/lib/project-list'
+import { filterProjectList, listMoney, lostInScope, projectYears } from '@/lib/project-list'
+import type { ProjectMoney } from '@/lib/money-loop'
 import { useClientGroups } from '@/lib/use-client-groups'
 import { useProjectMoney } from '@/lib/use-project-money'
 import { ProjectStatusBadge } from './project-status-badge'
@@ -55,10 +58,12 @@ function formatDate(dateKey: string): string {
 
 function ProjectRow({
   project,
+  money,
   onOpen,
   onDeleted,
 }: {
   project: Project
+  money: ProjectMoney | undefined
   onOpen: () => void
   onDeleted: (deleted: { project: Project; eventCount: number }) => void
 }) {
@@ -66,10 +71,10 @@ function ProjectRow({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Zmigrowane wyceny nie mają jeszcze policzonych finansów. Pokazujemy „—",
-  // nie „0 zł" — zero to konkretna informacja, a tu jej po prostu nie ma.
-  const financials = project.financials
-  const zysk = financials?.zysk ?? 0
+  // Kwoty z pętli pieniędzy, jak w Finansach projektu (U1). Bez kwoty — „—",
+  // nie „0 zł": zero to konkretna informacja, a tu jej po prostu nie ma.
+  const row = listMoney(project, money)
+  const zysk = row.profit ?? 0
   // Pełny kolor i pogrubienie tylko dla kwot, które się liczą: projekt
   // zatwierdzony („W realizacji") albo zrealizowany. Otwarta wycena to jeszcze
   // obietnica (szara), nieprzyjęta — archiwum (jeszcze ciemniejsza).
@@ -123,17 +128,18 @@ function ProjectRow({
         </div>
 
         <div className="shrink-0 text-right">
-          {financials ? (
+          {row.revenue !== null ? (
             <>
-              <div className={`tabular-nums ${amountTone}`}>{formatPln(financials.sumaNetto)}</div>
+              <div className={`tabular-nums ${amountTone}`}>{formatPln(row.revenue)}</div>
               <div className={`text-[11px] tabular-nums ${profitTone}`}>
-                zysk {formatPln(zysk)}
+                {row.profit === null ? 'zysk —' : `zysk ${formatPln(zysk)}`}
+                {row.fromInvoices && <span className="text-zinc-500"> · z faktur</span>}
               </div>
             </>
           ) : (
             <>
               <div className="text-zinc-600">—</div>
-              <div className="text-[11px] text-zinc-600">{project.quote ? 'nie policzono' : 'brak wyceny'}</div>
+              <div className="text-[11px] text-zinc-600">{row.missing}</div>
             </>
           )}
         </div>
@@ -454,6 +460,7 @@ export function ProjectList() {
             <ProjectRow
               key={project.id}
               project={project}
+              money={money.get(project.id)}
               onOpen={() => openProject(project.id)}
               onDeleted={setDeleted}
             />

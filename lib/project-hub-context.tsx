@@ -23,6 +23,7 @@ import {
   upsertProject,
 } from './project-library'
 import { backfillMissingFinancials } from './quote-financials'
+import { statusChangePatch } from './approved-price'
 import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
 import { blankDoc, createQuoteDocumentStore, docToSnapshot, type QuoteDocState, type QuoteDocumentStore } from './quote-documents'
@@ -379,11 +380,25 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
     [activeProjectId, patchProject]
   )
 
+  /**
+   * Zmiana statusu. Przyjęcie zlecenia (U1) zamraża zatwierdzoną cenę wybranego
+   * wariantu — najpierw zapis czekających zmian wyceny, żeby zamrozić to, co widać.
+   */
+  const applyStatus = useCallback(
+    async (id: string, status: ProjectStatus) => {
+      await quoteDocs.flushProject(id)
+      const project = projectsRef.current.find((p) => p.id === id)
+      if (!project) return
+      await patchProject(id, statusChangePatch(project, status, new Date()))
+    },
+    [patchProject, quoteDocs]
+  )
+
   const setStatus = useCallback(
     async (id: string, status: ProjectStatus) => {
-      await patchProject(id, { status })
+      await applyStatus(id, status)
     },
-    [patchProject]
+    [applyStatus]
   )
 
   // ── Warianty wyceny ───────────────────────────────────────────────────────
@@ -465,9 +480,9 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
         setStatusQuestion({ projectId: id, to: status })
         return
       }
-      await patchProject(id, { status })
+      await applyStatus(id, status)
     },
-    [patchProject]
+    [applyStatus]
   )
 
   const answerStatusQuestion = useCallback(
@@ -481,10 +496,10 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       // Pytanie zostaje otwarte — najpierw decyzja o finansach z importu.
       if (plan.status === 'blocked') return 'blocked' as const
       setStatusQuestion(null)
-      if (plan.status !== 'missing') await patchProject(question.projectId, { status: question.to })
+      if (plan.status !== 'missing') await applyStatus(question.projectId, question.to)
       return 'done' as const
     },
-    [chooseVariant, patchProject, statusQuestion]
+    [applyStatus, chooseVariant, statusQuestion]
   )
 
   const updateProject = useCallback(

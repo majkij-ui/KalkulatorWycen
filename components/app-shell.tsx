@@ -15,6 +15,7 @@ import {
   Calculator,
   CalendarDays,
   Clapperboard,
+  FileDown,
   FolderKanban,
   Handshake,
   Inbox,
@@ -32,7 +33,7 @@ import { EventsProvider } from '@/lib/events-context'
 import { InboxProvider, useInbox } from '@/lib/inbox-context'
 import { CrewProvider } from '@/lib/crew-context'
 import { QuoteProvider } from '@/lib/quote-context'
-import { QuoteCalculatorView, type CalculatorTab } from '@/components/quote-calculator'
+import { QuoteCalculatorView, QuotePdfView, type CalculatorTab } from '@/components/quote-calculator'
 import { ProjectList } from '@/components/projects/project-list'
 import { ProjectHeader } from '@/components/projects/project-header'
 import { ProjectTimeline } from '@/components/projects/project-timeline'
@@ -133,6 +134,8 @@ function Sidebar({
 const PROJECT_TAB_ITEMS: { value: ProjectTab; label: string; icon: typeof Calculator }[] = [
   { value: 'os', label: 'Oś czasu', icon: Waypoints },
   { value: 'wycena', label: 'Wycena', icon: Calculator },
+  // U1 (U-PDF): PDF oglądanego wariantu — każdy wariant ma swój.
+  { value: 'pdf', label: 'PDF', icon: FileDown },
   // Klucz `sprzet` na stałe; od T5a to zakładka Realizacja (sprzęt jest jej częścią).
   { value: 'sprzet', label: 'Realizacja', icon: Clapperboard },
   // R2 (C): cena z PDF, przelew, zysk netto i marża producencka projektu.
@@ -177,10 +180,12 @@ function ProjectView({
   }
   // Usunięty albo nieznany wariant → wybrany do rozliczeń.
   const variants = listVariants(project)
-  const viewed = variants.find((v) => v.id === variantId) ?? variants.find((v) => v.chosen)!
+  const chosen = variants.find((v) => v.chosen)!
+  const viewed = variants.find((v) => v.id === variantId) ?? chosen
   // Nagłówek (stan zapisu, „Cofnij zmiany z tej sesji") mówi o tym, co widać: w Wycenie
-  // o oglądanym wariancie, gdzie indziej o wybranym (Realizacja liczy z niego).
-  const headerDocId = tab === 'wycena' ? viewed.docId : project.id
+  // i PDF o oglądanym wariancie, gdzie indziej o wybranym (Realizacja i Finanse liczą z niego).
+  const headerDocId = tab === 'wycena' || tab === 'pdf' ? viewed.docId : project.id
+  const otherViewed = viewed.chosen ? null : { label: viewed.label, chosenLabel: chosen.label }
 
   return (
     <>
@@ -228,8 +233,17 @@ function ProjectView({
           onSelectVariant={selectVariant}
         />
       )}
+      {tab === 'pdf' && (
+        <QuotePdfView
+          project={project}
+          docId={viewed.docId}
+          variantId={viewed.id}
+          onSelectVariant={selectVariant}
+          chosenLabel={otherViewed?.chosenLabel ?? null}
+        />
+      )}
       {tab === 'sprzet' && <ProjectRealization />}
-      {tab === 'finanse' && <ProjectFinance project={project} />}
+      {tab === 'finanse' && <ProjectFinance project={project} viewedVariant={otherViewed} />}
       {tab === 'notatki' && <ProjectNotes project={project} />}
     </>
   )

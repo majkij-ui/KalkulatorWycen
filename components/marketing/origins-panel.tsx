@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from 'react'
 import { originBreakdown } from '@/lib/marketing-calc'
+import type { MoneyById } from '@/lib/client-money'
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, toYear, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
 import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
@@ -19,11 +20,14 @@ import { pln } from './marketing-bits'
 
 export function OriginsPanel({
   projects,
+  money,
   adsSpendForYear,
   onSetOrigin,
   onOpenProject,
 }: {
   projects: Project[]
+  /** Pieniądze projektów z pętli (U1) — przychód i zysk jak w Finansach. */
+  money: MoneyById
   /** Wydatek na Google Ads w roku (`null` = cały czas). */
   adsSpendForYear: (year: number | null) => number
   onSetOrigin: (projectId: string, origin: string) => void
@@ -39,7 +43,7 @@ export function OriginsPanel({
   }, [projects])
   const [year, setYear] = useState<number | null>(() => new Date().getFullYear())
 
-  const rows = useMemo(() => originBreakdown(projects, year), [projects, year])
+  const rows = useMemo(() => originBreakdown(projects, year, money), [projects, year, money])
   const unknown = projects.filter((p) => (year === null || toYear(p.date) === year) && !p.leadSource?.trim())
   const adsSpend = adsSpendForYear(year)
   const maxRevenue = Math.max(1, ...rows.map((r) => r.revenue))

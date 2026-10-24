@@ -36,7 +36,7 @@ import { mergeQuoteDataPartial, resolveSnapshot } from './quote-financials'
 import { blankQuoteSnapshot, planProjectSave } from './project-save'
 import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
-import type { QuoteData } from './quote-types'
+import { defaultQuoteData, type QuoteData } from './quote-types'
 import { findVariant, parseDocId } from './quote-variants'
 
 // ── Dokument ─────────────────────────────────────────────────────────────────
@@ -62,6 +62,28 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 /** Pusta wycena: klient z projektu, domyślny cennik użytkownika (albo fabryczny), marża 0 %. */
+/**
+ * Wycena od zera z zachowaniem tego, dla kogo jest (klient i nazwa projektu na
+ * PDF). Szkic PDF zostaje jak dawniej: jego teksty nie są częścią kalkulatora,
+ * a ceny pokaże ostrzeżenie „Ceny w PDF różnią się".
+ */
+export function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): QuoteDoc {
+  return {
+    ...doc,
+    // Wycena od zera to nowa wycena: marża jako osobna pozycja (R1, A5).
+    data: {
+      ...defaultQuoteData,
+      clientName: doc.data.clientName,
+      projectName: doc.data.projectName,
+      marginAsLine: true,
+      // U1: cenę zatwierdził klient — wyczyszczenie kalkulatora jej nie rusza.
+      ...(doc.data.approvedPrice ? { approvedPrice: doc.data.approvedPrice } : {}),
+    },
+    pricingConfig,
+    marginMultiplier: 1,
+  }
+}
+
 export function blankDoc(client: string, defaultPricing: PricingConfigShape | null): QuoteDoc {
   const blank = blankQuoteSnapshot(client, defaultPricing)
   return {
