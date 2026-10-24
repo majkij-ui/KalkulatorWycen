@@ -179,6 +179,54 @@ try {
   years.error = String(error)
 }
 
+// U2: gear „Zarobił" per catalogue item (moves by design), rental totals per project and per year
+// (new — must equal existing wynajem lines), Realizacja totals (must not move). Older trees print null.
+const roiModule = await load('equipment-roi')
+let gear: unknown = null
+try {
+  if (roiModule?.computeGearReport) {
+    const report = roiModule.computeGearReport(equipment, projects, { events, now: NOW })
+    gear = {
+      clientPaid: Object.fromEntries(report.items.map((r: any) => [r.item.name, round(r.clientPaid)])),
+      rentValue: Object.fromEntries(report.items.map((r: any) => [r.item.name, round(r.rentValue)])),
+      clientPaidPct: Object.fromEntries(report.items.map((r: any) => [r.item.name, round(r.clientPaidPct)])),
+      totals: roundAll(report.totals),
+    }
+  }
+} catch (error) {
+  gear = { error: String(error) }
+}
+const rentalsModule = await load('rentals')
+const summaryModule = await load('realization-summary')
+const rentalsPerProject: Record<string, unknown> = {}
+const realizationTotalsPerProject: Record<string, unknown> = {}
+const rentalsPerYear: Record<string, unknown> = {}
+try {
+  for (const p of projects) {
+    const key = `${p.id} ${String(p.name)}`
+    if (rentalsModule?.projectRentalTotal) {
+      const total = rentalsModule.projectRentalTotal(p)
+      if (total) rentalsPerProject[key] = round(total)
+    }
+    if (summaryModule?.realizationTotals && rentalsModule?.realizationLines) {
+      const t = summaryModule.realizationTotals(rentalsModule.realizationLines(p))
+      if (t.total) realizationTotalsPerProject[key] = roundAll(t)
+    }
+  }
+  if (rentalsModule?.periodRentals && money?.moneyLedger) {
+    const ledger = money.moneyLedger(projects, events, TODAY)
+    const byId = new Map(projects.map((p) => [p.id, p]))
+    for (const year of new Set(ledger.map((m: any) => Number(String(m.anchor).slice(0, 4))))) {
+      const rows = ledger
+        .filter((m: any) => Number(String(m.anchor).slice(0, 4)) === year)
+        .map((m: any) => ({ money: m, anchored: true }))
+      rentalsPerYear[String(year)] = round(rentalsModule.periodRentals(rows, byId).total)
+    }
+  }
+} catch (error) {
+  rentalsPerYear.error = String(error)
+}
+
 console.log(
   JSON.stringify(
     {
@@ -190,6 +238,10 @@ console.log(
       years,
       perProject,
       unflaggedJaLines,
+      gear,
+      rentalsPerProject: rentalsModule ? rentalsPerProject : null,
+      rentalsPerYear: rentalsModule ? rentalsPerYear : null,
+      realizationTotals: summaryModule ? realizationTotalsPerProject : null,
     },
     null,
     2

@@ -33,6 +33,7 @@ import {
 import type { DayInfo, DaySuggestion } from '@/lib/realization-days'
 import type { KitCrewEntry } from '@/lib/quote-crew'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
+import type { GearEarnings } from '@/lib/gear-earnings'
 import {
   countsTowardRevenue,
   equipmentCategoryLabel,
@@ -526,34 +527,33 @@ function SummaryTile({
 }
 
 /**
- * „Zarobił": ile klient zapłacił za mój sprzęt w tym projekcie. Dokładnie, gdy
- * wycena wycenia sprzęt pozycjami z katalogu (G5); szacunek („~") dla sprzętu
- * wycenionego po staremu (pakiet, kamery standard/rental).
+ * „Zarobił" (U2, decyzje M.J. 2026-10-24): wiersz „Sprzęt" z PDF − wynajem z
+ * Realizacji (albo kwota wpisana w projekcie), podzielony między pozycje
+ * stawka × dni. Może być ujemny — wynajem większy niż wiersz Sprzęt to fakt,
+ * nie błąd.
  */
+export function earnedHint(earnings: GearEarnings): string {
+  const parts: string[] = []
+  if (earnings.override !== null) parts.push('kwota wpisana w projekcie')
+  else if (earnings.rentalsOver > 0.5) parts.push(`wynajem > Sprzęt o ${pln(earnings.rentalsOver)}`)
+  else if (earnings.rentals > 0.5 && earnings.pdfGear) parts.push(`Sprzęt ${pln(earnings.pdfGear.pln)} − wynajem ${pln(earnings.rentals)}`)
+  else parts.push(earnings.pdfGear?.source === 'pdf' ? 'wiersz Sprzęt z PDF' : 'wiersz Sprzęt z kalkulatora')
+  if (Math.abs(earnings.unassigned) > 0.5) parts.push(`${pln(earnings.unassigned)} czeka: zaznacz sprzęt ze stawką`)
+  if (earnings.noRate.length > 0) parts.push(`${earnings.noRate.length} bez stawki`)
+  return parts.join(' · ')
+}
+
 function EarnedTile({ summary }: { summary: ReturnType<typeof summarizeProjectGear> }) {
-  const { revenue } = summary
-  if (!revenue) {
+  const { earnings } = summary
+  if (earnings.earned === null) {
     return <SummaryTile label="Zarobił" value="—" hint="projekt bez wyceny" tone="muted" />
   }
-  if (revenue.charged <= 0) {
-    return <SummaryTile label="Zarobił" value={pln(0)} hint="wycena nie nalicza sprzętu" tone="muted" />
-  }
-  // Część wyceniona po staremu czeka, aż w dniach pojawi się sprzęt, na który ją rozłożyć.
-  const waiting = revenue.ownGear - summary.clientPaidAssigned
-  const hint =
-    waiting > 0.5
-      ? `${pln(waiting)} czeka: zaznacz sprzęt w dniach`
-      : revenue.rentedIn > 0
-        ? `z ${pln(revenue.charged)}, −${pln(revenue.rentedIn)} wynajem`
-        : summary.clientPaidExact
-          ? 'z wyceny, pozycja po pozycji'
-          : 'szacunek z wyceny'
   return (
     <SummaryTile
       label="Zarobił"
-      value={`${summary.clientPaidExact ? '' : '~'}${pln(revenue.ownGear)}`}
-      hint={hint}
-      tone={summary.clientPaidAssigned <= 0 ? 'muted' : 'good'}
+      value={pln(earnings.earned)}
+      hint={earnedHint(earnings)}
+      tone={earnings.earned > 0 && earnings.assigned !== 0 ? 'good' : 'muted'}
     />
   )
 }

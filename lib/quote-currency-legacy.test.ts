@@ -29,7 +29,7 @@ import {
 import { getProductionEkipaCastSprzetNetto } from './quote-calc'
 import { resolveProfitSections } from './profit-calc'
 import { planFromQuote, plannedCrew } from './realization-plan'
-import { snapshotGearRevenue } from './gear-revenue'
+import { pdfGearRow } from './gear-earnings'
 import { buildInitialPdfState, coerceLocalPdfDraft, pdfRowsTotal, PDF_ROW_KEYS } from './pdf-draft'
 import { buildTermsAndConditions, DEFAULT_PDF_TEXTS } from './pdf-texts-config'
 import { formatPdfAmount } from './pdf-currency'
@@ -241,7 +241,7 @@ function metrics(snapshot: FinancialsSource & { pdfDraft?: unknown }) {
     .sections.flatMap((s) => s.lines)
     .map((l) => `${l.key}|${l.label}|${l.quantity}|${l.unitCost}|${l.isCost}|${l.total}`)
   const plan = planFromQuote(snapshot)!
-  const gear = snapshotGearRevenue(snapshot)!
+  const gear = pdfGearRow(snapshot)!
   const pl = pdfFor(snapshot, 'pl', 'PLN', 4.3)
   const en = pdfFor(snapshot, 'en', 'PLN', 4.3)
   const out: Record<string, unknown> = {
@@ -252,7 +252,7 @@ function metrics(snapshot: FinancialsSource & { pdfDraft?: unknown }) {
     planLines,
     plan: [plan.revenue, plan.tax, plan.costs, plan.profit, [...(plan.byCategory ?? new Map()).entries()].map(([k, v]) => `${k}=${v}`)],
     crew: plannedCrew(snapshot).map((m) => `${m.quoteDay}|${m.role}|${m.unitCost}|${m.personId ?? ''}`),
-    gearRevenue: [gear.charged, gear.rentedIn, gear.itemized, gear.unitemized, [...gear.byItem.entries()].map(([k, v]) => `${k}=${v}`)],
+    gearRow: [gear.pln, gear.source],
     pdfPl: rowsOf(pl.state),
     pdfPlTotal: formatPdfAmount(pdfRowsTotal(pl.state.rows), 'PLN'),
     termsPl: pl.terms,
@@ -688,9 +688,25 @@ function withPdfPrice(golden: ReturnType<typeof metrics>, revenue: number): Retu
   }
 }
 
+/**
+ * U2 (decyzja M.J. 2026-10-24, §18.3/1): „ile zarobił sprzęt" zaczyna się od
+ * wiersza „Sprzęt" z PDF (bez szkicu — od wiersza, który wydrukowałby
+ * kalkulator), a nie od kalkulatora × (przelew / suma) z wynajmem z planu.
+ * Dawne `gearRevenue` znika z wzorca; w jego miejscu wiersz Sprzęt: bez szkicu
+ * = `split.sprzetNetto` z tego samego wzorca, szkic EUR = 260 € × 4,3699.
+ * Wszystko inne bez zmian.
+ */
+function withGearRow(golden: ReturnType<typeof metrics>, pln: number, source: 'pdf' | 'calculator'): ReturnType<typeof metrics> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { gearRevenue: _old, ...rest } = golden
+  return { ...rest, gearRow: [pln, source] }
+}
+
+const fromCalculator = (golden: ReturnType<typeof metrics>) => withGearRow(golden, (golden.split as number[])[2], 'calculator')
+
 const EXPECTED: Record<string, ReturnType<typeof metrics>> = {
-  ...GOLDEN,
-  legacyEurPdf: withPdfPrice(GOLDEN.legacyEurPdf, 1460 * 4.3699),
+  ...Object.fromEntries(Object.entries(GOLDEN).map(([name, golden]) => [name, fromCalculator(golden)])),
+  legacyEurPdf: withGearRow(withPdfPrice(GOLDEN.legacyEurPdf, 1460 * 4.3699), 260 * 4.3699, 'pdf'),
 }
 
 for (const [name, snapshot] of Object.entries(FIXTURES)) {

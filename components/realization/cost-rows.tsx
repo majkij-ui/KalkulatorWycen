@@ -13,8 +13,10 @@ import { costRowRolePatch } from '@/lib/crew-rates'
 import { crewMemberById, rolesForPerson } from '@/lib/crew-types'
 import { costAmount, type CrewSuggestion } from '@/lib/project-costs'
 import { COST_CATEGORIES, costCategoryLabel, type ProjectCost } from '@/lib/project-types'
+import { isPlainAmount, plainAmountPatch } from '@/lib/realization-costs'
 import { pln } from '@/components/calendar/calendar-bits'
 import { PersonPicker } from './person-picker'
+import { RentalItemPicker, type RentalDictionary } from './rental-item-picker'
 
 export const fieldClass =
   'h-8 min-w-0 rounded-md border border-white/10 bg-black/40 px-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/30'
@@ -29,11 +31,14 @@ export function AmountInput({
   onChange,
   label,
   className = '',
+  title,
 }: {
   value: number
   onChange: (value: number) => void
   label: string
   className?: string
+  /** Podpowiedź po najechaniu (np. skąd kwota dojazdu). */
+  title?: string
 }) {
   const [text, setText] = useState(() => formatAmount(value))
   const focused = useRef(false)
@@ -46,6 +51,7 @@ export function AmountInput({
       value={text}
       placeholder="0"
       aria-label={label}
+      title={title}
       onFocus={() => {
         focused.current = true
       }}
@@ -73,7 +79,7 @@ export interface LineMechanics {
   onWork: (own: boolean) => void
 }
 
-function TickBox({ mechanics, label }: { mechanics: LineMechanics; label: string }) {
+export function TickBox({ mechanics, label }: { mechanics: LineMechanics; label: string }) {
   return (
     <input
       type="checkbox"
@@ -109,7 +115,7 @@ export function WorkPill({ mechanics }: { mechanics: LineMechanics }) {
   )
 }
 
-function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+export function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -190,7 +196,22 @@ function categoryOptions(current: string, withCrew: boolean): string[] {
   return known.includes(current) ? known : [...known, current]
 }
 
-/** Zwykły koszt: kategoria, opis, kwota. */
+/** Kwota do pola: zaokrąglona do groszy (km × zł/km daje ułamki). */
+function roundedAmount(cost: ProjectCost): number {
+  return Math.round(costAmount(cost) * 100) / 100
+}
+
+/** „2 500 km × 0,52 zł" — skąd się wzięła kwota dojazdu z wyceny. */
+function quantityHint(cost: ProjectCost): string {
+  const qty = (cost.quantity ?? 1).toLocaleString('pl-PL')
+  const rate = cost.unitCost.toLocaleString('pl-PL', { maximumFractionDigits: 2 })
+  return `z wyceny: ${qty} km × ${rate} zł — wpisz kwotę, jeśli było inaczej`
+}
+
+/**
+ * Zwykły koszt: kategoria, opis, kwota. Dojazd (U-DOJAZD) to jedna kwota —
+ * stary wiersz km × zł/km pokazuje swoją kwotę, poprawka zapisuje 1 × kwota.
+ */
 export function CostRow({
   cost,
   withCrewCategory,
@@ -207,7 +228,8 @@ export function CostRow({
   onRemove: () => void
 }) {
   const id = useId()
-  const quantity = cost.quantity ?? 1
+  const plain = isPlainAmount(cost)
+  const quantity = plain ? 1 : (cost.quantity ?? 1)
   const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
@@ -237,15 +259,140 @@ export function CostRow({
           {String(quantity).replace('.', ',')} ×
         </span>
       )}
-      <AmountInput
-        value={cost.unitCost}
-        onChange={(unitCost) => onChange({ unitCost })}
-        label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota (zł netto)'}
-        className={`w-24 shrink-0 ${dim}`}
-      />
+      {plain ? (
+        <AmountInput
+          value={roundedAmount(cost)}
+          onChange={(amount) => onChange(plainAmountPatch(amount))}
+          label="Kwota (zł netto)"
+          title={(cost.quantity ?? 1) !== 1 ? quantityHint(cost) : undefined}
+          className={`w-24 shrink-0 ${dim}`}
+        />
+      ) : (
+        <AmountInput
+          value={cost.unitCost}
+          onChange={(unitCost) => onChange({ unitCost })}
+          label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota (zł netto)'}
+          className={`w-24 shrink-0 ${dim}`}
+        />
+      )}
       <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
       {mechanics && <WorkPill mechanics={mechanics} />}
       <RemoveButton label="Usuń koszt" onClick={onRemove} />
+    </div>
+  )
+}
+
+function daysText(value: number | undefined): string {
+  return value ? String(value).replace('.', ',') : ''
+}
+
+/** Dni wynajmu: puste = nie wiadomo (wiersz dnia liczy się jako 1 dzień). */
+function DaysInput({
+  value,
+  onChange,
+  className = '',
+}: {
+  value: number | undefined
+  onChange: (days: number | undefined) => void
+  className?: string
+}) {
+  const [text, setText] = useState(() => daysText(value))
+  const focused = useRef(false)
+  useEffect(() => {
+    if (!focused.current) setText(daysText(value))
+  }, [value])
+  return (
+    <input
+      inputMode="decimal"
+      value={text}
+      placeholder="—"
+      aria-label="Dni wynajmu"
+      onFocus={() => {
+        focused.current = true
+      }}
+      onBlur={() => {
+        focused.current = false
+        setText(daysText(value))
+      }}
+      onChange={(e) => {
+        setText(e.target.value)
+        const days = Number(e.target.value.replace(',', '.'))
+        onChange(e.target.value.trim() && Number.isFinite(days) && days > 0 ? days : undefined)
+      }}
+      className={`${fieldClass} w-14 text-right tabular-nums ${className}`}
+    />
+  )
+}
+
+/**
+ * Wiersz wynajmu (U2, plan §17.1): co wynajęte (słownik albo opis) i kwota, a
+ * w drugiej linii — opcjonalnie dni i wypożyczalnia. Kategorię da się zmienić
+ * jak w zwykłym koszcie.
+ */
+export function RentalRow({
+  cost,
+  dictionary,
+  onChange,
+  onRemove,
+  mechanics,
+  withCrewCategory = false,
+}: {
+  cost: ProjectCost
+  dictionary: RentalDictionary
+  onChange: (patch: Partial<ProjectCost>) => void
+  onRemove: () => void
+  mechanics?: LineMechanics
+  withCrewCategory?: boolean
+}) {
+  const id = useId()
+  const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
+  const quantity = cost.quantity ?? 1
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
+        {mechanics && <TickBox mechanics={mechanics} label={cost.label?.trim() || 'wynajem'} />}
+        <select
+          id={`${id}-category`}
+          value={cost.category}
+          aria-label="Kategoria kosztu"
+          onChange={(e) => onChange({ category: e.target.value })}
+          className={`${fieldClass} min-w-0 flex-1 sm:w-44 sm:flex-none ${dim}`}
+        >
+          {categoryOptions(cost.category, withCrewCategory).map((c) => (
+            <option key={c} value={c}>
+              {costCategoryLabel(c)}
+            </option>
+          ))}
+        </select>
+        <RentalItemPicker cost={cost} dictionary={dictionary} onChange={onChange} className={`w-full flex-1 sm:w-auto ${dim}`} />
+        {quantity !== 1 && (
+          <span className="shrink-0 text-xs tabular-nums text-zinc-500" title={`Razem ${pln(costAmount(cost))}`}>
+            {String(quantity).replace('.', ',')} ×
+          </span>
+        )}
+        <AmountInput
+          value={cost.unitCost}
+          onChange={(unitCost) => onChange({ unitCost })}
+          label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota wynajmu (zł netto)'}
+          className={`w-24 shrink-0 ${dim}`}
+        />
+        <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+        {mechanics && <WorkPill mechanics={mechanics} />}
+        <RemoveButton label="Usuń wynajem" onClick={onRemove} />
+      </div>
+      <div className={`flex flex-wrap items-center gap-1.5 pl-6 text-[11px] text-zinc-500 ${dim}`}>
+        <label className="flex items-center gap-1">
+          dni
+          <DaysInput value={cost.rentalDays} onChange={(rentalDays) => onChange({ rentalDays })} className="h-7" />
+        </label>
+        <input
+          value={cost.vendor ?? ''}
+          placeholder="Wypożyczalnia"
+          aria-label="Wypożyczalnia"
+          onChange={(e) => onChange({ vendor: e.target.value || undefined })}
+          className={`${fieldClass} h-7 w-40 text-xs`}
+        />
+      </div>
     </div>
   )
 }

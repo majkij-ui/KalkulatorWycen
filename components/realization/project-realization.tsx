@@ -37,6 +37,11 @@ import { useCallSheets } from '@/lib/use-call-sheets'
 import { eventKind } from '@/lib/event-kinds'
 import type { TimelineEvent } from '@/lib/event-types'
 import { summarizeProjectGear } from '@/lib/equipment-roi'
+import { gearEarnings } from '@/lib/gear-earnings'
+import { isRental, rebalanceRental, rentalBlock, setTypedRental } from '@/lib/rentals'
+import { differsFromPrice, quotedPrice, realizationTotals, reconcile } from '@/lib/realization-summary'
+import { useRentalItems } from '@/lib/use-rental-items'
+import type { FinancialsSource } from '@/lib/quote-financials'
 import { gearFromQuote } from '@/lib/gear-usage'
 import { kitCrewDayCosts, kitCrewFromDayCosts, type KitCrewEntry } from '@/lib/quote-crew'
 import { isBlankQuoteData } from '@/lib/project-save'
@@ -100,6 +105,9 @@ import { DayCalendar, formatDayLong, type DayCalendarActions } from './day-calen
 import { DayCards, DayLines, TotalsText, type LineHandlers } from './day-cards'
 import { NewDayButton, type NewDay } from './new-day'
 import { MissingFromQuote, QuoteChangesBanner, RestartFromQuote } from './realization-notices'
+import { RentalBlockSection, type RentalBlockHandlers } from './rental-block'
+import type { RentalDictionary } from './rental-item-picker'
+import { RealizationTotalsCard, type FinanceComparison } from './realization-totals'
 
 const SAVE_DELAY_MS = 250
 
@@ -134,7 +142,12 @@ function RealizationView({ project }: { project: Project }) {
   const { allEvents, save: saveEvent, remove: removeEvent, restore: restoreEvent } = useEvents()
   const { updateProject, projects } = useProjectHub()
   const { items } = useEquipment()
-  const { data, pricingConfig, marginMultiplier } = useQuote()
+  const { data, pricingConfig, marginMultiplier, pdfDraft } = useQuote()
+  const rentalItems = useRentalItems()
+  const dictionary = useMemo<RentalDictionary>(
+    () => ({ items: rentalItems.items, allItems: rentalItems.allItems, addItem: rentalItems.addItem }),
+    [rentalItems.items, rentalItems.allItems, rentalItems.addItem]
+  )
 
   // `null` = projekt nie ma zapisanych dni; dni z kalendarza i podpowiedzi
   // zapiszą się dopiero przy pierwszej zmianie.
@@ -234,10 +247,9 @@ function RealizationView({ project }: { project: Project }) {
   )
   const mode = realizationMode({ costs, costsFromQuoteAt: startedAt })
   const shown = useMemo(() => (mode === 'draft' ? draftCosts(plan.rows, shootDayIds) : costs), [mode, plan.rows, shootDayIds, costs])
-  const layout = useMemo(
-    () => layoutRealization(shown, days.map((d) => d.id), plan.quoteDayIds),
-    [shown, days, plan.quoteDayIds]
-  )
+  const dayIds = useMemo(() => days.map((d) => d.id), [days])
+  const layout = useMemo(() => layoutRealization(shown, dayIds, plan.quoteDayIds), [shown, dayIds, plan.quoteDayIds])
+  const rentals = useMemo(() => rentalBlock(shown, dayIds), [shown, dayIds])
 
   /**
    * Pierwsza zmiana w szkicu (decyzja Q2, wariant A): cały szkic zapisuje się
@@ -405,6 +417,42 @@ function RealizationView({ project }: { project: Project }) {
       undo: () => commitCosts(restoreCosts(costsRef.current, deletedAt)),
     })
   }
+  // ── Wynajem sprzętu (U2, §17.1): pozycje najpierw wypełniają wpisaną kwotę ──
+
+  /** Zmiana pozycji wynajmu całego projektu; kwota „bez szczegółów" trzyma resztę. */
+  const changeRentalItem = (cost: ProjectCost, patch: Partial<ProjectCost>) => {
+    const { list, id } = targetOf(cost)
+    if (!id) return
+    const next = list.map((c) => (c.id === id ? applyPatch(c, editPatch(c, patch)) : c))
+    // Zmiana kategorii wyprowadza wiersz z wynajmu — nie wypełnia niczego.
+    commitCosts('category' in patch ? next : rebalanceRental(list, next, dayIds))
+  }
+  const rentalHandlers: RentalBlockHandlers = {
+    mechanics: (cost) => ({
+      counted: !cost.skipped,
+      own: isOwnWork(cost),
+      onTick: (counted) => (rentals.rest?.id === cost.id ? changeCost : changeRentalItem)(cost, { skipped: counted ? undefined : true }),
+      onWork: (own) => (rentals.rest?.id === cost.id ? changeCost : changeRentalItem)(cost, { ownWork: own ? true : undefined }),
+    }),
+    onTyped: (value) => {
+      const { list } = ensureStarted()
+      commitCosts(setTypedRental(list, value, dayIds))
+    },
+    onRestChange: changeCost,
+    onRestRemove: removeCost,
+    onAddItem: (init) => {
+      const { list } = ensureStarted()
+      commitCosts(addCost(list, { category: 'wynajem', quantity: 1, unitCost: 0, ...init }))
+    },
+    onItemChange: changeRentalItem,
+    onItemRemove: (cost) => {
+      const { list, id } = targetOf(cost)
+      if (!id) return
+      commitCosts(rebalanceRental(list, softDeleteCost(list, id, new Date().toISOString()), dayIds))
+      setNotice({ message: `Usunięto ${describeCost(cost)} z wynajmu.`, undo: () => commitCosts(list) })
+    },
+  }
+
   /** Wiersze dnia wyceny bez odpowiednika → wybrany dzień Realizacji (bez znacznika „zmieniony"). */
   const moveToDay = (lines: ProjectCost[], dayId: string) => {
     ensureDaysSaved()
@@ -495,7 +543,8 @@ function RealizationView({ project }: { project: Project }) {
   }
 
   const today = toDateKey(new Date())
-  const financeCosts = useMemo(() => projectMoney({ ...project, costs }, allEvents, today).costs, [project, costs, allEvents, today])
+  const money = useMemo(() => projectMoney({ ...project, costs }, allEvents, today), [project, costs, allEvents, today])
+  const financeCosts = money.costs
   const restartPreview = useMemo(() => {
     if (mode !== 'legacy' || !hasQuote) return null
     const next = restartFromQuote(costs, plan.rows, shootDayIds)
@@ -551,6 +600,51 @@ function RealizationView({ project }: { project: Project }) {
   const gear = useMemo(() => summarizeProjectGear({ ...project, gearDays: days }, items), [project, days, items])
   const rentByDay = useMemo(() => new Map(gear.perDay.map((d) => [d.dayId, d.rentValue])), [gear])
 
+  // ── Suma Realizacji i bilans wyceny (U2, U-SUMA) ───────────────────────────
+  // Wycena na żywo (wybrany wariant ze szkicem PDF) i wiersze, które widać.
+  const liveQuote = useMemo<FinancialsSource | null>(
+    () => (hasQuote ? { ...((project.quote as FinancialsSource | null) ?? {}), data, pricingConfig, marginMultiplier, pdfDraft } : null),
+    [hasQuote, project.quote, data, pricingConfig, marginMultiplier, pdfDraft]
+  )
+  const catalog = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  const earnings = useMemo(
+    () => gearEarnings({ quote: liveQuote, costs: shown, gearDays: days, catalog, override: project.gearEarnedOverride }),
+    [liveQuote, shown, days, catalog, project.gearEarnedOverride]
+  )
+  const totals = useMemo(() => realizationTotals(shown), [shown])
+  const price = useMemo(() => quotedPrice(liveQuote), [liveQuote])
+  const reconciliation = price ? reconcile(price.pln, totals, earnings.earned) : null
+  const financeComparison: FinanceComparison | null =
+    price && differsFromPrice(price.pln, money.revenue)
+      ? {
+          amount: money.revenue as number,
+          reconciliation: reconcile(money.revenue as number, totals, earnings.earned),
+          invoiced: money.revenueBasis === 'invoices',
+        }
+      : null
+  const setGearOverride = (value: number | null) => {
+    const before = project.gearEarnedOverride
+    void updateProject(project.id, { gearEarnedOverride: value ?? undefined })
+    setNotice({
+      message: value === null ? 'Sprzęt zarobił: znowu liczony z PDF.' : 'Zapisano kwotę „Sprzęt zarobił" dla tego projektu.',
+      undo: () => updateProject(project.id, { gearEarnedOverride: before }),
+    })
+  }
+  // Siatka sprzętu liczy „Zarobił" z tych samych danych co karta wyżej.
+  const liveProject = useMemo<Project>(
+    () => ({ ...project, costs, costsFromQuoteAt: startedAt, quote: (liveQuote ?? project.quote) as Project['quote'] }),
+    [project, costs, startedAt, liveQuote]
+  )
+  const rentalDayNames = useMemo(() => {
+    const names = new Set<string>()
+    rentals.days.forEach((cost) => {
+      const index = days.findIndex((d) => d.id === cost.dayId)
+      if (index >= 0) names.add(labelOf(days[index], index))
+      else names.add('dzień z wyceny')
+    })
+    return [...names]
+  }, [rentals.days, days, info]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const suggestions = useMemo(
     () =>
       crewSuggestions([
@@ -594,6 +688,7 @@ function RealizationView({ project }: { project: Project }) {
     mechanics,
     onChangeCost: changeCost,
     onRemoveCost: removeCost,
+    rentals: dictionary,
   }
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
   const newDayButton = <NewDayButton onAdd={addDay} />
@@ -755,6 +850,15 @@ function RealizationView({ project }: { project: Project }) {
         </div>
       )}
 
+      <RealizationTotalsCard
+        totals={totals}
+        price={price}
+        earnings={earnings}
+        reconciliation={reconciliation}
+        finance={financeComparison}
+        onOverride={setGearOverride}
+      />
+
       <section aria-label="Koszty projektu" className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
@@ -767,8 +871,9 @@ function RealizationView({ project }: { project: Project }) {
           </div>
           <TotalsText lines={layout.project} label="Razem" />
         </div>
+        <RentalBlockSection block={rentals} dictionary={dictionary} handlers={rentalHandlers} dayNames={rentalDayNames} />
         <div className="space-y-1.5">
-          {layout.project.map((cost) => (
+          {layout.project.filter((cost) => !isRental(cost)).map((cost) => (
             <div key={cost.id}>
               <CostRow
                 cost={cost}
@@ -854,7 +959,7 @@ function RealizationView({ project }: { project: Project }) {
       </section>
 
       <GearGrid
-        project={project}
+        project={liveProject}
         days={days}
         info={info}
         suggestion={suggestion}

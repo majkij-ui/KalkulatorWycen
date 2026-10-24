@@ -16,7 +16,8 @@ import type { GearDay, ProjectCost } from '@/lib/project-types'
 import { itemLabel } from '@/lib/pl-plural'
 import { KindChip, mono, pln } from '@/components/calendar/calendar-bits'
 import type { DayRemoval } from '@/components/equipment/project-equipment'
-import { CostRow, CrewRow, type LineMechanics } from './cost-rows'
+import { CostRow, CrewRow, RentalRow, type LineMechanics } from './cost-rows'
+import type { RentalDictionary } from './rental-item-picker'
 import { DayCalendar, type DayCalendarActions } from './day-calendar'
 
 const smallButton =
@@ -58,6 +59,8 @@ export interface LineHandlers {
   mechanics: (cost: ProjectCost) => LineMechanics
   onChangeCost: (cost: ProjectCost, patch: Partial<ProjectCost>) => void
   onRemoveCost: (cost: ProjectCost) => void
+  /** U2: słownik wynajmowanego sprzętu — wiersze wynajmu wybierają z niego pozycję. */
+  rentals?: RentalDictionary
 }
 
 /** Wiersze ekipy i kosztów jednej grupy (dzień albo dzień wyceny bez odpowiednika). */
@@ -84,16 +87,27 @@ export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: 
       )}
       {[...rentals, ...other].length > 0 && (
         <div className="mt-1.5 space-y-1.5">
-          {[...rentals, ...other].map((cost) => (
-            <CostRow
-              key={cost.id}
-              cost={cost}
-              withCrewCategory={false}
-              mechanics={handlers.mechanics(cost)}
-              onChange={(patch) => handlers.onChangeCost(cost, patch)}
-              onRemove={() => handlers.onRemoveCost(cost)}
-            />
-          ))}
+          {[...rentals, ...other].map((cost) =>
+            cost.category === 'wynajem' && handlers.rentals ? (
+              <RentalRow
+                key={cost.id}
+                cost={cost}
+                dictionary={handlers.rentals}
+                mechanics={handlers.mechanics(cost)}
+                onChange={(patch) => handlers.onChangeCost(cost, patch)}
+                onRemove={() => handlers.onRemoveCost(cost)}
+              />
+            ) : (
+              <CostRow
+                key={cost.id}
+                cost={cost}
+                withCrewCategory={false}
+                mechanics={handlers.mechanics(cost)}
+                onChange={(patch) => handlers.onChangeCost(cost, patch)}
+                onRemove={() => handlers.onRemoveCost(cost)}
+              />
+            )
+          )}
         </div>
       )}
     </>

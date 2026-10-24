@@ -73,6 +73,7 @@ import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
 import { ExtraSalesPanel } from './extra-sales-panel'
 import { GearCostsPanel } from './gear-costs-panel'
+import { RentalsPanel } from './rentals-panel'
 import { PaymentsPanel, PlanVsActual } from './money-loop-panels'
 import { ReportTab } from './report-tab'
 import { SubscriptionsPanel, type FinanceNotice } from './subscriptions-panel'
@@ -935,6 +936,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             onOpenProject={onOpenProject}
           />
           <ExtraSalesPanel summary={margin} periodLabel={periodLabel(period)} scoped={!!scopeIds} />
+          <RentalsPanel summary={margin} projectsById={projectsById} periodLabel={periodLabel(period)} onOpenProject={onOpenProject} />
           <GearCostsPanel gear={margin.gear} periodLabel={periodLabel(period)} />
         </>
       ) : tab === 'report' ? (

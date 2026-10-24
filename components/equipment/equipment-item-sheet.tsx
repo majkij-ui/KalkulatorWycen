@@ -193,8 +193,8 @@ export function EquipmentItemSheet({
           />
           <Stat
             label="Zarobił"
-            value={`~${pln(roi.clientPaid)}`}
-            sub={roi.clientPaidPct === null ? 'szacunek z wycen' : `${Math.round(roi.clientPaidPct)}% ceny zakupu`}
+            value={pln(roi.clientPaid)}
+            sub={roi.clientPaidPct === null ? 'Sprzęt z PDF − wynajem' : `${Math.round(roi.clientPaidPct)}% ceny zakupu`}
             good={roi.clientPaid > 0}
           />
           <Stat
@@ -366,7 +366,7 @@ export function EquipmentItemSheet({
                     </div>
                     <div className="text-right text-xs tabular-nums">
                       <div className="text-emerald-400/80">{pln(use.rentValue)}</div>
-                      <div className="text-zinc-500">~{pln(use.clientPaid)}</div>
+                      <div className="text-zinc-500">{pln(use.clientPaid)}</div>
                     </div>
                     {onOpenProject && (
                       <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />

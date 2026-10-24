@@ -33,6 +33,7 @@ export const AUTO_BACKUP_FILES = [
   'crew.json',
   'crew-roles.json',
   'client-groups.json',
+  'rental-items.json',
   'call-sheets.json',
   'inbox-decisions.json',
   'company.json',

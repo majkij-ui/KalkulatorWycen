@@ -696,6 +696,27 @@ test('R2: wiersz „Marża producencka" = suma marż producenckich (po podatku, 
   assert.match(reportToMarkdown(report), /\| Marża producencka \|/)
 })
 
+test('U2: wiersz „w tym wynajem sprzętu" = wynajem projektów okresu (część kosztów bezpośrednich), z poprzednim okresem', () => {
+  const rental = (amount: number, extra: Record<string, unknown> = {}) => ({ id: `c${++seq}`, category: 'wynajem', unitCost: amount, quantity: 1, ...extra })
+  const data = input({
+    projects: [
+      project('q2', { date: '2026-05-10', costs: [rental(300)] }),
+      project('a', { date: '2026-08-10', costs: [rental(1_500, { label: 'Wynajem sprzętu' }), rental(700, { dayId: 'd1' }), rental(99, { skipped: true })] }),
+      project('b', { date: '2026-09-02', costs: [{ id: 'x', category: 'ekipa', unitCost: 1_000 }] }),
+      project('lost', { date: '2026-08-11', status: 'lost', costs: [rental(5_000)] }),
+    ],
+  })
+  const report = buildPeriodReport(data, Q(2026, 3))
+  const row = metric(report, 'rentals')
+  assert.equal(row.value, 2_200)
+  assert.equal(row.previous, 300)
+  assert.equal(row.group, 'layer1')
+  assert.equal(report.metrics.findIndex((m) => m.key === 'rentals'), report.metrics.findIndex((m) => m.key === 'directCosts') + 1)
+  assert.ok(row.value <= metric(report, 'directCosts').value, 'część kosztów bezpośrednich')
+  assert.ok(report.definitions.some((d) => d.key === 'rentals'))
+  assert.match(reportToMarkdown(report), /\| w tym wynajem sprzętu \|/)
+})
+
 // ── Odporność ────────────────────────────────────────────────────────────────
 
 test('usunięte projekty i wydarzenia nie wchodzą do raportu; wejście nie jest zmieniane', () => {

@@ -55,6 +55,7 @@ import { invoiceAmount, moneyLedger, openInvoices, paymentDays, type ProjectMone
 import { formatDate } from './money-loop-labels'
 import { extraSaleStats } from './extra-sales'
 import { quoteMoney } from './quote-currency'
+import { periodRentals } from './rentals'
 import {
   countsTowardRevenue,
   PROJECT_STATUS_LABELS,
@@ -551,6 +552,11 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
       key: 'producerMargin',
       label: 'Marża producencka',
       text: 'W1 − ryczałt − wartość mojej pracy (pozycje „Moja praca" w Realizacji, a bez Realizacji pozycje „Ja" z wyceny, po ich koszcie). Czy zlecenie zarabia, gdybym tylko produkował, a na plan wysłał kogoś innego. Suma po projektach; wynikiem firmy zostaje W2.',
+    },
+    {
+      key: 'rentals',
+      label: 'Wynajem sprzętu',
+      text: 'Suma wierszy „Wynajem sprzętu" w Realizacji projektów okresu (na cały projekt i w dniach), a gdzie Finanse liczą plan — z planu. Część kosztów bezpośrednich, nie dodatkowy koszt.',
     },
     {
       key: 'ebbt',
@@ -1052,6 +1058,8 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
       pctOfRevenue: pctOf(extraSaleStats(current.projects).total, revenue),
     }),
     metricRow('directCosts', 'Koszty bezpośrednie', 'layer1', current.totals.costs, before((s) => s.totals.costs)),
+    // U2 (§17.1): wynajem sprzętu — jedna liczba projektu, część kosztów bezpośrednich.
+    metricRow('rentals', 'w tym wynajem sprzętu', 'layer1', periodRentals(current.projects, projectsById).total, before((s) => periodRentals(s.projects, projectsById).total)),
     metricRow('margin', 'Marża na realizacji (W1)', 'layer1', current.totals.margin, before((s) => s.totals.margin), {
       emphasis: true,
       pctOfRevenue: pctOf(current.totals.margin, revenue),
