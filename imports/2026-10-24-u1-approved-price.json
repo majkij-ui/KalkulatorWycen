@@ -1,5 +1,5 @@
 {
-  "note": "U1: zatwierdzona cena = dzisiejsza suma PDF przyjętych zleceń (decyzja U1/1) — 11 projektów, wygenerowane 2026-10-24T17:05:34.288Z",
+  "note": "U1: zatwierdzona cena = dzisiejsza suma PDF przyjętych zleceń (decyzja U1/1) — 11 projektów, wygenerowane 2026-10-24T21:46:28.098Z",
   "update": {
     "projects.json": [
       {
@@ -252,7 +252,7 @@
               "approvedPrice": {
                 "pln": 11980,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -399,7 +399,7 @@
             "podatek": 1018.3000000000001,
             "zysk": 5661.700000000001,
             "marzaPct": 47.259599332220375,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -506,7 +506,7 @@
               "approvedPrice": {
                 "pln": 6374.506,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z",
+                "at": "2026-10-24T21:46:28.098Z",
                 "amount": 1460,
                 "currency": "EUR",
                 "rate": 4.3661
@@ -653,7 +653,7 @@
             "podatek": 541.8330100000001,
             "zysk": 5832.67299,
             "marzaPct": 91.49999999999999,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -767,7 +767,7 @@
               "approvedPrice": {
                 "pln": 1800,
                 "source": "calculator",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -839,7 +839,7 @@
             "podatek": 153,
             "zysk": 1527,
             "marzaPct": 84.83333333333334,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -968,7 +968,7 @@
               "approvedPrice": {
                 "pln": 8200,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -1112,7 +1112,7 @@
             "podatek": 697,
             "zysk": 6003,
             "marzaPct": 73.20731707317073,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -1194,7 +1194,7 @@
               "approvedPrice": {
                 "pln": 4200,
                 "source": "calculator",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -1266,7 +1266,7 @@
             "podatek": 357,
             "zysk": 3593,
             "marzaPct": 85.54761904761905,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -1397,7 +1397,7 @@
               "approvedPrice": {
                 "pln": 3260,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -1537,7 +1537,7 @@
             "podatek": 277.1,
             "zysk": 1322.9,
             "marzaPct": 40.579754601226995,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "transfer"
           }
         }
@@ -1659,7 +1659,7 @@
               "approvedPrice": {
                 "pln": 13180,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -1807,7 +1807,7 @@
             "podatek": 1120.3000000000002,
             "zysk": 4749.700000000001,
             "marzaPct": 36.037177541729896,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -1897,7 +1897,7 @@
               "approvedPrice": {
                 "pln": 7810,
                 "source": "calculator",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -1969,7 +1969,7 @@
             "podatek": 663.85,
             "zysk": 96.14999999999964,
             "marzaPct": 1.2311139564660645,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -2230,7 +2230,7 @@
               "approvedPrice": {
                 "pln": 22250,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -2372,7 +2372,7 @@
             "podatek": 1891.2500000000002,
             "zysk": 7933.75,
             "marzaPct": 35.65730337078652,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -2444,7 +2444,7 @@
               "approvedPrice": {
                 "pln": 10050,
                 "source": "calculator",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -2516,7 +2516,7 @@
             "podatek": 0,
             "zysk": 9050,
             "marzaPct": 90.04975124378109,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "approved"
           }
         }
@@ -2594,7 +2594,7 @@
               "approvedPrice": {
                 "pln": 67800,
                 "source": "pdf",
-                "at": "2026-10-24T17:05:34.288Z"
+                "at": "2026-10-24T21:46:28.098Z"
               }
             },
             "pricingConfig": {
@@ -2728,7 +2728,7 @@
             "podatek": 6837.400000000001,
             "zysk": 25122.600000000006,
             "marzaPct": 31.23147687717554,
-            "computedAt": "2026-10-24T17:05:34.288Z",
+            "computedAt": "2026-10-24T21:46:28.098Z",
             "revenueSource": "transfer"
           }
         }
