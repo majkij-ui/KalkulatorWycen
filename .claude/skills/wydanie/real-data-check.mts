@@ -10,6 +10,11 @@
  *
  * A module or function missing in an older tree prints `null` for that part
  * instead of failing. `today` is fixed so both runs agree.
+ *
+ * U1 adds per project what the project LIST shows (`list`: the money loop since
+ * U1, the frozen `financials` before), the approved price (`price`: frozen /
+ * typed / live PDF) and extra sales with category and phase; per year EBBT in
+ * both gear views (`ledger`) and the extra-sale stats.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -75,6 +80,12 @@ for (const p of projects) {
 const money = await load('money-loop')
 const subs = await load('subscriptions')
 const finance = await load('finance-calc')
+const listModule = await load('project-list')
+const ledgerModule = await load('margin-ledger')
+const gearModule = await load('gear-costs')
+const extraModule = await load('extra-sales')
+const equipment = parseAll(types?.equipmentItemSchema, items('equipment.json')).filter((e) => !e.deletedAt)
+const company = items('company.json')[0] ?? null
 const years: Record<string, unknown> = {}
 // Best-known money per project (R2 adds ownWork / producerMargin; an older tree prints null for them).
 const perProject: Record<string, unknown> = {}
@@ -100,32 +111,68 @@ try {
     const ledger = money.moneyLedger(projects, events, TODAY)
     for (const m of ledger) {
       const p = projects.find((x) => x.id === m.id)
-      perProject[`${m.id} ${String(p?.name)}`] = roundAll({
-        counts: m.counts,
-        revenue: m.revenue,
-        revenueBasis: m.revenueBasis,
-        costs: m.costs,
-        costsBasis: m.costsBasis,
-        profit: m.profit,
-        ownWork: m.ownWork ?? null,
-        producerMargin: m.producerMargin ?? null,
-      })
+      // What the project list shows: U1 reads the loop (`listMoney`), before U1 the frozen plan.
+      const listed = listModule?.listMoney
+        ? listModule.listMoney(p, m)
+        : { revenue: (p?.financials as { sumaNetto?: number } | null)?.sumaNetto ?? null, profit: (p?.financials as { zysk?: number } | null)?.zysk ?? null }
+      const revenueOfPlan = qf?.snapshotPlanRevenue ? qf.snapshotPlanRevenue(p?.quote) : null
+      perProject[`${m.id} ${String(p?.name)}`] = {
+        ...(roundAll({
+          counts: m.counts,
+          revenue: m.revenue,
+          revenueBasis: m.revenueBasis,
+          costs: m.costs,
+          costsBasis: m.costsBasis,
+          profit: m.profit,
+          ownWork: m.ownWork ?? null,
+          producerMargin: m.producerMargin ?? null,
+          extrasTotal: m.extrasTotal,
+        }) as object),
+        list: roundAll({ revenue: listed.revenue, profit: listed.profit }),
+        price: revenueOfPlan
+          ? roundAll({ approved: revenueOfPlan.approvedPln, frozen: revenueOfPlan.frozen?.source ?? null, live: revenueOfPlan.live.pln, planSource: revenueOfPlan.source })
+          : null,
+        extras: (m.extras ?? []).map((x: { day: string; amount: number | null; category?: string; phase?: string }) => `${x.day} ${round(x.amount)} ${x.category ?? '-'} / ${x.phase ?? '-'}`),
+      }
     }
     const list: number[] = money.moneyYears ? money.moneyYears(ledger) : [Number(TODAY.slice(0, 4))]
     for (const year of list) {
       const yearCosts = subs?.fixedCostsInYear ? subs.fixedCostsInYear(fixedCosts, subscriptions, year) : fixedCosts
       const s = money.summarizeMoney(ledger, yearCosts, { kind: 'year', year })
       const fixed = finance?.summarizeFixedCosts ? finance.summarizeFixedCosts(yearCosts, { kind: 'year', year }) : null
-      years[year] = roundAll({
-        revenue: s.revenue,
-        tax: s.tax,
-        costs: s.costs,
-        profit: s.profit,
-        invoicedRevenue: s.invoicedRevenue,
-        plan: s.plan,
-        projects: s.projects,
-        fixedTotal: fixed?.total ?? null,
-      })
+      // Margin ledger in both gear views: EBBT (U1) must be the same in both; result differs by gear.
+      const layers: Record<string, unknown> = {}
+      if (ledgerModule?.marginSummary && gearModule?.gearSpreadSettings) {
+        for (const spread of [true, false]) {
+          const m = ledgerModule.marginSummary(
+            { ledger, fixedCosts: yearCosts, equipment, spread, settings: gearModule.gearSpreadSettings(company), today: TODAY, scope: null },
+            { kind: 'year', year }
+          )
+          layers[spread ? 'spread' : 'cash'] = roundAll({
+            margin: m.totals.margin,
+            producerMargin: m.totals.producerMargin ?? null,
+            result: m.totals.result,
+            ebbt: m.totals.ebbt ?? null,
+          })
+          if (spread && extraModule?.extraSaleStats) {
+            const x = extraModule.extraSaleStats(m.projects)
+            layers.extraSales = roundAll({ projects: x.projects, withExtras: x.withExtras, total: x.total, averagePerProject: x.averagePerProject })
+          }
+        }
+      }
+      years[year] = {
+        ...(roundAll({
+          revenue: s.revenue,
+          tax: s.tax,
+          costs: s.costs,
+          profit: s.profit,
+          invoicedRevenue: s.invoicedRevenue,
+          plan: s.plan,
+          projects: s.projects,
+          fixedTotal: fixed?.total ?? null,
+        }) as object),
+        ledger: layers,
+      }
     }
   }
 } catch (error) {
