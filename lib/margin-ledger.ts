@@ -27,9 +27,11 @@
  *    tylko w widoku roku (udział w ZUS wg udziału w przychodzie, jak warstwa 2).
  *  - Przełącznik „Rozłóż duże zakupy sprzętu" zmienia sprzęt, więc każdą
  *    liczbę warstwy 2 (także per projekt).
- *  - Okres, który się jeszcze nie skończył, jest „wstępnie": koszty firmy do
- *    końca okresu z planu (raty subskrypcji, rozłożony sprzęt), projekty w
- *    realizacji z planu.
+ *  - Okres, który się jeszcze nie skończył, jest „wstępnie" (projekty w
+ *    realizacji z planu). Okres, który ZAWIERA dziś, liczy koszty firmy (ZUS,
+ *    stałe, marketing, sprzęt) tylko do bieżącego miesiąca włącznie
+ *    (`companyCostsThrough`); okres całkiem przeszły i całkiem przyszły — w
+ *    całości, więc miesiąc przyszły nadal pokazuje swoje planowane koszty.
  *  - Filtr klienta / grupy (S2) zawęża projekty i ich sumy; udziały liczymy
  *    zawsze ze wszystkich projektów, więc grupa niesie swoją część kosztów firmy.
  *
@@ -159,13 +161,37 @@ export function projectIdsInScope(
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0)
 
+/**
+ * Do którego miesiąca (`YYYY-MM`) liczą się koszty firmy okresu. Okres, który
+ * ZAWIERA dziś, liczy je tylko do bieżącego miesiąca włącznie (kolejne raty
+ * subskrypcji, rozłożony sprzęt, planowany marketing jeszcze nie są kosztem).
+ * Okres całkiem przeszły i całkiem przyszły — `null`, czyli cały okres (przyszły
+ * miesiąc nadal pokazuje swoje planowane koszty, więc trend miesięczny się nie zmienia).
+ */
+export function companyCostsThrough(period: Period, today: string): string | null {
+  const months = periodMonths(period)
+  const current = today.slice(0, 7)
+  return months[0] <= current && current < months[months.length - 1] ? current : null
+}
+
+/** Koszty stałe bez miesięcy po `through` (`null` = bez odcięcia). */
+export function costsThrough<T extends { month: string }>(costs: T[], through: string | null): T[] {
+  return through ? costs.filter((cost) => cost.month.slice(0, 7) <= through) : costs
+}
+
 /** Koszty firmy okresu; ręczne pozycje powiązane z katalogiem liczą tylko resztę. */
-function companyCosts(input: MarginInput, period: Period, tax: number, gear: GearPeriodCost): CompanyCosts {
-  const fixed = summarizeFixedCosts(input.fixedCosts, period)
+function companyCosts(
+  input: MarginInput,
+  fixedCosts: FixedCost[],
+  period: Period,
+  tax: number,
+  gear: GearPeriodCost
+): CompanyCosts {
+  const fixed = summarizeFixedCosts(fixedCosts, period)
   // Pozycja powiązana z katalogiem (np. „Sprzęt" z zakupem z katalogu) poza
   // kategorią sprzętu: odejmujemy powiązane z jej worka. Sprzęt robi to sam.
   const linked: Partial<Record<CostCategory, number>> = {}
-  input.fixedCosts.forEach((cost) => {
+  fixedCosts.forEach((cost) => {
     if (!isLiveFixedCost(cost) || !cost.catalogueItemIds?.length || !isInPeriod(cost.month, period)) return
     const category = fixedCostCategory(cost)
     if (category === 'gear') return
@@ -201,9 +227,13 @@ function totalsOf(rows: ProjectMargin[], perProject: boolean): MarginTotals {
 }
 
 export function marginSummary(input: MarginInput, period: Period): MarginSummary {
-  const money = summarizeMoney(input.ledger, input.fixedCosts, period)
-  const gear = gearCostInPeriod(input.equipment, input.fixedCosts, period, input.spread, input.settings)
-  const company = companyCosts(input, period, money.tax, gear)
+  // Koszty firmy w trwającym okresie: tylko do bieżącego miesiąca. Jedna lista
+  // dla pieniędzy okresu, kosztów firmy i sprzętu — raport czyta te same liczby.
+  const through = companyCostsThrough(period, input.today)
+  const fixedCosts = costsThrough(input.fixedCosts, through)
+  const money = summarizeMoney(input.ledger, fixedCosts, period)
+  const gear = gearCostInPeriod(input.equipment, fixedCosts, period, input.spread, input.settings, through)
+  const company = companyCosts(input, fixedCosts, period, money.tax, gear)
   const perProject = period.kind === 'year'
   const months = periodMonths(period)
   const provisional = months[months.length - 1] >= input.today.slice(0, 7)

@@ -169,9 +169,9 @@ test('zakup 6 000 zł w maju: przełącznik zmienia sprzęt, wynik roku i wynik 
   const equipment = [gear('kamera', 6_000, '2026-05-03')]
   const on = marginSummary(input(projects, { equipment, spread: true }), YEAR(2026))
   const off = marginSummary(input(projects, { equipment, spread: false }), YEAR(2026))
-  near(on.company.gear, (6_000 / 36) * 8)
+  near(on.company.gear, (6_000 / 36) * 6, 'maj–październik: raty tylko do bieżącego miesiąca')
   assert.equal(off.company.gear, 6_000)
-  near((on.totals.result ?? 0) - (off.totals.result ?? 0), 6_000 - (6_000 / 36) * 8)
+  near((on.totals.result ?? 0) - (off.totals.result ?? 0), 6_000 - (6_000 / 36) * 6)
   for (const s of [on, off]) {
     near(s.projects.reduce((sum, r) => sum + (r.result ?? 0), 0), s.totals.result ?? NaN, 'suma wierszy = wynik')
   }
@@ -279,7 +279,7 @@ test('bieżący rok i bieżący kwartał są „wstępnie"; zamknięte okresy ni
   assert.equal(s(YEAR(2027)), true)
 })
 
-test('bieżący rok: koszty firmy do grudnia z planu (raty subskrypcji, rozłożony sprzęt)', () => {
+test('bieżący rok: koszty firmy tylko do bieżącego miesiąca (raty subskrypcji, rozłożony sprzęt)', () => {
   const zus: Subscription = {
     id: 'zus',
     name: 'ZUS',
@@ -295,9 +295,70 @@ test('bieżący rok: koszty firmy do grudnia z planu (raty subskrypcji, rozłoż
     input([project('a')], { fixedCosts: fixedCostsInYear([], [zus], 2026), equipment: [gear('red', 57_000, '2024-04-01')] }),
     YEAR(2026)
   )
-  near(s.company.zus, 4 * 1_417.14, 'wrzesień–grudzień')
-  near(s.company.gear, 19_000, '12 rat po 1 583,33')
+  near(s.company.zus, 2 * 1_417.14, 'wrzesień–październik; listopad i grudzień jeszcze nie są kosztem')
+  near(s.company.gear, 10 * (57_000 / 36), 'styczeń–październik: 10 rat po 1 583,33')
   assert.equal(s.provisional, true)
+})
+
+test('koszty firmy do bieżącego miesiąca: przeszły okres w całości, przyszły okres w całości (planowane koszty), miesiące bez zmian', () => {
+  const zus: Subscription = {
+    id: 'zus',
+    name: 'ZUS',
+    category: 'zus',
+    amount: 1_000,
+    currency: 'PLN',
+    cadence: 'monthly',
+    startDate: '2025-01-05',
+    createdAt: '',
+    updatedAt: '',
+  } as Subscription
+  const make = (year: number) =>
+    input([project('a')], {
+      fixedCosts: fixedCostsInYear([], [zus], year),
+      equipment: [gear('red', 36_000, '2026-01-10')],
+    })
+  const zusOf = (year: number, period: Period) => marginSummary(make(year), period).company.zus
+  // TODAY = 2026-10-16
+  assert.equal(zusOf(2026, YEAR(2026)), 10_000, 'rok z dziś: do października włącznie')
+  assert.equal(zusOf(2026, { kind: 'quarter', year: 2026, index: 4 }), 1_000, 'IV kwartał: tylko październik')
+  assert.equal(zusOf(2026, { kind: 'quarter', year: 2026, index: 3 }), 3_000, 'III kwartał zamknięty: w całości')
+  assert.equal(zusOf(2026, { kind: 'half', year: 2026, index: 2 }), 4_000, 'II półrocze: lipiec–październik')
+  assert.equal(zusOf(2026, MONTH(2026, 10)), 1_000, 'bieżący miesiąc: bez zmian')
+  assert.equal(zusOf(2026, MONTH(2026, 12)), 1_000, 'przyszły miesiąc pokazuje planowany koszt')
+  assert.equal(zusOf(2025, YEAR(2025)), 12_000, 'rok przeszły: w całości')
+  assert.equal(zusOf(2027, YEAR(2027)), 12_000, 'rok przyszły: w całości, jako plan')
+  near(marginSummary(make(2026), YEAR(2026)).company.gear, 1_000 * 10, 'sprzęt tak samo: 10 rat po 1 000')
+  near(marginSummary(make(2026), YEAR(2026)).money.fixedCosts.total, 10_000, 'ta sama lista kosztów w pieniądzach okresu')
+  // Wykres: miesiące po bieżącym nadal mają swój planowany koszt firmy.
+  const trend = marginTrend(make(2026), 2026)
+  near(trend[11].companyCosts, 2_000, 'grudzień: ZUS 1 000 + rata sprzętu 1 000, bez podatku (brak przychodu)')
+  near(trend[9].companyCosts, 2_000, 'październik tak samo')
+})
+
+test('koszty firmy do bieżącego miesiąca: udziały projektów nadal sumują się do kosztów firmy i do wyniku roku', () => {
+  const zus: Subscription = {
+    id: 'zus',
+    name: 'ZUS',
+    category: 'zus',
+    amount: 1_000,
+    currency: 'PLN',
+    cadence: 'monthly',
+    startDate: '2026-01-05',
+    createdAt: '',
+    updatedAt: '',
+  } as Subscription
+  const s = marginSummary(
+    input([project('a'), project('b', { financials: financials(30_000, 10_000) })], {
+      fixedCosts: fixedCostsInYear([], [zus], 2026),
+      equipment: [gear('kamera', 6_000, '2026-05-03')],
+    }),
+    YEAR(2026)
+  )
+  near(s.company.overhead, 10_000 + 1_000, 'ZUS do października + 6 rat sprzętu')
+  near(s.projects.reduce((total, r) => total + (r.overhead ?? 0), 0), s.company.overhead, 'suma udziałów = koszty firmy')
+  near(s.projects.reduce((total, r) => total + (r.result ?? 0), 0), s.totals.result ?? NaN, 'suma wierszy = wynik')
+  near(row(s, 'b').overhead, 0.75 * s.company.overhead)
+  assert.equal(s.unallocated, 0)
 })
 
 test('grupa klientów: wiersze członków, suma ich warstw; udział liczony ze wszystkich projektów', () => {

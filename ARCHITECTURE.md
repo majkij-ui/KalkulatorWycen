@@ -202,3 +202,9 @@ reading `inbox/` (`fs:allow-read-dir`), native save dialogs (PDF, JSON export), 
 in the installed app with real data, read-only where possible, and list them in the plan's „as built".
 React StrictMode in `npm run dev` runs effects twice; verify effect-order-sensitive flows on the export
 (`npm run build`, launch config „export").
+
+## Finance number rules (V3)
+
+- Shoot days (`periodActivity`): a project with any calendar `shoot_day` counts those inside the period; one with none counts `quoteShootDayCount`. Gear statistics are separate.
+- Company costs (ZUS, fixed, marketing, gear) in a period that contains today count only up to the current month (`companyCostsThrough` in `margin-ledger.ts`); past and future periods stay whole. One capped list feeds `marginSummary` and the Raport.
+- „Zakończone projekty" (Finanse › Projekty) filters the ledger to `done` before the margin input; company costs, „W realizacji" and the Raport use the unfiltered data.

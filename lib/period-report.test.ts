@@ -172,7 +172,7 @@ test('miesiąc bez zleceń: pusta lista projektów, W1 = 0, wynik = −koszty fi
   assert.equal(report.previous.period.label, '06.2026')
 })
 
-test('okres otwarty: „wstępnie" w tytule, definicjach i uwagach; raty subskrypcji do końca okresu liczą się z planu', () => {
+test('okres otwarty: „wstępnie" w tytule, definicjach i uwagach; raty subskrypcji tylko do bieżącego miesiąca', () => {
   const sub = subscriptionSchema.parse({
     id: 'sub1',
     name: 'Chmura',
@@ -184,8 +184,12 @@ test('okres otwarty: „wstępnie" w tytule, definicjach i uwagach; raty subskry
   })
   const report = buildPeriodReport(input({ subscriptions: [sub] }), Q(2026, 4))
   assert.equal(report.provisional, true)
-  near(report.companyCosts.subscriptionsTotal, 300, 'trzy raty IV kwartału, w tym dwie przyszłe')
-  near(report.companyCosts.planned, 200, 'listopad i grudzień to plan')
+  near(report.companyCosts.subscriptionsTotal, 100, 'z trzech rat IV kwartału liczy się październik; listopad i grudzień jeszcze nie')
+  near(report.companyCosts.planned, 0, 'w trwającym okresie przyszłe raty nie wchodzą do kosztów')
+  near(report.companyCosts.fixed, 100, 'ta sama liczba co w rejestrze marży')
+  const future = buildPeriodReport(input({ subscriptions: [sub] }), Q(2027, 1))
+  near(future.companyCosts.subscriptionsTotal, 300, 'okres przyszły: koszty z planu w całości')
+  near(future.companyCosts.planned, 300, 'wszystkie trzy raty to plan')
   assert.ok(report.notes.some((n) => n.code === 'provisional'))
   assert.match(reportToMarkdown(report), /^# Raport okresowy — Q4 2026 \(wstępnie\)/)
   const closed = buildPeriodReport(input({ subscriptions: [sub] }), Q(2026, 3))
@@ -247,7 +251,7 @@ test('przełącznik sprzętu: rozłożony i w całości dają różne koszty fir
   const full = buildPeriodReport({ ...data, spread: false }, YEAR(2026))
   assert.equal(spread.view.gear, 'spread')
   assert.equal(full.view.gear, 'full')
-  near(spread.gear.total, (6_000 / 36) * 8, 'maj–grudzień 2026 po 166,67')
+  near(spread.gear.total, (6_000 / 36) * 6, 'maj–październik 2026 po 166,67 (do bieżącego miesiąca)')
   near(full.gear.total, 6_000)
   near(metric(spread, 'margin').value, metric(full, 'margin').value)
   assert.notEqual(metric(spread, 'result').value, metric(full, 'result').value)
