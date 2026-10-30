@@ -33,8 +33,8 @@ export function GearCostsPanel({ gear, periodLabel }: { gear: GearPeriodCost; pe
         </h2>
         <p className="text-[11px] text-zinc-500">
           {gear.spread
-            ? `Rozłożony: zakupy od ${pln(settings.thresholdPln)} po równo przez ${settings.months} mies.; tańsze w całości w miesiącu zakupu.`
-            : 'W całości: każdy zakup w miesiącu, w którym go kupiono (jak zakupy uderzyły w konto).'}
+            ? `Zakupy sprzętu rozłożone na ${settings.months} mies.: zakupy od ${pln(settings.thresholdPln)} po równo, tańsze liczone jednorazowo w miesiącu zakupu.`
+            : 'Zakupy sprzętu liczone jednorazowo: każdy zakup w miesiącu, w którym go kupiono (jak zakupy uderzyły w konto).'}
         </p>
       </div>
 
@@ -63,7 +63,7 @@ export function GearCostsPanel({ gear, periodLabel }: { gear: GearPeriodCost; pe
                 {formatDate(line.date)} · {pln(line.price)}
                 {line.mode === 'spread'
                   ? ` · ${pln(line.monthly)} / mies. ${monthLabel(line.firstMonth)}–${monthLabel(line.lastMonth)}`
-                  : ' · w całości'}
+                  : ' · jednorazowo'}
                 {line.retiredMonth && ` · wycofany ${monthLabel(line.retiredMonth)}`}
               </span>
               <span className="w-24 text-right tabular-nums text-zinc-100">{pln(amount)}</span>

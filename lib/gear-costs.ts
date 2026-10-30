@@ -39,6 +39,15 @@ export interface GearSpreadSettings {
 
 export const DEFAULT_GEAR_SPREAD: GearSpreadSettings = { thresholdPln: 5000, months: 36 }
 
+/**
+ * Jak nazywamy widok kosztów sprzętu na ekranie i w raporcie (V1): „rozłożone na
+ * N mies." albo „liczone jednorazowo" — zamiast dawnego „rozłożony" / „w całości",
+ * które nie mówiły, o co chodzi. Klucze w kodzie (`spread` / `full`) bez zmian.
+ */
+export function gearViewLabel(spread: boolean, months: number): string {
+  return spread ? `zakupy sprzętu rozłożone na ${months} mies.` : 'zakupy sprzętu liczone jednorazowo'
+}
+
 /** Próg i liczba miesięcy z company.json; zła albo brakująca wartość = domyślna. */
 export function gearSpreadSettings(
   company?: { gearSpreadThresholdPln?: unknown; gearSpreadMonths?: unknown } | null

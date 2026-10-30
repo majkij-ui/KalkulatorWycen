@@ -81,8 +81,9 @@ export interface ProjectMargin {
   /** R2: wartość mojej pracy w okresie (projekt zakotwiczony, jak koszty). */
   ownWork: number
   /**
-   * R2: marża producencka w okresie = warstwa 1 − podatek − moja praca (po
-   * podatku, decyzja M.J. 2026-10-18). Suma wierszy = marża producencka firmy.
+   * R2 (V1): marża producencka w okresie = warstwa 1 − moja praca, PRZED
+   * podatkiem (V1 zastąpiło decyzję „po podatku" z 2026-10-18). Suma wierszy =
+   * marża producencka firmy.
    */
   producerMargin: number
   /** Udział w przychodzie roku (0–1); `null` poza widokiem roku. */
@@ -103,7 +104,7 @@ export interface MarginTotals {
   tax: number
   /** R2: moja praca w projektach okresu. */
   ownWork: number
-  /** R2: suma marż producenckich projektów (po podatku). */
+  /** R2 (V1): suma marż producenckich projektów (przed podatkiem). */
   producerMargin: number
   /** Koszty firmy bez podatku przypisane projektom; `null` poza rokiem (dla zawężenia). */
   overhead: number | null
@@ -220,7 +221,7 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
       known: row.money.revenue !== null,
       tax,
       ownWork,
-      producerMargin: row.revenue - costs - tax - ownWork,
+      producerMargin: row.revenue - costs - ownWork,
       share: null,
       ebbt: null,
       overhead: null,

@@ -150,8 +150,10 @@ export interface ProjectMoney {
   /** `null`, gdy przychód nieznany. Po podatku (ryczałt projektu). = „Marża" projektu (C4). */
   profit: number | null
   /**
-   * R2 (C4): marża producencka = zysk netto − wartość mojej pracy („gdybym tylko
-   * produkował, a na plan wysłał kogoś innego"). Po podatku. `null`, gdy przychód nieznany.
+   * R2 (C4, V1): marża producencka = marża na realizacji − wartość mojej pracy
+   * („gdybym tylko produkował, a na plan wysłał kogoś innego"). PRZED podatkiem,
+   * jak marża na realizacji; zysk netto (po podatku) to osobna liczba.
+   * `null`, gdy przychód nieznany.
    */
   producerMargin: number | null
   /** Marża producencka jako % przychodu; `null` bez przychodu. */
@@ -303,7 +305,7 @@ export function projectMoney(
   const profit = revenue === null ? null : revenue - tax - (costs ?? 0)
   const margin = revenue === null ? null : revenue - (costs ?? 0)
   const marginPct = profit !== null && revenue !== null && revenue > 0 ? (profit / revenue) * 100 : null
-  const producerMargin = profit === null ? null : profit - ownWork
+  const producerMargin = margin === null ? null : margin - ownWork
   const producerMarginPct = producerMargin !== null && revenue !== null && revenue > 0 ? (producerMargin / revenue) * 100 : null
 
   // ── Daty ───────────────────────────────────────────────────────────────────

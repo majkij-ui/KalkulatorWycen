@@ -193,14 +193,23 @@ test('C1: faktury wygrywają także z kwotą wpisaną ręcznie', () => {
   near(m.revenue, 12_500)
 })
 
-test('C4: marża = zysk netto (po kosztach zewnętrznych i podatku); producencka = minus moja praca', () => {
+test('C4 / V1: zysk netto po podatku; marża na realizacji i producencka przed podatkiem (producencka = marża − moja praca)', () => {
   const plan = projectMoney(project({ financials: fin(10_000, 2_000, { ownWork: 3_000 }) }), [], TODAY)
   near(plan.profit, 10_000 - 850 - 2_000)
   near(plan.ownWork, 3_000)
-  near(plan.producerMargin, 10_000 - 850 - 2_000 - 3_000)
-  near(plan.producerMarginPct, 41.5)
+  near(plan.margin, 10_000 - 2_000)
+  near(plan.producerMargin, 10_000 - 2_000 - 3_000)
+  near(plan.producerMarginPct, 50)
   const none = projectMoney(project({ financials: null }), [], TODAY)
   assert.deepEqual([none.producerMargin, none.producerMarginPct, none.ownWork], [null, null, 0])
+})
+
+test('V1 (JHJ): marża 13 915, moja praca 10 100 → marża producencka 3 815 (14,5 %) przed podatkiem; zysk netto osobno po podatku', () => {
+  const m = projectMoney(project({ financials: fin(26_310, 12_395, { ownWork: 10_100 }) }), [], TODAY)
+  near(m.margin, 13_915)
+  near(m.producerMargin, 3_815)
+  near(m.producerMarginPct, 14.5, 'procent od przychodu')
+  near(m.profit, 26_310 - 26_310 * 0.085 - 12_395, 'zysk netto po podatku bez zmian')
 })
 
 test('C4: Realizacja — moja praca z wierszy „Moja praca"; przełączenie pozycji nie zmienia podstawy (koszty + moja praca)', () => {
@@ -211,7 +220,7 @@ test('C4: Realizacja — moja praca z wierszy „Moja praca"; przełączenie poz
   near(m.costs, 1_500)
   near(m.ownWork, 1_500)
   near(m.actualOwnWork, 1_500)
-  near(m.producerMargin, 10_000 - 850 - 1_500 - 1_500)
+  near(m.producerMargin, 10_000 - 1_500 - 1_500)
 })
 
 test('T6 bez zmian: odznaczenie w trakcie realizacji to wpisywanie w toku — liczy się plan, po Zrealizowanym fakty', () => {
@@ -231,12 +240,12 @@ test('koszty sprzed R2 (bez nowych pól) liczą się dokładnie jak dotąd', () 
   const costs = [cost(1800), cost(700, { category: 'dojazd' }), cost(510, { category: 'wynajem' }), cost(2200, { category: 'postprodukcja' })]
   const m = projectMoney(project({ status: 'won', financials: fin(12_020, 5_300), costs }), [], TODAY)
   assert.deepEqual([m.costsBasis, m.costsNote, m.costs, m.ownWork], ['plan', 'partial', 5_300, 0], 'Morris: wpisano 5 210 z 5 300')
-  near(m.producerMargin, m.profit!)
+  near(m.producerMargin, m.margin!)
 })
 
 // ── D2: rejestr marży i raport ───────────────────────────────────────────────
 
-test('D2: marża producencka firmy = suma projektów (po podatku); projekt spoza okresu nie wnosi mojej pracy', () => {
+test('D2: marża producencka firmy = suma projektów (przed podatkiem); projekt spoza okresu nie wnosi mojej pracy', () => {
   const projects = [
     { ...project({ id: 'a', financials: fin(10_000, 2_000, { ownWork: 3_000 }), date: '2026-05-10' }), client: 'A' },
     { ...project({ id: 'b', financials: fin(5_000, 1_000), date: '2026-06-10' }), client: 'B' },
@@ -251,9 +260,9 @@ test('D2: marża producencka firmy = suma projektów (po podatku); projekt spoza
   }
   const year = marginSummary(input, { kind: 'year', year: 2026 })
   near(year.totals.ownWork, 3_000)
-  near(year.totals.producerMargin, 10_000 - 850 - 2_000 - 3_000 + (5_000 - 425 - 1_000))
+  near(year.totals.producerMargin, 10_000 - 2_000 - 3_000 + (5_000 - 1_000))
   const a = year.projects.find((r) => r.money.id === 'a')!
-  near(a.producerMargin, a.margin - a.tax - a.ownWork)
+  near(a.producerMargin, a.margin - a.ownWork)
   const june = marginSummary(input, { kind: 'month', year: 2026, index: 6 })
   near(june.totals.ownWork, 0)
   const scoped = marginSummary({ ...input, scope: new Set(['a']) }, { kind: 'year', year: 2026 })
@@ -279,7 +288,7 @@ test('D2: moja praca leży w okresie kotwicy, jak koszty — późniejsza faktur
   }
   const july = marginSummary(input, { kind: 'month', year: 2026, index: 7 })
   near(july.totals.ownWork, 0)
-  near(july.totals.producerMargin, 5_000 - 425)
+  near(july.totals.producerMargin, 5_000)
   near(marginSummary(input, { kind: 'month', year: 2026, index: 5 }).totals.ownWork, 3_000)
 })
 

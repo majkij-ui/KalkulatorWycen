@@ -123,6 +123,7 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
   const { money, price, transfer, plan, received } = view
   const counts = countsTowardRevenue(latest.status)
   const revenue = money.revenue
+  const marginBeforeTaxPct = money.margin !== null && revenue !== null && revenue > 0 ? (money.margin / revenue) * 100 : null
   const pendingImport = docState?.status === 'needs-confirmation'
   const hasInvoices = money.invoices.some((i) => i.state !== 'planned')
 
@@ -410,17 +411,17 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
         )}
       </section>
 
-      {/* C2 + C4 — wynik */}
+      {/* C2 + C4 (V1) — wynik: obie marże przed podatkiem, zysk netto (po podatku) osobno */}
       <section aria-label="Wynik projektu" className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3">
-          <div className="text-[11px] text-zinc-500">Zysk netto (marża)</div>
-          <div className={`mt-0.5 text-2xl font-semibold ${money.profit !== null && money.profit < 0 ? 'text-red-300' : 'text-emerald-300'}`} style={mono}>
-            {money.profit === null ? '—' : pln(money.profit)}
+          <div className="text-[11px] text-zinc-500">Marża na realizacji · przed podatkiem</div>
+          <div className={`mt-0.5 text-2xl font-semibold ${money.margin !== null && money.margin < 0 ? 'text-red-300' : 'text-white'}`} style={mono}>
+            {money.margin === null ? '—' : pln(money.margin)}
           </div>
-          <div className="mt-1 text-xs text-zinc-500">{pct(money.marginPct)} przychodu · po kosztach zewnętrznych i ryczałcie</div>
+          <div className="mt-1 text-xs text-zinc-500">{pct(marginBeforeTaxPct)} przychodu · przychód − koszty zewnętrzne</div>
         </div>
         <div className="rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3">
-          <div className="text-[11px] text-zinc-500">Marża producencka</div>
+          <div className="text-[11px] text-zinc-500">Marża producencka · przed podatkiem</div>
           <div className={`mt-0.5 text-2xl font-semibold ${money.producerMargin !== null && money.producerMargin < 0 ? 'text-red-300' : 'text-white'}`} style={mono}>
             {money.producerMargin === null ? '—' : pln(money.producerMargin)}
           </div>
@@ -429,24 +430,37 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
             {money.ownWork > 0 ? `bez Twojej pracy (${pln(money.ownWork)})` : 'nic nie oznaczono jako „Moja praca"'}
           </div>
         </div>
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-2.5 sm:col-span-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-[11px] text-zinc-500">Zysk netto · po podatku</span>
+            <span className={`text-lg font-semibold ${money.profit !== null && money.profit < 0 ? 'text-red-300' : 'text-emerald-300'}`} style={mono}>
+              {money.profit === null ? '—' : pln(money.profit)}
+            </span>
+          </div>
+          <div className="mt-0.5 text-xs text-zinc-500">{pct(money.marginPct)} przychodu · po kosztach zewnętrznych i ryczałcie</div>
+        </div>
       </section>
 
       <section aria-label="Rozliczenie" className="rounded-xl border border-white/5 bg-zinc-900/20 px-4 py-3 text-sm">
         <Row label={<>Przychód <span className="text-xs text-zinc-500">({revenueSourceText(view)})</span></>} value={revenue === null ? '—' : pln(revenue)} />
-        <Row label="" value={revenue === null ? '' : minus(money.tax)}>
-          <span className="inline-flex items-center gap-1.5">
-            Ryczałt
-            {view.hasQuote ? (
-              <TaxInput value={data.profitTaxRatePercent} onCommit={(rate) => updateField('profitTaxRatePercent', rate)} />
-            ) : (
-              <span className="text-zinc-500">{pct(money.taxRatePercent)}</span>
-            )}
-          </span>
-        </Row>
         <Row label={<>Koszty zewnętrzne <span className="text-xs text-zinc-500">({costsText})</span></>} value={money.costs === null ? '—' : minus(money.costs)} />
-        <Row label="Zysk netto (marża)" value={money.profit === null ? '—' : pln(money.profit)} strong />
+        <Row label="Marża na realizacji (przed podatkiem)" value={money.margin === null ? '—' : pln(money.margin)} strong />
         <Row label="Moja praca (po koszcie z wyceny / Realizacji)" value={minus(money.ownWork)} muted />
-        <Row label="Marża producencka" value={money.producerMargin === null ? '—' : pln(money.producerMargin)} strong />
+        <Row label="Marża producencka (przed podatkiem)" value={money.producerMargin === null ? '—' : pln(money.producerMargin)} strong />
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <Row label="Marża na realizacji" value={money.margin === null ? '—' : pln(money.margin)} muted />
+          <Row label="" value={revenue === null ? '' : minus(money.tax)}>
+            <span className="inline-flex items-center gap-1.5">
+              Ryczałt
+              {view.hasQuote ? (
+                <TaxInput value={data.profitTaxRatePercent} onCommit={(rate) => updateField('profitTaxRatePercent', rate)} />
+              ) : (
+                <span className="text-zinc-500">{pct(money.taxRatePercent)}</span>
+              )}
+            </span>
+          </Row>
+          <Row label="Zysk netto (po podatku)" value={money.profit === null ? '—' : pln(money.profit)} strong />
+        </div>
         {!counts && <p className="pt-2 text-[11px] text-zinc-500">{statusNote}</p>}
       </section>
 
