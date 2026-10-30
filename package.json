@@ -10,6 +10,7 @@
     "test": "node --import ./scripts/register-ts.mjs --test lib/*.test.ts",
     "typecheck": "tsc --noEmit",
     "data": "node --import ./scripts/register-ts.mjs scripts/data.mts",
+    "ksef:test": "node --import ./scripts/register-ts.mjs scripts/ksef-test-env.mts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
