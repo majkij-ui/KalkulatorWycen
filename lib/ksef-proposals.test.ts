@@ -131,6 +131,10 @@ test('jedyny ręczny wpis w projekcie: KSeF nadpisuje numer, kwotę, termin i dz
   assert.equal(next.start, '2027-01-15')
   assert.equal(next.data.amountNetto, 23020)
   assert.equal(next.data.number, 'FV/1/2027')
+  const trace = (next.updatedFrom as { before?: Record<string, unknown> }[]).at(-1)!
+  assert.equal(trace.before?.['data.amountNetto'], 20000)
+  assert.equal(trace.before?.['data.number'], 'stary')
+  assert.equal(trace.before?.start, '2027-01-20')
 })
 
 test('ten sam numer w innym zapisie: nadpisuje ten wpis, także gdy projektów jest kilka', () => {

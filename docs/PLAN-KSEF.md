@@ -57,7 +57,7 @@ Ministry's app and revoke every unknown one. Whether revoking a token also revok
 
 | Case | Behaviour |
 |---|---|
-| Invoice matches one open project of the client | Proposal to overwrite number, amount and due date; old data in the backup |
+| Invoice matches one open project of the client | Proposal to overwrite number, amount, due date and day; the old values stay in the event's `updatedFrom[].before` |
 | Client has several open projects | M.J. picks the project, nothing automatic |
 | No matching project | „Nieprzypisane"; revenue does not change by itself |
 | Issued 31.12, KSeF number 02.01 | Calendar 02.01 (reaches the client); revenue in the year of issue |

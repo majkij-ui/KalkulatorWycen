@@ -60,6 +60,8 @@ export interface EventUpdateTrace {
   at: string
   /** Zmienione pola: `projectId`, `start`, `data.<klucz>`. */
   fields: string[]
+  /** Tylko KSeF: poprzednie wartości nadpisanych pól. */
+  before?: Record<string, unknown>
 }
 
 /** Refy zmian zapisanych w `updatedFrom` wydarzenia (czytane ostrożnie — to pole spoza schematu). */
@@ -763,6 +765,8 @@ export function applyEventUpdate(
     inboxFile: file,
     at: nowIso,
     fields: changes.map((c) => c.field),
+    // KSeF nadpisuje dane: stare wartości zostają w śladzie, żeby dało się je odtworzyć.
+    ...(proposal.ref.startsWith('ksef:') ? { before: Object.fromEntries(changes.map((c) => [c.field, c.before ?? null])) } : {}),
   }
   const previous = Array.isArray(event.updatedFrom) ? event.updatedFrom : []
   return { ...next, data, updatedFrom: [...previous, trace], updatedAt: nowIso }
