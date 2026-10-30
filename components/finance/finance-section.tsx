@@ -64,11 +64,19 @@ import { clientScope, groupDirectory } from '@/lib/client-groups'
 import { clientDirectory, type ClientInfo } from '@/lib/clients'
 import { Switch } from '@/components/ui/switch'
 import { ClientCombobox } from '@/components/projects/client-combobox'
-import { pln, signedPln } from '@/lib/money-loop-labels'
+import { pln } from '@/lib/money-loop-labels'
 import { toDateKey, toYear } from '@/lib/project-types'
 import { useEvents } from '@/lib/events-context'
 import { plural } from '@/lib/pl-plural'
-import { activityLabel, overdueAwaiting, periodActivity, periodPayments, type PeriodActivity } from '@/lib/finance-summary'
+import {
+  activityLabel,
+  inProgressInPeriod,
+  overdueAwaiting,
+  periodActivity,
+  periodElapsedMonths,
+  periodPayments,
+  type PeriodActivity,
+} from '@/lib/finance-summary'
 import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
@@ -90,8 +98,9 @@ const COLOR_PROFIT = '#0284c7'
 const COLOR_FIXED = '#ea580c'
 const COLOR_RESULT = '#f4f4f5'
 
-/** Preferencje widoku (tylko ten komputer): przełącznik sprzętu i filtr klienta. */
+/** Preferencje widoku (tylko ten komputer): przełącznik sprzętu, „Zakończone projekty" i filtr klienta. */
 const SPREAD_KEY = 'nonoise-finance-spread-gear'
+const DONE_ONLY_KEY = 'nonoise-finance-done-only'
 const SCOPE_KEY = 'nonoise-finance-client'
 
 function readPref(key: string): string | null {
@@ -276,60 +285,87 @@ function BackfillBanner() {
 
 // ── Kafle KPI ────────────────────────────────────────────────────────────────
 
-/** „plan 159 613 zł · +1 500 zł" — albo „zgodnie z planem", gdy różnicy nie ma. */
-function vsPlan(actual: number, plan: number): string {
-  const delta = signedPln(actual - plan)
-  return delta ? `plan ${pln(plan)} · ${delta}` : 'zgodnie z planem'
-}
-
 const pctOf = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : null)
 
-/** „wstępnie" — okres trwa, koszty firmy do jego końca są z planu. */
+/** „59,1%" — procent od przychodu z jednym miejscem po przecinku; „—" bez przychodu. */
+const pct1 = (part: number, whole: number) =>
+  whole > 0 ? `${((part / whole) * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : '—'
+
+/** „wstępnie" — okres jeszcze trwa; jedna odznaka przy wyborze okresu, nie na kaflach. */
 function Provisional() {
   return (
-    <span className="ml-1.5 rounded border border-amber-400/30 px-1 text-[10px] font-medium normal-case tracking-normal text-amber-300/90">
+    <span
+      className="rounded border border-amber-400/30 px-1.5 py-0.5 text-[10px] font-medium text-amber-300/90"
+      title="Okres jeszcze trwa — projekty w realizacji z planu, koszty firmy do bieżącego miesiąca"
+    >
       wstępnie
     </span>
   )
 }
 
-/** Podpowiedzi (i) przy kaflach — zastąpiły akapit z objaśnieniami pod tytułem. */
+const TIP_PERIOD_COSTS = 'W trwającym okresie koszty firmy liczone do bieżącego miesiąca.'
+
+/** Podpowiedzi (i) przy kaflach, które nie zależą od widoku ani filtra. */
 const TILE_HELP = {
-  revenue: 'Z faktur (w miesiącu wystawienia), a gdzie ich brak — z planu. Wyceny nie wchodzą.',
-  costs: 'Wszystko zapłacone na realizację (ekipa, wynajem, dojazd…). Z Realizacji, a gdzie jej brak — z planu.',
-  margin: 'Przychód − koszty bezpośrednie, przed podatkiem. Twoja praca nie jest kosztem.',
-  producer: 'Marża na realizacji − Twoja praca, też przed podatkiem: co zostaje, gdyby ktoś inny zrobił Twoją robotę.',
-  ebbt: 'Przychód netto − koszty bezpośrednie − podatek − ZUS: to, czego nie da się pominąć.',
-  company: 'Podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing.',
-  result: 'Marża − podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing. To, co zostaje dla Ciebie.',
+  revenue:
+    'Wartość netto projektów z tego okresu: kwota z faktury, a bez niej zatwierdzona cena. Dni zdjęciowe: z kalendarza, a bez wpisów z wyceny.',
+  ebbt: 'Przychód netto − koszty bezpośrednie − podatek − ZUS: to, czego nie da się pominąć. Taki sam w obu widokach sprzętu.',
+  margin: 'Przychód − koszty bezpośrednie. Po podatku: minus podatek. Twoja praca nie jest kosztem. Procent liczony od przychodu.',
+  inProgress:
+    'Projekty w toku i wyceny z tego okresu. Projekty w toku są wliczone w przychód, chyba że włączysz „Zakończone projekty". Wyceny nie są wliczone nigdzie.',
   awaiting: 'Przychód tego okresu, który jeszcze nie wpłynął.',
 } as const
+
+/** Dwie duże liczby obok siebie: marża przed i po podatku (procent od przychodu, pod spodem kwota). */
+function MarginPair({ before, after, revenue, redWhenNegative }: { before: number; after: number; revenue: number; redWhenNegative?: boolean }) {
+  return (
+    <div className="mt-1 grid grid-cols-2 gap-2">
+      {[
+        { label: 'przed podatkiem', value: before },
+        { label: 'po podatku', value: after },
+      ].map((column) => (
+        <div key={column.label} className="min-w-0">
+          <div
+            className={`tabular-nums text-lg font-bold sm:text-xl ${redWhenNegative && column.value < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}
+          >
+            {pct1(column.value, revenue)}
+          </div>
+          <div className="text-[11px] text-zinc-500">{column.label}</div>
+          <div className="tabular-nums text-xs text-zinc-400">{pln(column.value)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function KpiTiles({
   summary,
   scopeName,
   pipeline,
-  plannedFixed,
+  inProgress,
   gearMonths,
   activity,
   open,
+  today,
   onOpenFixed,
 }: {
   summary: MarginSummary
   /** Nazwa klienta / grupy z filtra; `null` = cała firma. */
   scopeName: string | null
+  /** Wyceny okresu (niewliczone nigdzie). */
   pipeline: { count: number; value: number }
-  /** Raty subskrypcji z miesięcy po bieżącym, wliczone w okres. */
-  plannedFixed: number
+  /** „W realizacji": projekty `won` okresu i filtra — zawsze z pełnego rejestru. */
+  inProgress: { count: number; revenue: number }
   /** Na ile miesięcy rozkładamy duże zakupy sprzętu (ustawienie). */
   gearMonths: number
   /** „N projektów · M klientów · D dni zdjęciowych" okresu i filtra. */
   activity: PeriodActivity
-  /** Faktury czekające na wpłatę (cała firma) — „po terminie" zawęża do projektów okresu. */
+  /** Faktury czekające na wpłatę — „po terminie" zawęża do projektów okresu. */
   open: OpenInvoice[]
+  today: string
   onOpenFixed: () => void
 }) {
-  const { money, company, totals, scoped, perProject, provisional } = summary
+  const { money, company, totals, scoped, perProject } = summary
   const view = scoped ?? totals
   const result = scoped ? scoped.result : totals.result
   const ebbt = scoped ? scoped.ebbt : totals.ebbt
@@ -340,171 +376,45 @@ function KpiTiles({
       : negative
         ? { box: 'border-red-500/30 bg-red-500/5', text: 'text-red-300' }
         : { box: 'border-emerald-500/30 bg-emerald-500/5', text: 'text-emerald-300' }
-  const { coverage } = money
-  const projectCount = view.projects
-  const fromPlan = money.revenue - money.invoicedRevenue
-  const planMargin = money.plan.revenue - money.plan.costs
   const gearView = gearViewLabel(summary.spread, gearMonths)
+  const elapsed = periodElapsedMonths(summary.period, today)
   // Z filtrem klienta liczymy z kawałków przychodu jego projektów; bez filtra — gotowe sumy okresu.
   const payments = scoped
     ? periodPayments(summary.projects, summary.period)
     : { paid: money.paid.revenue, awaiting: money.awaiting.revenue }
   const overdue = overdueAwaiting(open, new Set(summary.projects.map((row) => row.money.id)), summary.period)
+
+  // Całkowite koszty: bez filtra wszystko; z filtrem klienta — jego koszty, podatek i (tylko w roku) udział w kosztach firmy.
+  const costRows: { label: string; value: number }[] = scoped
+    ? [
+        { label: 'Koszty bezpośrednie', value: scoped.costs },
+        { label: 'Podatek PIT', value: scoped.tax },
+        ...(perProject && scoped.overhead !== null ? [{ label: 'Udział w kosztach firmy', value: scoped.overhead }] : []),
+      ]
+    : [
+        { label: 'Koszty bezpośrednie', value: totals.costs },
+        { label: 'Podatek PIT', value: company.tax },
+        { label: 'ZUS', value: company.zus },
+        { label: 'Koszty stałe i subskrypcje', value: company.fixed },
+        { label: 'Marketing', value: company.marketing },
+        { label: 'Sprzęt', value: company.gear },
+      ]
+  const totalCosts = costRows.reduce((total, row) => total + row.value, 0)
+
   return (
     <div className="mb-6">
-      <p className="mb-2 text-sm tabular-nums text-zinc-400" data-testid="finance-activity">
-        {activityLabel(activity)}
-      </p>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Przychód netto <InfoTip title="Przychód netto">{TILE_HELP.revenue}</InfoTip>
-          </div>
-          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.revenue)}</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            {projectCount} {plural(projectCount, 'projekt', 'projekty', 'projektów')}
-            {scoped
-              ? totals.revenue > 0 && ` · ${pctOf(view.revenue, totals.revenue)} przychodu firmy`
-              : coverage.partial > 0 && ` · ${coverage.partial} w toku`}
-          </div>
-          {!scoped && money.revenue > 0 && (
-            <div className="mt-0.5 text-xs text-zinc-500">
-              {money.invoicedRevenue === 0
-                ? 'brak faktur — wszystko z planu'
-                : fromPlan < 0.5
-                  ? `wszystko z faktur`
-                  : `z faktur ${pln(money.invoicedRevenue)} · z planu ${pln(fromPlan)}`}
-            </div>
-          )}
-          {!scoped && coverage.projects > 0 && (
-            <div className="mt-0.5 text-xs text-zinc-500">{vsPlan(money.revenue, money.plan.revenue)}</div>
-          )}
-        </div>
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Koszty bezpośrednie <InfoTip title="Koszty bezpośrednie">{TILE_HELP.costs}</InfoTip>
-          </div>
-          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.costs)}</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            {view.revenue > 0 ? `${pctOf(view.costs, view.revenue)} przychodu` : 'brak przychodu'}
-          </div>
-          {!scoped && coverage.projects > 0 && (
-            <div className="mt-0.5 text-xs text-zinc-500">
-              {vsPlan(totals.costs, money.plan.costs)} ·{' '}
-              {coverage.withCosts === 0
-                ? 'brak kosztów z Realizacji'
-                : `z Realizacji ${coverage.withCosts} z ${coverage.projects}`}
-            </div>
-          )}
-        </div>
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Marża na realizacji <InfoTip title="Marża na realizacji">{TILE_HELP.margin}</InfoTip>{' '}
-            <span className="normal-case tracking-normal text-zinc-600">· przed podatkiem</span>
-          </div>
-          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.margin)}</div>
-          <div className="mt-0.5 tabular-nums text-xs font-medium text-zinc-300">po podatku {pln(view.margin - view.tax)}</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            przychód − koszty bezpośrednie
-            {view.revenue > 0 && ` · ${pctOf(view.margin, view.revenue)}`}
-          </div>
-          {!scoped && coverage.projects > 0 && (
-            <div className="mt-0.5 text-xs text-zinc-500">{vsPlan(totals.margin, planMargin)}</div>
-          )}
-        </div>
-        {/* R2 (D2, V1): suma marż producenckich projektów — marża na realizacji minus wartość mojej pracy, przed podatkiem. */}
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Marża producencka <InfoTip title="Marża producencka">{TILE_HELP.producer}</InfoTip>{' '}
-            <span className="normal-case tracking-normal text-zinc-600">· przed podatkiem</span>
-          </div>
-          <div className={`mt-1 tabular-nums text-xl font-bold ${view.producerMargin < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>
-            {pln(view.producerMargin)}
-          </div>
-          <div className="mt-0.5 tabular-nums text-xs font-medium text-zinc-300">
-            po podatku {pln(view.producerMargin - view.tax)}
-          </div>
-          <div className="mt-1 text-xs text-zinc-500">
-            marża − Twoja praca {pln(view.ownWork)}
-            {view.revenue > 0 && ` · ${pctOf(view.producerMargin, view.revenue)}`}
-          </div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            {view.ownWork > 0.5 ? 'gdybyś tylko produkował, a na plan wysłał kogoś innego' : 'nic nie oznaczono jako „Moja praca"'}
-          </div>
-        </div>
-        {/* U1 (§17.2): EBBT obok wyniku — to samo w obu widokach sprzętu; różnica = pole do optymalizacji. */}
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            EBBT <InfoTip title="EBBT">{TILE_HELP.ebbt}</InfoTip>
-            {provisional && <Provisional />}
-          </div>
-          {ebbt === null ? (
-            <>
-              <div className="mt-1 text-xl font-bold text-zinc-500">—</div>
-              <div className="mt-1 text-xs text-zinc-500">dla klienta tylko w widoku roku · cała firma {pln(totals.ebbt ?? 0)}</div>
-            </>
-          ) : (
-            <>
-              <div className={`mt-1 tabular-nums text-xl font-bold ${ebbt < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>{pln(ebbt)}</div>
-              <div className="mt-1 text-xs text-zinc-500">
-                Przychód netto − koszty bezpośrednie {pln(view.costs)} − podatek {pln(view.tax)} − ZUS{' '}
-                {pln(view.margin - view.tax - ebbt)}
-                {view.revenue > 0 && ` · ${pctOf(ebbt, view.revenue)}`}
-              </div>
-              {result !== null && (
-                <div className="mt-0.5 text-xs text-sky-300/80">
-                  pole do optymalizacji {pln(ebbt - result)} — sprzęt, subskrypcje i stałe, marketing
-                </div>
-              )}
-              <div className="mt-0.5 text-xs text-zinc-500">przed „złymi rzeczami" · taki sam w obu widokach sprzętu</div>
-            </>
-          )}
-        </div>
-        {/* Cała karta otwiera koszty stałe myszą; z klawiatury i czytnika — strzałka (prawdziwy przycisk, bo w tytule jest (i)). */}
-        <div
-          onClick={onOpenFixed}
-          className="group cursor-pointer rounded-xl border border-white/5 bg-zinc-900/40 p-4 text-left transition-colors hover:border-white/15"
-        >
-          <div className="flex items-start justify-between gap-1 text-[11px] uppercase tracking-wide text-zinc-500">
-            <span>
-              Koszty firmy <InfoTip title="Koszty firmy">{TILE_HELP.company}</InfoTip>
-              {provisional && <Provisional />}
-            </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenFixed()
-              }}
-              aria-label="Koszty firmy — koszty stałe i subskrypcje"
-              className="shrink-0 rounded text-zinc-700 transition-colors group-hover:text-zinc-300 focus-visible:text-zinc-300"
-            >
-              <ArrowRight className="size-3.5" />
-            </button>
-          </div>
-          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(company.total)}</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            podatek {pln(company.tax)} · ZUS {pln(company.zus)}
-          </div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            stałe i subskrypcje {pln(company.fixed)} · marketing {pln(company.marketing)}
-          </div>
-          <div className="mt-0.5 text-xs text-zinc-500">
-            {gearView}: {pln(company.gear)}
-          </div>
-          {plannedFixed > 0.5 && (
-            <div className="mt-0.5 text-xs text-zinc-500">w tym plan subskrypcji na kolejne miesiące {pln(plannedFixed)}</div>
-          )}
-          {scoped && perProject && scoped.overhead !== null && (
-            <div className="mt-0.5 text-xs text-sky-300/80">
-              na {scopeName}: {pln(scoped.overhead + scoped.tax)} (udział w przychodzie roku)
-            </div>
-          )}
-        </div>
-        <div className={`rounded-xl border p-4 ${tone.box}`}>
+        {/* Rząd 1 */}
+        <div className={`rounded-xl border p-3 sm:p-4 ${tone.box}`}>
           <div className="text-[11px] uppercase tracking-wide text-zinc-400">
-            Wynik po kosztach firmy <InfoTip title="Wynik po kosztach firmy">{TILE_HELP.result}</InfoTip>
-            {provisional && <Provisional />}
+            Zysk po wszystkich kosztach{' '}
+            <InfoTip title="Zysk po wszystkich kosztach">
+              <p>
+                Przychód netto minus wszystkie koszty: bezpośrednie, podatek, ZUS, stałe i subskrypcje, marketing, sprzęt. To, co
+                zostaje dla Ciebie. {TIP_PERIOD_COSTS}
+              </p>
+              <p className="mt-1.5 text-zinc-400">Widok sprzętu: {gearView}.</p>
+            </InfoTip>
           </div>
           {result === null ? (
             <>
@@ -516,18 +426,160 @@ function KpiTiles({
           ) : (
             <>
               <div className={`mt-1 tabular-nums text-xl font-bold ${tone.text}`}>{pln(result)}</div>
-              <div className="mt-1 text-xs text-zinc-400">
-                {view.revenue > 0 ? `${pctOf(result, view.revenue)} przychodu` : 'brak przychodu'} · {gearView}
-                {!scoped && pipeline.count > 0 && ` · +${pln(pipeline.value)} w wycenach (niewliczone)`}
+              <div className="mt-1 text-xs tabular-nums text-zinc-400">
+                {view.revenue > 0 ? `${pct1(result, view.revenue)} przychodu` : 'brak przychodu'}
+                {elapsed !== null && ` · ~${pln(result / elapsed)}/mies.`}
               </div>
-              {!scoped && summary.unallocated > 0.5 && perProject && (
-                <div className="mt-0.5 text-xs text-zinc-500">brak projektów, na które dałoby się rozłożyć koszty</div>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+            Przychód netto <InfoTip title="Przychód netto">{TILE_HELP.revenue}</InfoTip>
+          </div>
+          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.revenue)}</div>
+          <div className="mt-1.5 text-sm font-semibold leading-snug tabular-nums text-zinc-300" data-testid="finance-activity">
+            {activityLabel(activity)}
+          </div>
+          {scoped && totals.revenue > 0 && (
+            <div className="mt-1 text-xs text-zinc-500">{pctOf(view.revenue, totals.revenue)} przychodu firmy</div>
+          )}
+        </div>
+
+        {/* Cała karta otwiera koszty stałe myszą; z klawiatury i czytnika — strzałka (prawdziwy przycisk, bo w tytule jest (i)). */}
+        <div
+          onClick={onOpenFixed}
+          className="group cursor-pointer rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4 text-left transition-colors hover:border-white/15"
+        >
+          <div className="flex items-start justify-between gap-1 text-[11px] uppercase tracking-wide text-zinc-500">
+            <span>
+              Całkowite koszty{' '}
+              <InfoTip title="Całkowite koszty">
+                {scoped ? (
+                  perProject ? (
+                    <p>
+                      Dla {scopeName}: koszty bezpośrednie i podatek PIT jego projektów oraz jego udział w kosztach firmy (ZUS, stałe i
+                      subskrypcje, marketing, sprzęt) — wg udziału w przychodzie roku. Sprzęt: {gearView}. {TIP_PERIOD_COSTS}
+                    </p>
+                  ) : (
+                    <p>
+                      Dla {scopeName}: koszty bezpośrednie i podatek PIT jego projektów. Udział w kosztach firmy jest liczony tylko w
+                      widoku roku.
+                    </p>
+                  )
+                ) : (
+                  <>
+                    <p>Wszystko, co kosztuje, razem:</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      <li>koszty bezpośrednie: ekipa, wynajem, dojazd… (z Realizacji, a bez niej z planu),</li>
+                      <li>podatek PIT: ryczałt od przychodu,</li>
+                      <li>ZUS,</li>
+                      <li>koszty stałe i subskrypcje: oprogramowanie, bank, biuro, telefon, ubezpieczenia,</li>
+                      <li>marketing: kampanie,</li>
+                      <li>sprzęt: zakupy z katalogu i spoza niego ({gearView}).</li>
+                    </ul>
+                    <p className="mt-1.5 text-zinc-400">{TIP_PERIOD_COSTS}</p>
+                  </>
+                )}
+              </InfoTip>
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenFixed()
+              }}
+              aria-label="Całkowite koszty — koszty stałe i subskrypcje"
+              className="shrink-0 rounded text-zinc-700 transition-colors group-hover:text-zinc-300 focus-visible:text-zinc-300"
+            >
+              <ArrowRight className="size-3.5" />
+            </button>
+          </div>
+          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(totalCosts)}</div>
+          <dl className="mt-1.5 space-y-0.5 text-xs">
+            {costRows.map((row) => (
+              <div key={row.label} className="flex items-baseline justify-between gap-2">
+                <dt className="min-w-0 text-zinc-500">{row.label}</dt>
+                <dd className="shrink-0 text-right tabular-nums text-zinc-300">{pln(row.value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        {/* U1 (§17.2): EBBT obok zysku — to samo w obu widokach sprzętu; różnica = pole do optymalizacji. */}
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+            EBBT <InfoTip title="EBBT">{TILE_HELP.ebbt}</InfoTip>
+          </div>
+          {ebbt === null ? (
+            <>
+              <div className="mt-1 text-xl font-bold text-zinc-500">—</div>
+              <div className="mt-1 text-xs text-zinc-500">dla klienta tylko w widoku roku · cała firma {pln(totals.ebbt ?? 0)}</div>
+            </>
+          ) : (
+            <>
+              <div className={`mt-1 tabular-nums text-xl font-bold ${ebbt < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>{pln(ebbt)}</div>
+              {result !== null && (
+                <div className="mt-1 text-xs text-sky-300/80">
+                  pole do optymalizacji {pln(ebbt - result)} — sprzęt, subskrypcje i stałe, marketing
+                </div>
               )}
             </>
           )}
         </div>
+
+        {/* Rząd 2 */}
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+            Marża na realizacji <InfoTip title="Marża na realizacji">{TILE_HELP.margin}</InfoTip>
+          </div>
+          <MarginPair before={view.margin} after={view.margin - view.tax} revenue={view.revenue} />
+        </div>
+
+        {/* R2 (D2, V1): suma marż producenckich projektów — marża na realizacji minus wartość mojej pracy. */}
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+            Marża producencka{' '}
+            <InfoTip title="Marża producencka">
+              {view.ownWork > 0.5 ? (
+                <>
+                  Marża na realizacji − wartość Twojej pracy ({pln(view.ownWork)}): co zostaje, gdyby ktoś inny zrobił Twoją
+                  robotę. Procent liczony od przychodu.
+                </>
+              ) : (
+                <>
+                  Marża na realizacji − wartość Twojej pracy: co zostaje, gdyby ktoś inny zrobił Twoją robotę. W tym okresie nic nie
+                  oznaczono jako „Moja praca", więc marża producencka jest równa marży na realizacji. Procent liczony od przychodu.
+                </>
+              )}
+            </InfoTip>
+          </div>
+          <MarginPair
+            before={view.producerMargin}
+            after={view.producerMargin - view.tax}
+            revenue={view.revenue}
+            redWhenNegative
+          />
+        </div>
+
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+            W realizacji <InfoTip title="W realizacji">{TILE_HELP.inProgress}</InfoTip>
+          </div>
+          <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(inProgress.revenue)}</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            {inProgress.count} {plural(inProgress.count, 'projekt', 'projekty', 'projektów')}
+          </div>
+          {pipeline.count > 0 && (
+            <div className="mt-0.5 text-xs tabular-nums text-zinc-500">
+              w wycenach {pln(pipeline.value)} · {pipeline.count}
+            </div>
+          )}
+        </div>
+
         {/* Ta sama reguła co odhaczenie „Zapłacone" na liście projektów, per faktura. */}
-        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
+        <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-3 sm:p-4">
           <div className="text-[11px] uppercase tracking-wide text-zinc-500">
             Czeka na wpłatę <InfoTip title="Czeka na wpłatę">{TILE_HELP.awaiting}</InfoTip>
           </div>
@@ -624,6 +676,22 @@ function GearToggle({
   )
 }
 
+/** „Zakończone projekty": liczby zależne od projektów (kafle, wykres, tabele) tylko ze statusu „Zakończony". Raport go nie czyta. */
+function DoneOnlyToggle({ id, checked, onChange }: { id: string; checked: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+      <label htmlFor={id} className="cursor-pointer text-sm text-zinc-300">
+        Zakończone projekty
+      </label>
+      <InfoTip title="Zakończone projekty">
+        Włączone: kafle, wykres i tabele liczą tylko projekty ze statusem „Zakończony". Koszty firmy (ZUS, stałe, marketing, sprzęt)
+        zostają w całości. Raportu to nie dotyczy.
+      </InfoTip>
+    </div>
+  )
+}
+
 function FinanceToolbar({
   directory,
   scopeName,
@@ -633,6 +701,8 @@ function FinanceToolbar({
   onSpread,
   settings,
   onThreshold,
+  doneOnly,
+  onDoneOnly,
 }: {
   directory: ClientInfo[]
   scopeName: string
@@ -642,6 +712,8 @@ function FinanceToolbar({
   onSpread: (next: boolean) => void
   settings: GearSpreadSettings
   onThreshold: (value: number) => void
+  doneOnly: boolean
+  onDoneOnly: (next: boolean) => void
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -657,6 +729,7 @@ function FinanceToolbar({
         {memberNames.length > 0 && <span className="text-xs text-zinc-500">grupa: {memberNames.join(', ')}</span>}
       </div>
       <GearToggle id="finance-spread-gear" spread={spread} onSpread={onSpread} settings={settings} onThreshold={onThreshold} />
+      <DoneOnlyToggle id="finance-done-only" checked={doneOnly} onChange={onDoneOnly} />
     </div>
   )
 }
@@ -841,15 +914,22 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
   const { allItems: equipment } = useEquipment()
   const { groups } = useClientGroups()
   const [spread, setSpread] = useState<boolean>(() => readPref(SPREAD_KEY) !== 'off')
+  const [doneOnly, setDoneOnly] = useState<boolean>(() => readPref(DONE_ONLY_KEY) === 'on')
   const [scopeValue, setScopeValue] = useState<string>(() => readPref(SCOPE_KEY) ?? '')
   const [settings, setSettings] = useState<GearSpreadSettings>(() => gearSpreadSettings(getLoadedCompany()))
   const today = toDateKey(new Date())
-  const currentMonth = today.slice(0, 7)
   const taxRate = companyTaxRate(getLoadedCompany())
 
   // Pieniądze projektów liczone raz; okresy i wykres tylko je dzielą.
   const ledger = useMemo(() => moneyLedger(projects, events, today, taxRate), [projects, events, today, taxRate])
   const ledgerById = useMemo(() => new Map(ledger.map((m) => [m.id, m])), [ledger])
+  const statusById = useMemo(() => new Map(projects.map((p) => [p.id, p.status])), [projects])
+  // „Zakończone projekty": liczby zależne od projektów (kafle, wykres, tabele, płatności) tylko z projektów `done`.
+  // Koszty firmy zostają w całości; „W realizacji" i Raport czytają pełny rejestr.
+  const viewLedger = useMemo(
+    () => (doneOnly ? ledger.filter((m) => statusById.get(m.id) === 'done') : ledger),
+    [ledger, statusById, doneOnly]
+  )
   // Koszty stałe roku: ręczne + raty subskrypcji (bez podwójnego liczenia).
   const yearCosts: EffectiveFixedCost[] = useMemo(
     () => fixedCostsInYear(fixed.costs, subs.subscriptions, period.year),
@@ -890,8 +970,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
 
   // Rejestr marży (S4): warstwa 1, koszty firmy, warstwa 2 — jedno źródło liczb ekranu.
   const marginInput: MarginInput = useMemo(
-    () => ({ ledger, fixedCosts: yearCosts, equipment, spread, settings, today, scope: scopeIds }),
-    [ledger, yearCosts, equipment, spread, settings, today, scopeIds]
+    () => ({ ledger: viewLedger, fixedCosts: yearCosts, equipment, spread, settings, today, scope: scopeIds }),
+    [viewLedger, yearCosts, equipment, spread, settings, today, scopeIds]
   )
   const margin = useMemo(() => marginSummary(marginInput, period), [marginInput, period])
   const trend = useMemo(() => marginTrend(marginInput, period.year), [marginInput, period.year])
@@ -905,6 +985,10 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     setSpread(next)
     writePref(SPREAD_KEY, next ? 'on' : 'off')
   }
+  const changeDoneOnly = (next: boolean) => {
+    setDoneOnly(next)
+    writePref(DONE_ONLY_KEY, next ? 'on' : 'off')
+  }
   const changeScope = (value: string) => {
     setScopeValue(value)
     writePref(SCOPE_KEY, value)
@@ -913,12 +997,9 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     patchLoadedCompany({ gearSpreadThresholdPln: thresholdPln })
     setSettings((prev) => ({ ...prev, thresholdPln }))
   }
-  const plannedFixed = useMemo(
-    () =>
-      yearCosts
-        .filter((c) => c.derived && c.month > currentMonth && isInPeriod(c.month, period))
-        .reduce((sum, c) => sum + c.amount, 0),
-    [yearCosts, currentMonth, period]
+  const inProgress = useMemo(
+    () => inProgressInPeriod(ledger, statusById, scopeIds, period),
+    [ledger, statusById, scopeIds, period]
   )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
   const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period, ledgerById), [projects, period, ledgerById])
@@ -929,13 +1010,13 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
       ),
     [projects, period, scopeIds]
   )
-  const open = useMemo(() => openInvoices(ledger, today), [ledger, today])
+  const open = useMemo(() => openInvoices(viewLedger, today), [viewLedger, today])
   const openByProject = useMemo(() => {
     const map = new Map<string, OpenInvoice[]>()
     open.forEach((invoice) => map.set(invoice.projectId, [...(map.get(invoice.projectId) ?? []), invoice]))
     return map
   }, [open])
-  const days = useMemo(() => paymentDays(ledger, period), [ledger, period])
+  const days = useMemo(() => paymentDays(viewLedger, period), [viewLedger, period])
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
   const switchTab = (next: FinanceTab) => {
@@ -965,7 +1046,10 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             </p>
           )}
         </div>
-        <PeriodPicker period={period} years={years} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          {tab === 'projects' && margin.provisional && <Provisional />}
+          <PeriodPicker period={period} years={years} onChange={setPeriod} />
+        </div>
       </header>
 
       <FinanceTabs tab={tab} onChange={switchTab} />
@@ -986,15 +1070,18 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             onSpread={changeSpread}
             settings={settings}
             onThreshold={changeThreshold}
+            doneOnly={doneOnly}
+            onDoneOnly={changeDoneOnly}
           />
           <KpiTiles
             summary={margin}
             scopeName={selectedClient?.name ?? null}
             pipeline={{ count: pipelineSummary.quoteCount, value: pipelineSummary.pipelineValue }}
-            plannedFixed={plannedFixed}
+            inProgress={inProgress}
             gearMonths={settings.months}
             activity={activity}
             open={open}
+            today={today}
             onOpenFixed={() => switchTab('fixed')}
           />
           <PaymentsPanel
