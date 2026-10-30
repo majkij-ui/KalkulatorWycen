@@ -255,10 +255,10 @@ test('przełącznik sprzętu: rozłożony i w całości dają różne koszty fir
   near(spread.alternativeView.result, metric(full, 'result').value)
   near(full.alternativeView.result, metric(spread, 'result').value)
   assert.equal(spread.alternativeView.gear, 'full')
-  assert.match(reportToMarkdown(spread), /Widok sprzętu: rozłożony — zakupy od 5 000 zł/)
-  assert.match(reportToMarkdown(full), /Widok sprzętu: w całości/)
-  assert.match(sectionText(spread), /W drugim widoku \(sprzęt w całości\) wynik po kosztach firmy = /)
-  assert.match(sectionText(full), /W drugim widoku \(sprzęt rozłożony\)/)
+  assert.match(reportToMarkdown(spread), /Widok sprzętu: zakupy sprzętu rozłożone na 36 mies\. — zakupy od 5 000 zł/)
+  assert.match(reportToMarkdown(full), /Widok sprzętu: zakupy sprzętu liczone jednorazowo/)
+  assert.match(sectionText(spread), /W drugim widoku \(zakupy sprzętu liczone jednorazowo\) wynik po kosztach firmy = /)
+  assert.match(sectionText(full), /W drugim widoku \(zakupy sprzętu rozłożone na 36 mies\.\)/)
   const json = JSON.parse(reportToMarkdown(spread).split('```json\n')[1].split('\n```')[0]) as PeriodReport
   near(json.alternativeView.result, metric(full, 'result').value)
   assert.equal(json.view.gear, 'spread')
@@ -677,7 +677,7 @@ test('kształt otwarty pod R2: nowy wiersz nagłówka i klucz w `extra` pojawiaj
   assert.equal(JSON.parse(reportToMarkdown(withProducer).split('```json\n')[1].split('\n```')[0]).projects[0].extra.producerMargin, 100)
 })
 
-test('R2: wiersz „Marża producencka" = suma marż producenckich (po podatku, minus moja praca); `extra` projektów i klientów', () => {
+test('R2: wiersz „Marża producencka" = suma marż producenckich (przed podatkiem, minus moja praca); `extra` projektów i klientów', () => {
   const data = input({
     projects: [
       project('a', { date: '2026-08-10', financials: { ...financials(10_000, 2_000), ownWork: 3_000 } }),
@@ -686,14 +686,14 @@ test('R2: wiersz „Marża producencka" = suma marż producenckich (po podatku, 
   })
   const report = buildPeriodReport(data, Q(2026, 3))
   const row = metric(report, 'producerMargin')
-  const expected = 10_000 - 850 - 2_000 - 3_000 + (10_000 - 850 - 2_000)
+  const expected = 10_000 - 2_000 - 3_000 + (10_000 - 2_000)
   near(row.value, expected)
   near(row.pctOfRevenue, (expected / 20_000) * 100)
   assert.equal(report.metrics.findIndex((m) => m.key === 'producerMargin'), report.metrics.findIndex((m) => m.key === 'margin') + 1)
-  near(report.projects.find((p) => p.id === 'a')!.extra.producerMargin, 10_000 - 850 - 2_000 - 3_000)
-  near(report.clients.find((c) => c.members.includes('Klient a'))!.extra.producerMargin, 4_150)
+  near(report.projects.find((p) => p.id === 'a')!.extra.producerMargin, 10_000 - 2_000 - 3_000)
+  near(report.clients.find((c) => c.members.includes('Klient a'))!.extra.producerMargin, 5_000)
   assert.ok(report.definitions.some((d) => d.key === 'producerMargin'))
-  assert.match(reportToMarkdown(report), /\| Marża producencka \|/)
+  assert.match(reportToMarkdown(report), /\| Marża producencka \(przed podatkiem\) \|/)
 })
 
 test('U2: wiersz „w tym wynajem sprzętu" = wynajem projektów okresu (część kosztów bezpośrednich), z poprzednim okresem', () => {
@@ -902,7 +902,7 @@ test('U1: wiersz „EBBT" = W1 − ryczałt − ZUS (ten sam w obu widokach), tu
   assert.equal(spread.metrics.findIndex((m) => m.key === 'ebbt') + 1, spread.metrics.findIndex((m) => m.key === 'result'))
   near(ebbt.pctOfRevenue, (ebbt.value / 20_000) * 100)
   assert.match(spread.definitions.find((d) => d.key === 'ebbt')!.text, /pole do optymalizacji/)
-  assert.match(reportToMarkdown(spread), /\| EBBT \(W1 − ryczałt − ZUS\) \|/)
+  assert.match(reportToMarkdown(spread), /\| EBBT \(przychód netto − koszty bezpośrednie − podatek − ZUS\) \|/)
 })
 
 test('U1: wiersz „w tym dosprzedaż" — dosprzedaż projektów zakotwiczonych w okresie; `extra.extraSales` projektu', () => {

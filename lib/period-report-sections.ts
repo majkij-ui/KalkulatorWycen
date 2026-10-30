@@ -127,7 +127,7 @@ function summarySection(report: PeriodReport): ReportSection {
   const after: string[] = []
   const alt = report.alternativeView
   after.push(
-    `W drugim widoku (sprzęt ${alt.gearLabel}) wynik po kosztach firmy = ${pln(alt.result)} (sprzęt ${pln(alt.gearCost)}, koszty firmy ${pln(alt.companyCosts)}).`
+    `W drugim widoku (${alt.gearLabel}) wynik po kosztach firmy = ${pln(alt.result)} (sprzęt ${pln(alt.gearCost)}, koszty firmy ${pln(alt.companyCosts)}).`
   )
   after.push(
     report.pipeline.count === 0
@@ -376,7 +376,7 @@ function gearSection(report: PeriodReport): ReportSection {
       l.name + (l.onSet ? '' : ' (zaplecze)'),
       l.carried ? `z ${l.date.slice(0, 4)}` : formatDate(l.date),
       pln(l.price),
-      l.mode === 'spread' ? `${pln(l.monthly)} / mies. ${monthText(l.firstMonth)}–${monthText(l.lastMonth)}` : 'w całości',
+      l.mode === 'spread' ? `${pln(l.monthly)} / mies. ${monthText(l.firstMonth)}–${monthText(l.lastMonth)}` : 'jednorazowo',
       pln(l.amount),
     ]),
     ...g.manualEntries.map((e) => [e.label, monthText(e.month), pln(e.amount), 'ręczny wpis spoza katalogu', pln(e.counted)]),

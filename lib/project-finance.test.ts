@@ -99,12 +99,13 @@ test('faktura wygrywa z kwotą przelewu i ceną', () => {
   assert.equal(revenueSourceText(view), 'z faktur')
 })
 
-test('C2 / C4: zysk netto po kosztach zewnętrznych i ryczałcie, marża producencka minus moja praca („Ja" 1 500)', () => {
+test('C2 / C4 / V1: zysk netto po kosztach zewnętrznych i ryczałcie; marża producencka = marża na realizacji (przed podatkiem) minus moja praca („Ja" 1 500)', () => {
   const view = projectFinanceView(project(), live({}, pdf({ ekipa: 3000 })), [], TODAY)
   assert.equal(view.money.costs, 1200)
   assert.equal(view.money.ownWork, 1500)
   assert.equal(view.money.profit, 3000 - 255 - 1200)
-  assert.equal(view.money.producerMargin, 3000 - 255 - 1200 - 1500)
+  assert.equal(view.money.margin, 3000 - 1200)
+  assert.equal(view.money.producerMargin, 3000 - 1200 - 1500)
   assert.equal(view.actual, null, 'Realizacja jeszcze nie ruszona')
   assert.deepEqual(view.categories, [])
 })
@@ -123,7 +124,7 @@ test('retro-import bez wyceny: przychód i koszty z importu, bez ceny do edycji;
   const view = projectFinanceView(project({ quote: null, financials, status: 'done' }), { data: {}, marginMultiplier: 1 }, [ev('invoice_sent', '2026-03-26', { amountNetto: 9180 })], TODAY)
   assert.deepEqual([view.hasQuote, view.price, view.transfer, view.imported, view.due], [false, null, null, 9180, 9180])
   assert.equal(view.money.profit, 9180 - 780.3)
-  assert.equal(view.money.producerMargin, view.money.profit)
+  assert.equal(view.money.producerMargin, view.money.margin, 'bez mojej pracy: marża producencka = marża na realizacji')
   assert.equal(view.received.invoiceDecides, true)
 })
 

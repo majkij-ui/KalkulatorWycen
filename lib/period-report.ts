@@ -39,7 +39,7 @@ import type { TimelineEvent } from './event-types'
 import { COST_CATEGORY_KEYS, COST_CATEGORY_LABELS } from './fixed-cost-categories'
 import { isInPeriod, periodLabel, periodMonths, summarizePeriod, type Period } from './finance-calc'
 import { gearPurchases } from './gear-backstage'
-import type { GearPeriodCost, GearSpreadSettings } from './gear-costs'
+import { gearViewLabel, type GearPeriodCost, type GearSpreadSettings } from './gear-costs'
 import { computeGearReport } from './equipment-roi'
 import {
   campaignMonths,
@@ -105,7 +105,7 @@ export interface ReportPeriod {
 
 export interface ReportView {
   gear: 'spread' | 'full'
-  /** „rozłożony" / „w całości". */
+  /** „zakupy sprzętu rozłożone na N mies." / „zakupy sprzętu liczone jednorazowo" (`gearViewLabel`). */
   gearLabel: string
   /** Pełne zdanie do nagłówka raportu. */
   description: string
@@ -522,14 +522,14 @@ function viewOf(spread: boolean, settings: GearSpreadSettings): ReportView {
   return spread
     ? {
         gear: 'spread',
-        gearLabel: 'rozłożony',
-        description: `zakupy od ${zl(settings.thresholdPln)} netto po równo przez ${settings.months} mies., tańsze w całości w miesiącu zakupu`,
+        gearLabel: gearViewLabel(true, settings.months),
+        description: `zakupy od ${zl(settings.thresholdPln)} netto po równo przez ${settings.months} mies., tańsze liczone jednorazowo w miesiącu zakupu`,
         thresholdPln: settings.thresholdPln,
         months: settings.months,
       }
     : {
         gear: 'full',
-        gearLabel: 'w całości',
+        gearLabel: gearViewLabel(false, settings.months),
         description: 'każdy zakup w miesiącu zakupu (jak zakupy uderzyły w konto)',
         thresholdPln: settings.thresholdPln,
         months: settings.months,
@@ -551,7 +551,7 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
     {
       key: 'producerMargin',
       label: 'Marża producencka',
-      text: 'W1 − ryczałt − wartość mojej pracy (pozycje „Moja praca" w Realizacji, a bez Realizacji pozycje „Ja" z wyceny, po ich koszcie). Czy zlecenie zarabia, gdybym tylko produkował, a na plan wysłał kogoś innego. Suma po projektach; wynikiem firmy zostaje W2.',
+      text: 'W1 − wartość mojej pracy (pozycje „Moja praca" w Realizacji, a bez Realizacji pozycje „Ja" z wyceny, po ich koszcie), przed podatkiem — tak jak W1. Czy zlecenie zarabia, gdybym tylko produkował, a na plan wysłał kogoś innego. Suma po projektach; wynikiem firmy zostaje W2.',
     },
     {
       key: 'rentals',
@@ -561,7 +561,7 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
     {
       key: 'ebbt',
       label: 'EBBT („earnings before bad things")',
-      text: 'W1 − ryczałt − ZUS: wynik przed wszystkim, co da się w teorii pominąć (sprzęt, subskrypcje i inne koszty stałe, marketing). Ten sam w obu widokach sprzętu. EBBT − W2 = pole do optymalizacji firmy.',
+      text: 'Przychód netto − koszty bezpośrednie − podatek − ZUS (czyli W1 − ryczałt − ZUS): wynik przed wszystkim, co da się w teorii pominąć (sprzęt, subskrypcje i inne koszty stałe, marketing). Ten sam w obu widokach sprzętu. EBBT − W2 = pole do optymalizacji firmy.',
     },
     {
       key: 'extraSales',
@@ -586,7 +586,7 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
     {
       key: 'provisional',
       label: 'Wstępnie',
-      text: 'Okres, który się nie skończył: koszty firmy do jego końca z planu (raty subskrypcji, rozłożony sprzęt), projekty w realizacji z planu.',
+      text: 'Okres, który się nie skończył: koszty firmy do jego końca z planu (raty subskrypcji, zakupy sprzętu rozłożone na miesiące), projekty w realizacji z planu.',
     },
     ...(perProject
       ? []
@@ -671,7 +671,7 @@ function reportProject(
     share: row.share === null ? null : r2(row.share * 10000) / 10000,
     overhead: r2n(row.overhead),
     result: r2n(row.result),
-    // R2: marża producencka (po podatku, minus moja praca); `null` = „brak kwoty".
+    // R2: marża producencka (przed podatkiem, minus moja praca); `null` = „brak kwoty".
     // U1: dosprzedaż projektu (tylko zakotwiczonego w okresie, jak koszty).
     extra: { producerMargin: row.known ? r2(row.producerMargin) : null, extraSales: row.anchored ? r2(row.money.extrasTotal) : null },
   }
@@ -1064,8 +1064,8 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
       emphasis: true,
       pctOfRevenue: pctOf(current.totals.margin, revenue),
     }),
-    // R2: suma marż producenckich projektów — po podatku i po wartości mojej pracy.
-    metricRow('producerMargin', 'Marża producencka', 'layer1', current.totals.producerMargin, before((s) => s.totals.producerMargin), {
+    // R2: suma marż producenckich projektów — W1 minus wartość mojej pracy, przed podatkiem.
+    metricRow('producerMargin', 'Marża producencka (przed podatkiem)', 'layer1', current.totals.producerMargin, before((s) => s.totals.producerMargin), {
       pctOfRevenue: pctOf(current.totals.producerMargin, revenue),
     }),
     metricRow('tax', 'Podatek (ryczałt)', 'costs', current.company.tax, before((s) => s.company.tax)),
@@ -1075,7 +1075,7 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     metricRow('gear', 'Sprzęt', 'costs', current.company.gear, before((s) => s.company.gear)),
     metricRow('companyCosts', 'Koszty firmy razem', 'costs', current.company.total, before((s) => s.company.total)),
     // U1 (§17.2): EBBT = W1 − ryczałt − ZUS; ten sam w obu widokach sprzętu.
-    metricRow('ebbt', 'EBBT (W1 − ryczałt − ZUS)', 'layer2', current.totals.ebbt ?? 0, before((s) => s.totals.ebbt ?? 0), {
+    metricRow('ebbt', 'EBBT (przychód netto − koszty bezpośrednie − podatek − ZUS)', 'layer2', current.totals.ebbt ?? 0, before((s) => s.totals.ebbt ?? 0), {
       pctOfRevenue: pctOf(current.totals.ebbt ?? 0, revenue),
     }),
     metricRow('result', 'Wynik po kosztach firmy (W2)', 'layer2', current.totals.result ?? 0, before((s) => s.totals.result ?? 0), {
@@ -1248,7 +1248,7 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     notes.push({
       kind: 'info',
       code: 'provisional',
-      text: 'Okres jeszcze trwa (wstępnie): koszty firmy do jego końca z planu — raty subskrypcji i rozłożony sprzęt — a projekty w realizacji z planu.',
+      text: 'Okres jeszcze trwa (wstępnie): koszty firmy do jego końca z planu — raty subskrypcji i zakupy sprzętu rozłożone na miesiące — a projekty w realizacji z planu.',
     })
   }
   if (current.unallocated > 0.5 && perProject) {

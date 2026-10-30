@@ -56,7 +56,7 @@ import {
   type MarginSummary,
   type MarginTrendRow,
 } from '@/lib/margin-ledger'
-import { gearSpreadSettings, type GearSpreadSettings } from '@/lib/gear-costs'
+import { gearSpreadSettings, gearViewLabel, type GearSpreadSettings } from '@/lib/gear-costs'
 import { getLoadedCompany, patchLoadedCompany } from '@/lib/company-settings-core'
 import { useEquipment } from '@/lib/equipment-context'
 import { useClientGroups } from '@/lib/use-client-groups'
@@ -296,6 +296,7 @@ function KpiTiles({
   scopeName,
   pipeline,
   plannedFixed,
+  gearMonths,
   onOpenFixed,
 }: {
   summary: MarginSummary
@@ -304,6 +305,8 @@ function KpiTiles({
   pipeline: { count: number; value: number }
   /** Raty subskrypcji z miesięcy po bieżącym, wliczone w okres. */
   plannedFixed: number
+  /** Na ile miesięcy rozkładamy duże zakupy sprzętu (ustawienie). */
+  gearMonths: number
   onOpenFixed: () => void
 }) {
   const { money, company, totals, scoped, perProject, provisional } = summary
@@ -321,7 +324,7 @@ function KpiTiles({
   const projectCount = view.projects
   const fromPlan = money.revenue - money.invoicedRevenue
   const planMargin = money.plan.revenue - money.plan.costs
-  const gearView = summary.spread ? 'sprzęt rozłożony' : 'sprzęt w całości'
+  const gearView = gearViewLabel(summary.spread, gearMonths)
   return (
     <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
@@ -356,10 +359,12 @@ function KpiTiles({
         )}
       </div>
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Marża na realizacji</div>
+        <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+          Marża na realizacji <span className="normal-case tracking-normal text-zinc-600">· przed podatkiem</span>
+        </div>
         <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.margin)}</div>
         <div className="mt-1 text-xs text-zinc-500">
-          przychód − koszty bezpośrednie {pln(view.costs)} · przed podatkiem
+          przychód − koszty bezpośrednie {pln(view.costs)}
           {view.revenue > 0 && ` · ${pctOf(view.margin, view.revenue)}`}
         </div>
         {!scoped && coverage.projects > 0 && (
@@ -371,14 +376,16 @@ function KpiTiles({
           </div>
         )}
       </div>
-      {/* R2 (D2): suma marż producenckich projektów — po podatku i po wartości mojej pracy. */}
+      {/* R2 (D2, V1): suma marż producenckich projektów — marża na realizacji minus wartość mojej pracy, przed podatkiem. */}
       <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500">Marża producencka</div>
+        <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+          Marża producencka <span className="normal-case tracking-normal text-zinc-600">· przed podatkiem</span>
+        </div>
         <div className={`mt-1 tabular-nums text-xl font-bold ${view.producerMargin < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>
           {pln(view.producerMargin)}
         </div>
         <div className="mt-1 text-xs text-zinc-500">
-          marża − podatek {pln(view.tax)} − Twoja praca {pln(view.ownWork)}
+          marża − Twoja praca {pln(view.ownWork)}
           {view.revenue > 0 && ` · ${pctOf(view.producerMargin, view.revenue)}`}
         </div>
         <div className="mt-0.5 text-xs text-zinc-500">
@@ -406,7 +413,7 @@ function KpiTiles({
           stałe i subskrypcje {pln(company.fixed)} · marketing {pln(company.marketing)}
         </div>
         <div className="mt-0.5 text-xs text-zinc-500">
-          {gearView} {pln(company.gear)}
+          {gearView}: {pln(company.gear)}
         </div>
         {plannedFixed > 0.5 && (
           <div className="mt-0.5 text-xs text-zinc-500">w tym plan subskrypcji na kolejne miesiące {pln(plannedFixed)}</div>
@@ -432,7 +439,8 @@ function KpiTiles({
           <>
             <div className={`mt-1 tabular-nums text-xl font-bold ${ebbt < -0.5 ? 'text-red-300' : 'text-zinc-100'}`}>{pln(ebbt)}</div>
             <div className="mt-1 text-xs text-zinc-500">
-              marża − podatek {pln(view.tax)} − ZUS {pln(view.margin - view.tax - ebbt)}
+              Przychód netto − koszty bezpośrednie {pln(view.costs)} − podatek {pln(view.tax)} − ZUS{' '}
+              {pln(view.margin - view.tax - ebbt)}
               {view.revenue > 0 && ` · ${pctOf(ebbt, view.revenue)}`}
             </div>
             {result !== null && (
@@ -461,7 +469,7 @@ function KpiTiles({
             <div className={`mt-1 tabular-nums text-xl font-bold ${tone.text}`}>{pln(result)}</div>
             <div className="mt-1 text-xs text-zinc-400">
               {view.revenue > 0 ? `${pctOf(result, view.revenue)} przychodu` : 'brak przychodu'} · {gearView}
-              {!scoped && pipeline.count > 0 && ` · w wycenach ${pln(pipeline.value)}`}
+              {!scoped && pipeline.count > 0 && ` · +${pln(pipeline.value)} w wycenach (niewliczone)`}
             </div>
             {!scoped && summary.unallocated > 0.5 && perProject && (
               <div className="mt-0.5 text-xs text-zinc-500">brak projektów, na które dałoby się rozłożyć koszty</div>
@@ -873,7 +881,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
           <p className="mt-1 text-sm text-zinc-500">
             {tab === 'projects' ? (
               <>
-                Marża na realizacji = przychód − koszty bezpośrednie, przed podatkiem. EBBT = marża − podatek − ZUS. Wynik po
+                Marża na realizacji = przychód − koszty bezpośrednie, przed podatkiem; marża producencka = marża na realizacji −
+                Twoja praca, też przed podatkiem. EBBT = Przychód netto − koszty bezpośrednie − podatek − ZUS. Wynik po
                 kosztach firmy = marża − podatek, ZUS, subskrypcje i koszty stałe, sprzęt, marketing. Przychód z faktur (w miesiącu wystawienia), a
                 gdzie ich brak — z planu; koszty z Realizacji, a gdzie ich brak — z planu. Wyceny nie wchodzą do wyniku.
               </>
@@ -917,6 +926,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             scopeName={selectedClient?.name ?? null}
             pipeline={{ count: pipelineSummary.quoteCount, value: pipelineSummary.pipelineValue }}
             plannedFixed={plannedFixed}
+            gearMonths={settings.months}
             onOpenFixed={() => switchTab('fixed')}
           />
           <PaymentsPanel

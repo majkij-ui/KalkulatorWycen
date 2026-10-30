@@ -120,8 +120,9 @@ number of an existing project silently: list what moves and let M.J. confirm.
   the first change writes the whole draft (`planKey`, `costsFromQuoteAt`); later quote edits only through the
   „Wycena zmieniła się" banner (never-edited lines); costs entered before R2 count as entered, with the plan lines
   they lack listed. Every line is ticked („było"; `skipped` counts nowhere) and external or „Moja praca" (`ownWork`,
-  not a cost). Per project: Marża = zysk netto (after external costs and tax), Marża producencka = Marża − own work;
-  company-wide it is the sum of the projects' (ledger `producerMargin`, Finance tile, S5 metric). The project tab
+  not a cost). Per project (V1 — supersedes the 2026-10-18 „after tax" decision): Marża na realizacji = revenue −
+  external costs and Marża producencka = Marża na realizacji − own work, BOTH before tax; Zysk netto (after external costs
+  and tax) is its own separate figure (`ProjectMoney.profit`); company-wide it is the sum of the projects' (ledger `producerMargin`, Finance tile, S5 metric). The project tab
   „Finanse" (`project-finance.ts`) shows the approved price, the final transfer (price + extra sales; a typed number
   is the override; a gap can be saved as an extra sale) and these margins.
 - **Money loop** (`money-loop.ts`, T6): actual revenue = issued invoices (`invoice_sent.amountNetto`, net)

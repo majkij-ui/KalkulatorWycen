@@ -100,7 +100,7 @@ function PlanActualRow({
           <ArrowRight className="size-3.5 shrink-0 text-zinc-700 transition-colors group-hover:text-zinc-300" />
         </span>
         <span className="tabular-nums text-[11px] text-zinc-500">{formatDate(money.anchor)}</span>
-        <ProjectStatusBadge status={project.status} />
+        <ProjectStatusBadge status={project.status} stage={project.stage} paid={money.paid} />
         {partOfWhole && (
           <span className="text-[11px] text-sky-300/80">
             {row.anchored ? 'część' : 'dodatkowa faktura'}: {pln(row.revenue)} w tym okresie
@@ -152,7 +152,7 @@ export function PlanVsActual({
 
       {rows.length === 0 ? (
         <p className="px-3 py-2 text-sm text-zinc-600">
-          Żaden projekt nie jest „W realizacji" ani „Zrealizowany" w tym okresie.
+          Żaden projekt nie jest „W realizacji" ani „Zakończony" w tym okresie.
         </p>
       ) : (
         <div className="flex flex-col">

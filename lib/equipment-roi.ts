@@ -387,3 +387,55 @@ export function itemUsageHistory(
     })
     .sort((a, b) => lastDate(b.use).localeCompare(lastDate(a.use)))
 }
+
+// ── Własność czy wynajem (V1) ────────────────────────────────────────────────
+
+/** Różnica poniżej tej kwoty (zł) to „tak samo". */
+const OWN_VS_RENT_EPSILON = 0.5
+
+export type OwnVsRentVerdict = 'dearer' | 'cheaper' | 'equal'
+
+export interface OwnVsRent {
+  /** Kapitał w sprzęcie na plan (także wycofany, bez zaplecza). */
+  capital: number
+  /** Ile sprzęt zarobił (`clientPaid`). */
+  earned: number
+  /** Kapitał minus zarobek — ile własny sprzęt kosztuje po tym, co zarobił. */
+  net: number
+  /** „Gdybym wszystko wynajmował" = `rentValue` („Odpracował"), nie liczone drugi raz. */
+  rentAll: number
+  /** `net − rentAll`; dodatnia = własny sprzęt wyszedł drożej. */
+  diff: number
+  verdict: OwnVsRentVerdict
+  /**
+   * Uczciwe porównanie: zarobek na sprzęcie miałbyś też przy wynajmie (to wiersz
+   * „Sprzęt" z PDF), więc bez niego — kapitał kontra wynajem.
+   */
+  fair: { capital: number; rentAll: number; diff: number; verdict: OwnVsRentVerdict }
+}
+
+const verdictOf = (diff: number): OwnVsRentVerdict =>
+  Math.abs(diff) < OWN_VS_RENT_EPSILON ? 'equal' : diff > 0 ? 'dearer' : 'cheaper'
+
+/**
+ * „Własność czy wynajem": kapitał − zarobek kontra to, ile kosztowałby wynajem
+ * za każdy dzień na planie. Korzysta z sum raportu — nic nie liczy od nowa.
+ * Wynajem, który faktycznie opłacono, nie wchodzi do tych liczb.
+ */
+export function ownVsRent(totals: Pick<GearReportTotals, 'invested' | 'clientPaid' | 'rentValue'>): OwnVsRent {
+  const capital = totals.invested
+  const earned = totals.clientPaid
+  const rentAll = totals.rentValue
+  const net = capital - earned
+  const diff = net - rentAll
+  const fairDiff = capital - rentAll
+  return {
+    capital,
+    earned,
+    net,
+    rentAll,
+    diff,
+    verdict: verdictOf(diff),
+    fair: { capital, rentAll, diff: fairDiff, verdict: verdictOf(fairDiff) },
+  }
+}
