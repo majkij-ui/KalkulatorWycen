@@ -7,7 +7,6 @@ import assert from 'node:assert/strict'
 import { createClientGroup } from './client-groups'
 import type { Period } from './finance-calc'
 import {
-  activityLabel,
   inProgressInPeriod,
   overdueAwaiting,
   periodActivity,
@@ -78,13 +77,6 @@ test('klienci: grupa to jeden klient, ten sam klient w dwóch projektach liczy s
     period: YEAR,
   })
   assert.deepEqual(result, { projects: 5, clients: 2, shootDays: 0 })
-})
-
-test('etykieta: polskie liczby mnogie', () => {
-  assert.equal(activityLabel({ projects: 1, clients: 1, shootDays: 1 }), '1 projekt · 1 klient · 1 dzień zdjęciowy')
-  assert.equal(activityLabel({ projects: 3, clients: 2, shootDays: 4 }), '3 projekty · 2 klientów · 4 dni zdjęciowe')
-  assert.equal(activityLabel({ projects: 12, clients: 5, shootDays: 0 }), '12 projektów · 5 klientów · 0 dni zdjęciowych')
-  assert.equal(activityLabel({ projects: 22, clients: 13, shootDays: 22 }), '22 projekty · 13 klientów · 22 dni zdjęciowe')
 })
 
 test('czeka na wpłatę: kawałki okresu, wpłynęło osobno', () => {

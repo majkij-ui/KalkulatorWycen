@@ -6,7 +6,6 @@ import { clientScopeOf, type ClientGroup } from './client-groups'
 import { isInPeriod, periodMonths, type Period } from './finance-calc'
 import { projectShootDates, quoteShootDayCount } from './gear-usage'
 import { summarizeMoney, type OpenInvoice, type ProjectMoney } from './money-loop'
-import { plural } from './pl-plural'
 import type { Project } from './project-types'
 import type { TimelineEvent } from './event-types'
 
@@ -19,7 +18,7 @@ export interface PeriodActivity {
 type ShootEvent = Pick<TimelineEvent, 'kind' | 'projectId' | 'start' | 'end' | 'deletedAt'>
 
 /**
- * „N projektów · M klientów · D dni zdjęciowych" dla projektów, które liczą się
+ * Liczba projektów, klientów i dni zdjęciowych dla projektów, które liczą się
  * w okresie i filtrze (`projectIds` — te same, z których są kafle).
  *
  *  - klienci: różni klienci tych projektów; grupa klientów to jeden klient
@@ -65,15 +64,6 @@ export function periodActivity(input: {
   })
 
   return { projects: ids.length, clients: clients.size, shootDays }
-}
-
-export function activityLabel(activity: PeriodActivity): string {
-  const { projects, clients, shootDays } = activity
-  return [
-    `${projects} ${plural(projects, 'projekt', 'projekty', 'projektów')}`,
-    `${clients} ${plural(clients, 'klient', 'klientów', 'klientów')}`,
-    `${shootDays} ${plural(shootDays, 'dzień zdjęciowy', 'dni zdjęciowe', 'dni zdjęciowych')}`,
-  ].join(' · ')
 }
 
 /**

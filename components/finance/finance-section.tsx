@@ -69,7 +69,6 @@ import { toDateKey, toYear } from '@/lib/project-types'
 import { useEvents } from '@/lib/events-context'
 import { plural } from '@/lib/pl-plural'
 import {
-  activityLabel,
   inProgressInPeriod,
   overdueAwaiting,
   periodActivity,
@@ -358,7 +357,7 @@ function KpiTiles({
   inProgress: { count: number; revenue: number }
   /** Na ile miesięcy rozkładamy duże zakupy sprzętu (ustawienie). */
   gearMonths: number
-  /** „N projektów · M klientów · D dni zdjęciowych" okresu i filtra. */
+  /** Projekty, klienci i dni zdjęciowe okresu i filtra. */
   activity: PeriodActivity
   /** Faktury czekające na wpłatę — „po terminie" zawęża do projektów okresu. */
   open: OpenInvoice[]
@@ -395,7 +394,7 @@ function KpiTiles({
         { label: 'Koszty bezpośrednie', value: totals.costs },
         { label: 'Podatek PIT', value: company.tax },
         { label: 'ZUS', value: company.zus },
-        { label: 'Koszty stałe i subskrypcje', value: company.fixed },
+        { label: 'Koszty stałe', value: company.fixed },
         { label: 'Marketing', value: company.marketing },
         { label: 'Sprzęt', value: company.gear },
       ]
@@ -403,7 +402,7 @@ function KpiTiles({
 
   return (
     <div className="mb-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:auto-rows-fr lg:grid-cols-4">
         {/* Rząd 1 */}
         <div className={`rounded-xl border p-3 sm:p-4 ${tone.box}`}>
           <div className="text-[11px] uppercase tracking-wide text-zinc-400">
@@ -439,9 +438,18 @@ function KpiTiles({
             Przychód netto <InfoTip title="Przychód netto">{TILE_HELP.revenue}</InfoTip>
           </div>
           <div className="mt-1 tabular-nums text-xl font-bold text-zinc-100">{pln(view.revenue)}</div>
-          <div className="mt-1.5 text-sm font-semibold leading-snug tabular-nums text-zinc-300" data-testid="finance-activity">
-            {activityLabel(activity)}
-          </div>
+          <dl className="mt-1.5 space-y-0.5 text-xs" data-testid="finance-activity">
+            {[
+              { label: 'Projekty', value: activity.projects },
+              { label: 'Klienci', value: activity.clients },
+              { label: 'Dni zdjęciowe', value: activity.shootDays },
+            ].map((row) => (
+              <div key={row.label} className="flex items-baseline justify-between gap-2">
+                <dt className="min-w-0 text-zinc-500">{row.label}</dt>
+                <dd className="shrink-0 text-right tabular-nums text-zinc-300">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
           {scoped && totals.revenue > 0 && (
             <div className="mt-1 text-xs text-zinc-500">{pctOf(view.revenue, totals.revenue)} przychodu firmy</div>
           )}
@@ -475,7 +483,7 @@ function KpiTiles({
                       <li>koszty bezpośrednie: ekipa, wynajem, dojazd… (z Realizacji, a bez niej z planu),</li>
                       <li>podatek PIT: ryczałt od przychodu,</li>
                       <li>ZUS,</li>
-                      <li>koszty stałe i subskrypcje: oprogramowanie, bank, biuro, telefon, ubezpieczenia,</li>
+                      <li>koszty stałe: subskrypcje, oprogramowanie, bank, biuro, telefon, ubezpieczenia,</li>
                       <li>marketing: kampanie,</li>
                       <li>sprzęt: zakupy z katalogu i spoza niego ({gearView}).</li>
                     </ul>
