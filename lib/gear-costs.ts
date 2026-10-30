@@ -250,11 +250,13 @@ export function gearCostInPeriod(
   fixedCosts: FixedCost[],
   period: Period,
   spread: boolean,
-  settings: GearSpreadSettings
+  settings: GearSpreadSettings,
+  /** Ostatni miesiąc (`YYYY-MM`), do którego liczymy (trwający okres: bieżący); `null` = cały okres. */
+  through: string | null = null
 ): GearPeriodCost {
   const months = periodMonths(period)
   const from = months[0]
-  const to = months[months.length - 1]
+  const to = through && through < months[months.length - 1] ? through : months[months.length - 1]
   const { lines, undated, unpriced } = gearCostLines(items, spread, settings)
 
   const periodLines: GearPeriodLine[] = []

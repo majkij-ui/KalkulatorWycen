@@ -50,7 +50,7 @@ import {
 } from './marketing-calc'
 import { leadsFromEvents, type Lead } from './marketing-leads'
 import type { Campaign } from './marketing-types'
-import { companyTaxRate, marginSummary, type MarginInput, type MarginSummary, type ProjectMargin } from './margin-ledger'
+import { companyCostsThrough, companyTaxRate, costsThrough, marginSummary, type MarginInput, type MarginSummary, type ProjectMargin } from './margin-ledger'
 import { invoiceAmount, moneyLedger, openInvoices, paymentDays, type ProjectMoney } from './money-loop'
 import { formatDate } from './money-loop-labels'
 import { extraSaleStats } from './extra-sales'
@@ -448,7 +448,7 @@ export interface PeriodReport {
   version: 1
   generatedAt: string
   period: ReportPeriod
-  /** Okres trwa albo jest przyszły — koszty firmy do jego końca z planu. */
+  /** Okres trwa albo jest przyszły — koszty firmy do bieżącego miesiąca (przyszły okres: z planu). */
   provisional: boolean
   /** Warstwa 2 per projekt (widok roku, decyzja A). */
   perProject: boolean
@@ -586,7 +586,7 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
     {
       key: 'provisional',
       label: 'Wstępnie',
-      text: 'Okres, który się nie skończył: koszty firmy do jego końca z planu (raty subskrypcji, zakupy sprzętu rozłożone na miesiące), projekty w realizacji z planu.',
+      text: 'Okres, który się nie skończył: koszty firmy (raty subskrypcji, zakupy sprzętu rozłożone na miesiące) tylko do bieżącego miesiąca, projekty w realizacji z planu. Okres przyszły pokazuje koszty z planu.',
     },
     ...(perProject
       ? []
@@ -1140,7 +1140,10 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
   }
 
   // ── Koszty firmy, subskrypcje ──────────────────────────────────────────────
-  const periodCosts = fixedCosts.filter((cost) => isInPeriod(cost.month, periodDef))
+  // Te same koszty co w rejestrze marży: w trwającym okresie tylko do bieżącego miesiąca.
+  const periodCosts = costsThrough(fixedCosts, companyCostsThrough(periodDef, input.today)).filter((cost) =>
+    isInPeriod(cost.month, periodDef)
+  )
   const subsById = new Map(input.subscriptions.map((s) => [s.id, s]))
   const bySub = totalsBySubscription(periodCosts)
   const subscriptions: ReportSubscription[] = [...bySub.entries()]
@@ -1248,7 +1251,7 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     notes.push({
       kind: 'info',
       code: 'provisional',
-      text: 'Okres jeszcze trwa (wstępnie): koszty firmy do jego końca z planu — raty subskrypcji i zakupy sprzętu rozłożone na miesiące — a projekty w realizacji z planu.',
+      text: 'Okres jeszcze trwa (wstępnie): koszty firmy — raty subskrypcji i zakupy sprzętu rozłożone na miesiące — liczone do bieżącego miesiąca, a projekty w realizacji z planu.',
     })
   }
   if (current.unallocated > 0.5 && perProject) {
