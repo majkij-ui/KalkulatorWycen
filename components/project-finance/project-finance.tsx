@@ -418,6 +418,9 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
           <div className={`mt-0.5 text-2xl font-semibold ${money.margin !== null && money.margin < 0 ? 'text-red-300' : 'text-white'}`} style={mono}>
             {money.margin === null ? '—' : pln(money.margin)}
           </div>
+          {money.margin !== null && (
+            <div className="mt-0.5 text-xs font-medium text-zinc-300" style={mono}>po podatku {pln(money.margin - money.tax)}</div>
+          )}
           <div className="mt-1 text-xs text-zinc-500">{pct(marginBeforeTaxPct)} przychodu · przychód − koszty zewnętrzne</div>
         </div>
         <div className="rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3">
@@ -425,6 +428,9 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
           <div className={`mt-0.5 text-2xl font-semibold ${money.producerMargin !== null && money.producerMargin < 0 ? 'text-red-300' : 'text-white'}`} style={mono}>
             {money.producerMargin === null ? '—' : pln(money.producerMargin)}
           </div>
+          {money.producerMargin !== null && (
+            <div className="mt-0.5 text-xs font-medium text-zinc-300" style={mono}>po podatku {pln(money.producerMargin - money.tax)}</div>
+          )}
           <div className="mt-1 text-xs text-zinc-500">
             {pct(money.producerMarginPct)} przychodu ·{' '}
             {money.ownWork > 0 ? `bez Twojej pracy (${pln(money.ownWork)})` : 'nic nie oznaczono jako „Moja praca"'}
