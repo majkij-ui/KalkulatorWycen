@@ -4,7 +4,7 @@
  * Sekcja „Finanse" — kokpit wyniku firmy.
  *
  *   marża na realizacji (warstwa 1) = przychód − koszty bezpośrednie
- *   wynik po kosztach firmy (warstwa 2) = warstwa 1 − podatek − ZUS − stałe − sprzęt − marketing
+ *   zysk po wszystkich kosztach (warstwa 2) = warstwa 1 − podatek − ZUS − stałe − sprzęt − marketing
  *
  * Liczby warstw: rejestr marży (`margin-ledger.ts`, S4) — przełącznik
  * „Rozłóż duże zakupy sprzętu" i filtr klienta / grupy zmieniają wszystko na
@@ -753,7 +753,7 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
       {[
         { label: 'Marża na realizacji', value: row.margin, color: COLOR_PROFIT },
         { label: 'Koszty firmy', value: row.companyCosts, color: COLOR_FIXED },
-        { label: 'Wynik po kosztach firmy', value: row.result, color: COLOR_RESULT },
+        { label: 'Zysk po wszystkich kosztach', value: row.result, color: COLOR_RESULT },
       ].map((item) => (
         <div key={item.label} className="flex items-center justify-between gap-4">
           <span className="flex items-center gap-1.5 text-zinc-400">
@@ -794,7 +794,7 @@ function TrendChart({ trend, period, scoped }: { trend: MarginTrendRow[]; period
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-0.5 w-3 rounded-full" style={{ background: COLOR_RESULT }} />
-            Wynik po kosztach firmy{scoped && ' (cała firma)'}
+            Zysk po wszystkich kosztach{scoped && ' (cała firma)'}
           </span>
         </div>
       </div>

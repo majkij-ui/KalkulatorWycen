@@ -146,7 +146,7 @@ export function PlanVsActual({
           podatkiem.{' '}
           {perProject
             ? 'Po kosztach firmy: minus ryczałt i część kosztów firmy wg udziału w przychodzie roku.'
-            : 'Wynik po kosztach firmy per projekt — w widoku roku.'}
+            : 'Zysk po wszystkich kosztach per projekt — w widoku roku.'}
         </p>
       </div>
 

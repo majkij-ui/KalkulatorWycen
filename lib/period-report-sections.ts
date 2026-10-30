@@ -127,7 +127,7 @@ function summarySection(report: PeriodReport): ReportSection {
   const after: string[] = []
   const alt = report.alternativeView
   after.push(
-    `W drugim widoku (${alt.gearLabel}) wynik po kosztach firmy = ${pln(alt.result)} (sprzęt ${pln(alt.gearCost)}, koszty firmy ${pln(alt.companyCosts)}).`
+    `W drugim widoku (${alt.gearLabel}) zysk po wszystkich kosztach = ${pln(alt.result)} (sprzęt ${pln(alt.gearCost)}, koszty firmy ${pln(alt.companyCosts)}).`
   )
   after.push(
     report.pipeline.count === 0
@@ -191,7 +191,7 @@ function projectsSection(report: PeriodReport): ReportSection {
         ? ['Brak projektów w okresie (żaden nie ma tu kotwicy ani faktury).']
         : [
             'Data* = data kotwicy: pierwsza faktura, a bez faktur data projektu.' +
-              (year ? ' Widok roku: udział w przychodzie roku, koszty firmy bez podatku i wynik po kosztach firmy per projekt.' : ' Wynik po kosztach firmy per projekt tylko w raporcie rocznym.'),
+              (year ? ' Widok roku: udział w przychodzie roku, koszty firmy bez podatku i zysk po wszystkich kosztach per projekt.' : ' Zysk po wszystkich kosztach per projekt tylko w raporcie rocznym.'),
           ],
     tables: rows.length === 0 ? [] : [table(head, rows, align, { strong: [rows.length - 1] })],
     after: [],

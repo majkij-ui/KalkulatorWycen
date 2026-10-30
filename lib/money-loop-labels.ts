@@ -144,7 +144,7 @@ export function marginText(row: Pick<ProjectMargin, 'money' | 'revenue' | 'costs
   }
 }
 
-/** Wynik po kosztach firmy (S4, warstwa 2) — tylko w widoku roku. */
+/** Zysk po wszystkich kosztach (S4, warstwa 2) — tylko w widoku roku. */
 export function resultText(row: Pick<ProjectMargin, 'result' | 'overhead' | 'share' | 'tax' | 'known'>): CellText {
   if (row.result === null) return { value: '—', basis: null, note: 'tylko w widoku roku', muted: true }
   if (!row.known && row.share === 0 && row.result === 0) return { value: '—', basis: null, note: null, muted: true }

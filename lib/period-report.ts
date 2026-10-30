@@ -455,7 +455,7 @@ export interface PeriodReport {
   view: ReportView
   definitions: ReportDefinition[]
   metrics: ReportMetric[]
-  /** Wynik po kosztach firmy w drugim widoku sprzętu. */
+  /** Zysk po wszystkich kosztach w drugim widoku sprzętu. */
   alternativeView: { gear: ReportView['gear']; gearLabel: string; gearCost: number; companyCosts: number; result: number }
   /** Wyceny w toku (po dacie księgowej), nie wchodzą do wyniku. */
   pipeline: { count: number; value: number }
@@ -545,7 +545,7 @@ export function reportDefinitions(view: ReportView, perProject: boolean): Report
     },
     {
       key: 'layer2',
-      label: 'Wynik po kosztach firmy (W2)',
+      label: 'Zysk po wszystkich kosztach (W2)',
       text: 'W1 − ryczałt − ZUS − subskrypcje i koszty stałe − sprzęt − marketing. Dla okresu zawsze; per projekt i per klient tylko w raporcie rocznym (koszty firmy dzielone wg udziału w przychodzie roku).',
     },
     {
@@ -1078,7 +1078,7 @@ export function buildPeriodReport(input: ReportInput, periodDef: Period): Period
     metricRow('ebbt', 'EBBT (przychód netto − koszty bezpośrednie − podatek − ZUS)', 'layer2', current.totals.ebbt ?? 0, before((s) => s.totals.ebbt ?? 0), {
       pctOfRevenue: pctOf(current.totals.ebbt ?? 0, revenue),
     }),
-    metricRow('result', 'Wynik po kosztach firmy (W2)', 'layer2', current.totals.result ?? 0, before((s) => s.totals.result ?? 0), {
+    metricRow('result', 'Zysk po wszystkich kosztach (W2)', 'layer2', current.totals.result ?? 0, before((s) => s.totals.result ?? 0), {
       emphasis: true,
       pctOfRevenue: pctOf(current.totals.result ?? 0, revenue),
     }),

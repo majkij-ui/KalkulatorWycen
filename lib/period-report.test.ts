@@ -261,7 +261,7 @@ test('przełącznik sprzętu: rozłożony i w całości dają różne koszty fir
   assert.equal(spread.alternativeView.gear, 'full')
   assert.match(reportToMarkdown(spread), /Widok sprzętu: zakupy sprzętu rozłożone na 36 mies\. — zakupy od 5 000 zł/)
   assert.match(reportToMarkdown(full), /Widok sprzętu: zakupy sprzętu liczone jednorazowo/)
-  assert.match(sectionText(spread), /W drugim widoku \(zakupy sprzętu liczone jednorazowo\) wynik po kosztach firmy = /)
+  assert.match(sectionText(spread), /W drugim widoku \(zakupy sprzętu liczone jednorazowo\) zysk po wszystkich kosztach = /)
   assert.match(sectionText(full), /W drugim widoku \(zakupy sprzętu rozłożone na 36 mies\.\)/)
   const json = JSON.parse(reportToMarkdown(spread).split('```json\n')[1].split('\n```')[0]) as PeriodReport
   near(json.alternativeView.result, metric(full, 'result').value)

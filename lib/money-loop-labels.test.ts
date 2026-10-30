@@ -169,7 +169,7 @@ test('S4 marża na realizacji: plan, rzeczywistość z Δ do planu, brak kwoty, 
   assert.equal(loss.warn, true)
 })
 
-test('S4 wynik po kosztach firmy: tylko w roku, z podatkiem i udziałem', () => {
+test('S4 zysk po wszystkich kosztach: tylko w roku, z podatkiem i udziałem', () => {
   assert.equal(resultText({ result: null, overhead: null, share: null, tax: 0, known: true }).note, 'tylko w widoku roku')
   const text = resultText({ result: 1_962.6, overhead: 23_160, share: 0.448, tax: 6_837.4, known: true })
   assert.equal(plain(text.value), '1 963 zł')
