@@ -19,7 +19,7 @@ import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { investedSplit } from '@/lib/gear-backstage'
-import { computeGearReport, type EquipmentRoi, type MissingGearProject } from '@/lib/equipment-roi'
+import { computeGearReport, ownVsRent, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
@@ -183,7 +183,7 @@ function MissingGearBanner({
         <span className="flex-1 text-sm text-amber-100/90">
           {missing.length}{' '}
           {plural(missing.length, 'projekt nie ma', 'projekty nie mają', 'projektów nie ma')} wpisanego sprzętu
-          <span className="text-amber-100/50"> (w realizacji i zrealizowane)</span>
+          <span className="text-amber-100/50"> (w realizacji i zakończone)</span>
         </span>
         <ChevronDown className={`size-4 text-amber-300/60 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -287,7 +287,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           Twój sprzęt i to, jak na siebie zarabia. <span className="text-zinc-300">Odpracował</span>: ile
           kosztowałby rental za każdy dzień na planie. <span className="text-zinc-300">Zarobił</span>: jego część
           wiersza „Sprzęt" z PDF po odjęciu wynajmu, dzielona stawka × dni na planie (gdy wynajem był droższy niż
-          wiersz Sprzęt — ujemna). Liczą się projekty w realizacji i zrealizowane.
+          wiersz Sprzęt — ujemna). Liczą się projekty w realizacji i zakończone.
         </p>
       </header>
 
@@ -385,6 +385,10 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           </>
           )}
         </div>
+      )}
+
+      {tab === 'plan' && items.length > 0 && totals.invested > 0 && (
+        <OwnVsRentCard result={ownVsRent(totals)} missingRate={missingRate} />
       )}
 
       {tab === 'zaplecze' ? (
@@ -510,6 +514,54 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         </SheetContent>
       </Sheet>
     </div>
+  )
+}
+
+/**
+ * „Własność czy wynajem" (V1): kapitał w sprzęcie minus to, co zarobił, kontra
+ * „Odpracował" — ile kosztowałby wynajem za każdy dzień na planie. Wszystkie
+ * liczby z sum raportu (`ownVsRent`); wynajem faktycznie opłacony nie wchodzi.
+ */
+function OwnVsRentCard({ result, missingRate }: { result: OwnVsRent; missingRate: number }) {
+  const verdict =
+    result.verdict === 'equal'
+      ? 'Własny sprzęt wychodzi tak samo jak wynajem'
+      : `Własny sprzęt wychodzi ${result.verdict === 'dearer' ? 'drożej' : 'taniej'} o ${pln(Math.abs(result.diff))}`
+  const tone =
+    result.verdict === 'cheaper' ? 'text-emerald-400' : result.verdict === 'dearer' ? 'text-amber-300' : 'text-zinc-100'
+  return (
+    <section
+      aria-label="Własność czy wynajem"
+      className="mb-6 rounded-xl border border-white/5 bg-zinc-900/40 px-4 py-3"
+    >
+      <div className="text-[11px] uppercase tracking-wide text-zinc-500">Własność czy wynajem</div>
+      <dl className="mt-2 grid max-w-md grid-cols-[1fr_auto] gap-x-6 gap-y-0.5 text-sm">
+        <dt className="text-zinc-400">Kapitał w sprzęcie</dt>
+        <dd className="text-right tabular-nums text-zinc-200">{pln(result.capital)}</dd>
+        <dt className="text-zinc-400">− Zarobił</dt>
+        <dd className="text-right tabular-nums text-zinc-200">{pln(result.earned)}</dd>
+        <dt className="border-t border-white/10 pt-0.5 text-zinc-300">= Kapitał minus zarobek</dt>
+        <dd className="border-t border-white/10 pt-0.5 text-right tabular-nums font-semibold text-zinc-100">
+          {pln(result.net)}
+        </dd>
+        <dt className="mt-1 text-zinc-400">vs „Gdybym wszystko wynajmował"</dt>
+        <dd className="mt-1 text-right tabular-nums font-semibold text-zinc-100">{pln(result.rentAll)}</dd>
+      </dl>
+      <div className={`mt-2 text-sm font-semibold ${tone}`}>{verdict}</div>
+      <div className="mt-0.5 text-xs text-zinc-500">
+        Zarobek na sprzęcie miałbyś też przy wynajmie, więc bez niego: kapitał {pln(result.fair.capital)} vs wynajem{' '}
+        {pln(result.fair.rentAll)}
+      </div>
+      <div className="mt-0.5 text-[11px] text-zinc-600">
+        Wynajem, który faktycznie opłaciłeś, nie wchodzi do tych liczb. Kapitał to sprzęt na plan, także wycofany; zaplecze
+        pominięte.
+      </div>
+      {missingRate > 0 && (
+        <div className="mt-1 text-xs text-amber-300/80">
+          {missingRate} bez stawki rentalowej — kwota wynajmu jest za niska
+        </div>
+      )}
+    </section>
   )
 }
 

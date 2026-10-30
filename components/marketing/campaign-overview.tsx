@@ -167,7 +167,7 @@ export function CampaignFunnel({ summary }: { summary: CampaignSummary }) {
     { label: 'Zapytania', value: s.leads.total, note: 'wszystkie zgłoszenia' },
     { label: 'Realne leady', value: s.leads.real, note: 'dobre + bardzo dobre' },
     { label: 'Z wyceną', value: s.projects.quoted, note: 'projekt z wyceną' },
-    { label: 'Zlecenia', value: s.projects.won.length, note: 'w realizacji + zrealizowane' },
+    { label: 'Zlecenia', value: s.projects.won.length, note: 'w realizacji + zakończone' },
   ]
   const max = Math.max(1, steps[0].value)
 

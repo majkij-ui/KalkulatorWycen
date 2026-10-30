@@ -19,7 +19,7 @@ import { hasContact, type ClientInfo } from '@/lib/clients'
 import { countsTowardRevenue, leadSourceLabel, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
 import { ProjectSwatch, archivo, mono } from '@/components/calendar/calendar-bits'
-import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
+import { ProjectBadge } from '@/components/projects/project-status-badge'
 import { CopyButton, Tile, formatDate, pct, pln } from './client-bits'
 import { SizeBars } from './size-bars'
 import { ClientMerge } from './client-merge'
@@ -102,7 +102,7 @@ function ProjectRow({ project, money, onOpen }: { project: Project; money?: Mone
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm text-zinc-200">{project.name || 'Bez nazwy'}</span>
-          <ProjectStatusBadge status={project.status} />
+          <ProjectBadge project={project} />
         </div>
         <div className="text-[11px] text-zinc-500" style={mono}>
           {formatDate(project.date)}

@@ -37,8 +37,47 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   quote: 'Wycena',
   won: 'W realizacji',
-  done: 'Zrealizowany',
+  done: 'Zakończony',
   lost: 'Nieprzyjęta',
+}
+
+/**
+ * Podstatus projektu „W realizacji" (V1): w jakim etapie jest zlecenie. To tylko
+ * etykieta — żadna reguła pieniędzy ani filtr go nie czyta (czyta `status`).
+ * Brak pola = `production`. Dla `done` podstatusem jest fakt wpłaty (wydarzenia
+ * `invoice_paid`, `lib/payments.ts`), więc go NIE zapisujemy.
+ */
+export const PROJECT_STAGES = ['pre', 'production', 'post'] as const
+export type ProjectStage = (typeof PROJECT_STAGES)[number]
+
+export const PROJECT_STAGE_LABELS: Record<ProjectStage, string> = {
+  pre: 'Przedprodukcja',
+  production: 'Realizacja',
+  post: 'Postprodukcja',
+}
+
+/** Etap w przełączniku „W realizacji": brak zapisu (albo zły zapis) = realizacja. */
+export function effectiveStage(stage: ProjectStage | null | undefined): ProjectStage {
+  return stage && (PROJECT_STAGES as readonly string[]).includes(stage) ? stage : 'production'
+}
+
+/** Podstatus „Zakończonego": czeka na wpłatę albo zapłacony (pochodna wpłat, nie pole). */
+export const PAYMENT_SUBSTATUS_LABELS = { awaiting: 'Oczekuje na zapłatę', paid: 'Zapłacony' } as const
+
+/**
+ * Etykieta odznaki: podstatus, gdy jest, inaczej status. „W realizacji" bez
+ * etapu (albo z etapem „Realizacja") zostaje „W realizacji"; „Zakończony" z
+ * wiadomą wpłatą (`paid` ustawione) mówi „Oczekuje na zapłatę" / „Zapłacony".
+ */
+export function projectBadgeLabel(input: { status: ProjectStatus; stage?: ProjectStage | null; paid?: boolean }): string {
+  if (input.status === 'won') {
+    const stage = effectiveStage(input.stage)
+    return stage === 'production' ? PROJECT_STATUS_LABELS.won : PROJECT_STAGE_LABELS[stage]
+  }
+  if (input.status === 'done' && typeof input.paid === 'boolean') {
+    return input.paid ? PAYMENT_SUBSTATUS_LABELS.paid : PAYMENT_SUBSTATUS_LABELS.awaiting
+  }
+  return PROJECT_STATUS_LABELS[input.status]
 }
 
 /**
@@ -549,6 +588,11 @@ export const projectSchema = z
     /** Klient jako cecha projektu (bez osobnej kartoteki — plan §3.2a). */
     client: z.string().catch(''),
     status: z.enum(PROJECT_STATUSES).catch('quote'),
+    /**
+     * Etap projektu „W realizacji" (V1): przedprodukcja / realizacja / postprodukcja.
+     * Opcjonalny i łagodny; brak = realizacja. Znaczący tylko dla `won`.
+     */
+    stage: z.enum(PROJECT_STAGES).optional().catch(undefined),
     /**
      * Slot palety kalendarza (`'amber'`), nie hex. Brak = jeszcze nie wybrany;
      * kolor wylicza wtedy `projectColorFor` i utrwala go pierwszy zapis.

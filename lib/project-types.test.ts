@@ -2,12 +2,16 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  PROJECT_STATUSES,
+  PROJECT_STATUS_LABELS,
   countsTowardRevenue,
   defaultProjectTab,
+  effectiveStage,
   equipmentCategoryLabel,
   equipmentItemSchema,
   fixedCostSchema,
   matchesFilter,
+  projectBadgeLabel,
   projectSchema,
   toDateKey,
   toMonthKey,
@@ -255,4 +259,34 @@ test('deletedAt przechodzi przez schemat; zepsuta wartość nie odrzuca projektu
   const broken = projectSchema.safeParse({ ...base, deletedAt: 42 })
   assert.equal(broken.success, true)
   assert.equal(broken.success && broken.data.deletedAt, undefined)
+})
+
+// ── V1: podstatusy ───────────────────────────────────────────────────────────
+
+test('V1: „Zakończony" to tylko nowa etykieta statusu done — klucze i reguły pieniędzy bez zmian', () => {
+  assert.equal(PROJECT_STATUS_LABELS.done, 'Zakończony')
+  assert.deepEqual([...PROJECT_STATUSES], ['quote', 'won', 'done', 'lost'])
+  assert.equal(countsTowardRevenue('done'), true)
+})
+
+test('V1: etykieta odznaki — etap dla „W realizacji", wpłata dla „Zakończony", reszta jak status', () => {
+  assert.equal(projectBadgeLabel({ status: 'won' }), 'W realizacji')
+  assert.equal(projectBadgeLabel({ status: 'won', stage: 'production' }), 'W realizacji')
+  assert.equal(projectBadgeLabel({ status: 'won', stage: 'pre' }), 'Przedprodukcja')
+  assert.equal(projectBadgeLabel({ status: 'won', stage: 'post' }), 'Postprodukcja')
+  assert.equal(projectBadgeLabel({ status: 'done', paid: false }), 'Oczekuje na zapłatę')
+  assert.equal(projectBadgeLabel({ status: 'done', paid: true }), 'Zapłacony')
+  assert.equal(projectBadgeLabel({ status: 'done' }), 'Zakończony', 'bez wiedzy o wpłacie zostaje sam status')
+  assert.equal(projectBadgeLabel({ status: 'quote', stage: 'post', paid: true }), 'Wycena', 'etap i wpłata nic nie znaczą poza swoim statusem')
+  assert.equal(projectBadgeLabel({ status: 'lost' }), 'Nieprzyjęta')
+})
+
+test('V1: pole stage jest opcjonalne i łagodne — stary projekt się wczytuje, zły etap znika, nieznane pola przeżywają', () => {
+  const base = { id: 'p-1', date: '2026-10-09', status: 'won' }
+  assert.equal(projectSchema.parse(base).stage, undefined)
+  assert.equal(projectSchema.parse({ ...base, stage: 'post' }).stage, 'post')
+  assert.equal(projectSchema.parse({ ...base, stage: 'nonsens' }).stage, undefined)
+  assert.equal((projectSchema.parse({ ...base, futureField: 7 }) as Record<string, unknown>).futureField, 7)
+  assert.equal(effectiveStage(undefined), 'production')
+  assert.equal(effectiveStage('pre'), 'pre')
 })

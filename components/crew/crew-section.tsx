@@ -301,7 +301,7 @@ export function CrewSection({ onOpenProject }: { onOpenProject?: (id: string) =>
         <p className="mt-1 max-w-2xl text-sm text-zinc-500">
           Ludzie, z którymi pracuję — na planie i przy postprodukcji — z kontaktem, rolami i stawką. Ile razem
           przepracowaliśmy i ile wypłaciłem, liczy się z rzeczywistych kosztów ekipy w zakładce Realizacja
-          (projekty w realizacji i zrealizowane).
+          (projekty w realizacji i zakończone).
         </p>
       </header>
 

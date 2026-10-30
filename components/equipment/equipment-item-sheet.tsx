@@ -341,7 +341,7 @@ export function EquipmentItemSheet({
           </h3>
           {history.length === 0 ? (
             <p className="text-xs text-zinc-600">
-              Jeszcze w żadnym zrealizowanym projekcie. Zaznacza się go w zakładce Realizacja projektu.
+              Jeszcze w żadnym zakończonym projekcie. Zaznacza się go w zakładce Realizacja projektu.
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
@@ -450,7 +450,7 @@ export function EquipmentItemSheet({
             <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
               <p className="text-xs text-red-200">
                 {history.length > 0
-                  ? `Jest w ${history.length} zrealizowanych projektach. Usunięcie wymaże go ze statystyk. Jeśli został sprzedany, lepiej go wycofać.`
+                  ? `Jest w ${history.length} zakończonych projektach. Usunięcie wymaże go ze statystyk. Jeśli został sprzedany, lepiej go wycofać.`
                   : 'Usunąć tę pozycję z katalogu?'}
               </p>
               <div className="mt-2 flex gap-2">

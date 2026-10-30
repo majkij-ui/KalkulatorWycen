@@ -407,7 +407,7 @@ export function ClientsSection({
         <p className="mt-1 max-w-2xl text-sm text-zinc-500">
           Klienci z Twoich projektów: ile przynieśli, jak często wracają i czy zlecenia rosną. Nazwy różniące się
           wielkością liter lub polskimi znakami to jeden klient, a grupa (np. spółki jednej firmy) liczy się jak
-          jeden. Przychód liczy się jak w Finansach — projekty w realizacji i zrealizowane, z faktur, a bez nich z
+          jeden. Przychód liczy się jak w Finansach — projekty w realizacji i zakończone, z faktur, a bez nich z
           planu.
         </p>
       </header>
@@ -435,7 +435,7 @@ export function ClientsSection({
           <Tile
             label="Przychód od klientów"
             value={pln(totals.clientRevenue)}
-            lines={['w realizacji i zrealizowane']}
+            lines={['w realizacji i zakończone']}
             warn={
               totals.noClientJobs > 0
                 ? `+${pln(totals.noClientRevenue)} w ${totals.noClientJobs} ${plural(totals.noClientJobs, 'zleceniu', 'zleceniach', 'zleceniach')} bez klienta`

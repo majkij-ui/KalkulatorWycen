@@ -192,7 +192,7 @@ export function RentedGearPanel({ onOpenProject }: { onOpenProject?: (id: string
       </div>
 
       <p className="text-xs text-zinc-500">
-        Z wierszy „Wynajem sprzętu" w Realizacji (na cały projekt i w dniach), projekty w realizacji i zrealizowane. Pozycję dodasz w
+        Z wierszy „Wynajem sprzętu" w Realizacji (na cały projekt i w dniach), projekty w realizacji i zakończone. Pozycję dodasz w
         Realizacji: Koszty projektu → Wynajem sprzętu → „Pozycja z wynajmu".
       </p>
 

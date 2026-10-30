@@ -14,7 +14,7 @@ import { originBreakdown } from '@/lib/marketing-calc'
 import type { MoneyById } from '@/lib/client-money'
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, toYear, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
-import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
+import { ProjectBadge } from '@/components/projects/project-status-badge'
 import { mono } from '@/components/calendar/calendar-bits'
 import { pln } from './marketing-bits'
 
@@ -153,7 +153,7 @@ export function OriginsPanel({
                   {p.name || 'Bez nazwy'}
                   {p.client && p.client !== p.name && <span className="text-zinc-500"> · {p.client}</span>}
                 </button>
-                <ProjectStatusBadge status={p.status} />
+                <ProjectBadge project={p} />
                 <select
                   aria-label={`Pochodzenie klienta: ${p.name}`}
                   value=""

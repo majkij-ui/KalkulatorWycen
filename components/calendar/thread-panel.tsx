@@ -12,7 +12,7 @@ import type { CalendarEntry } from '@/lib/calendar-entries'
 import { eventKind } from '@/lib/event-kinds'
 import type { Project } from '@/lib/project-types'
 import { describeThreadStats, threadStats } from '@/lib/thread-stats'
-import { ProjectStatusBadge } from '@/components/projects/project-status-badge'
+import { ProjectBadge } from '@/components/projects/project-status-badge'
 import { KindChip, ProjectSwatch, archivo, formatDay, mono, tileFor, timeOf } from './calendar-bits'
 
 /** Liczby wątku („Odpowiedź po 4 h", „Zapłacono po 23 dniach") na kaflu w kolorze projektu. */
@@ -128,7 +128,7 @@ export function ThreadPanel({
             {project.name}
           </h2>
           <div className="mt-2">
-            <ProjectStatusBadge status={project.status} />
+            <ProjectBadge project={project} />
           </div>
         </div>
         <button

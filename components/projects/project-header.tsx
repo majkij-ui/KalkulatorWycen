@@ -3,9 +3,10 @@
 /**
  * Nagłówek otwartego projektu (T3, plan §6b) — zastąpił zatłoczony pasek.
  *
- *   wiersz 1: powrót do listy · stan zapisu wyceny · status
+ *   wiersz 1: powrót do listy · stan zapisu wyceny · status (pod nim drugi rząd:
+ *             etap „W realizacji" albo wpłata „Zakończonego")
  *   wiersz 2: nazwa na całą szerokość (zawija się, nigdy nie jest ściśnięta)
- *   wiersz 3: klient · data księgowa · pochodzenie klienta · „Zapłacone"
+ *   wiersz 3: klient · data księgowa · pochodzenie klienta · „Zapłacone" (tylko „W realizacji")
  *
  * Wszystko zapisuje się samo — wycena też (Q1, `lib/quote-documents.ts`), więc
  * zamiast „Zapisz" jest stan zapisu i „Cofnij zmiany z tej sesji". Wycena
@@ -20,7 +21,7 @@ import { useEvents } from '@/lib/events-context'
 import { clientDirectory, clientKey } from '@/lib/clients'
 import { leadsFromEvents } from '@/lib/marketing-leads'
 import { LEAD_QUALITY_LABELS } from '@/lib/marketing-types'
-import { LEAD_SOURCES, LEAD_SOURCE_LABELS, countsTowardRevenue, leadSourceLabel } from '@/lib/project-types'
+import { LEAD_SOURCES, LEAD_SOURCE_LABELS, leadSourceLabel } from '@/lib/project-types'
 import { hasAlternatives, listVariants } from '@/lib/quote-variants'
 import { ProjectStatusPicker } from './project-status-badge'
 import { PaidToggle } from './paid-toggle'
@@ -179,6 +180,8 @@ export function ProjectHeader({
             <ProjectStatusPicker
               status={activeProject.status}
               onChange={(status) => void requestStatus(activeProject.id, status)}
+              project={activeProject}
+              onStageChange={(stage) => void updateActiveProject({ stage })}
             />
           </div>
         </div>
@@ -264,7 +267,8 @@ export function ProjectHeader({
             </select>
           </Field>
 
-          {countsTowardRevenue(activeProject.status) && (
+          {/* „Zakończony" ma wpłatę w drugim rzędzie przełącznika statusu (V1). */}
+          {activeProject.status === 'won' && (
             <div className="pb-0.5">
               <PaidToggle project={activeProject} />
             </div>

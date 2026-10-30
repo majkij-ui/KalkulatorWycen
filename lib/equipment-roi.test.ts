@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { computeGearReport, itemUsageHistory, summarizeProjectGear } from './equipment-roi'
+import { computeGearReport, itemUsageHistory, ownVsRent, summarizeProjectGear } from './equipment-roi'
 import type { EquipmentItem, GearDay, Project, ProjectStatus } from './project-types'
 import { DEFAULT_PRICING } from './pricing-config'
 
@@ -423,6 +423,37 @@ test('U2: kwota wpisana w projekcie (wynajem w osobnym wierszu PDF) dzieli się 
   assert.equal(roiOf(report, 'l1').clientPaid, 200)
   typed.gearEarnedOverride = -400
   assert.equal(roiOf(computeGearReport([camera, light], [typed], { now: NOW }), 'c1').clientPaid, -300)
+})
+
+test('V1 własność czy wynajem: kapitał − zarobek kontra wynajem; „drożej" i „taniej" o różnicę', () => {
+  const dearer = ownVsRent({ invested: 20_000, clientPaid: 3_000, rentValue: 9_000 })
+  assert.deepEqual([dearer.capital, dearer.earned, dearer.net, dearer.rentAll], [20_000, 3_000, 17_000, 9_000])
+  assert.equal(dearer.verdict, 'dearer')
+  assert.equal(dearer.diff, 8_000, 'własny wychodzi drożej o 8 000')
+  assert.equal(dearer.fair.diff, 11_000, 'uczciwie, bez zarobku: kapitał 20 000 vs wynajem 9 000')
+  assert.deepEqual([dearer.fair.capital, dearer.fair.rentAll], [20_000, 9_000])
+
+  const cheaper = ownVsRent({ invested: 10_000, clientPaid: 6_000, rentValue: 12_000 })
+  assert.equal(cheaper.verdict, 'cheaper')
+  assert.equal(cheaper.diff, -8_000)
+  assert.equal(cheaper.fair.verdict, 'cheaper')
+  assert.equal(cheaper.fair.diff, -2_000)
+
+  assert.equal(ownVsRent({ invested: 5_000, clientPaid: 2_000, rentValue: 3_000 }).verdict, 'equal')
+  // Zarobek ujemny (wynajem droższy niż wiersz „Sprzęt") podnosi koszt własnego sprzętu.
+  assert.equal(ownVsRent({ invested: 5_000, clientPaid: -500, rentValue: 3_000 }).net, 5_500)
+})
+
+test('V1 własność czy wynajem: kapitał z raportu obejmuje wycofany sprzęt; „odpracował" nie jest liczone drugi raz', () => {
+  const camera = item('c1', 'FX3', 10_000, 300, { purchaseDate: '2025-01-01' })
+  const old = item('o1', 'GH5', 8_000, 200, { purchaseDate: '2024-01-01', retiredAt: '2026-02-01' })
+  const used = project('p1', 'done', { equipment: [{ itemId: 'c1', days: 4 }] })
+  const report = computeGearReport([camera, old], [used], { now: NOW })
+  const result = ownVsRent(report.totals)
+  assert.equal(result.capital, 18_000, 'wycofany też, pieniądze poszły')
+  assert.equal(result.rentAll, report.totals.rentValue)
+  near(result.rentAll, 1_200)
+  near(result.net, 18_000 - report.totals.clientPaid)
 })
 
 function near(actual: number, expected: number) {

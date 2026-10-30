@@ -108,7 +108,7 @@ function ProjectRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate font-semibold text-zinc-100">{project.name}</span>
-            <ProjectStatusBadge status={project.status} />
+            <ProjectStatusBadge status={project.status} stage={project.stage} paid={money?.paid} />
           </div>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
             <span>{formatDate(project.date)}</span>
@@ -385,7 +385,7 @@ export function ProjectList() {
           <span className="text-xs text-zinc-500">
             {revenue.countedProjects}{' '}
             {plural(revenue.countedProjects, 'projekt wliczony', 'projekty wliczone', 'projektów wliczonych')} (w
-            realizacji i zrealizowane, z faktur albo z planu — jak w Finansach{year !== null ? ', rok po dacie faktury' : ''})
+            realizacji i zakończone, z faktur albo z planu — jak w Finansach{year !== null ? ', rok po dacie faktury' : ''})
           </span>
         </div>
       )}

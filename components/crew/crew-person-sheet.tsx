@@ -387,7 +387,7 @@ export function CrewPersonSheet({
             </div>
           )}
           <div className="col-span-2 text-[11px] text-zinc-600">
-            Liczone z rzeczywistych kosztów ekipy w projektach w realizacji i zrealizowanych.
+            Liczone z rzeczywistych kosztów ekipy w projektach w realizacji i zakończonych.
           </div>
         </section>
       )}
