@@ -2013,3 +2013,16 @@ the override in the catalogue report) — 45 / 45. `npx tsc --noEmit` clean; `np
   a pick keeps the typed text.
 - Rental days are optional; „Wynajmowany" shows „N× bez dni" for lines without them.
 - `docs/PLAN-GEAR.md` still describes `gear-revenue.ts` (historical).
+
+## 21. V1 as built
+
+- **Sub-statuses:** `Project.stage?` (`pre`/`production`/`post`, lenient, meaningful only for `won`, absent = production). `status` and all money rules untouched; the `done` label is now „Zakończony". The picker's 2nd row: stage for `won`; „Oczekuje na zapłatę" / „Zapłacony" for `done`, derived from the payment events (same actions and undo as the paid toggle, which now shows only for `won`). The badge shows the sub-state (`projectBadgeLabel`).
+- **Gear:** „Własność czy wynajem" card on „Na plan" (`ownVsRent`): capital (retired included, zaplecze excluded) − „Zarobił" vs „Odpracował", plus the fair line without earnings.
+- **Margins:** producer margin = margin − own work, both before tax (supersedes the 2026-10-18 after-tax rule); „Zysk netto" stays separate (the project Finanse tab shows all three). JHJ: 13 915 − 10 100 = 3 815 (14,5 %), was 1 576.
+- **Wording:** „zakupy sprzętu rozłożone na N mies." / „liczone jednorazowo" (`gearViewLabel`), „+X zł w wycenach (niewliczone)", EBBT spelled out on the tile, legend and report. Real-data check on base vs branch: only `producerMargin` moved.
+
+## 21. V1 as built
+
+- **Sub-statuses:** `Project.stage?` (`pre`/`production`/`post`, lenient, meaningful only for `won`, absent = production). `status` and all money rules untouched; `done` label is now „Zakończony". The picker`s 2nd row: etap for `won`; „Oczekuje na zapłatę" / „Zapłacony" for `done`, derived from the payment events (same actions and undo as the paid toggle, which now shows only for `won`). Badge shows the sub-state (`projectBadgeLabel`).
+- **Gear:** „Własność czy wynajem" card on „Na plan" (`ownVsRent`): capital (retired incl., zaplecze excl.) − „Zarobił" vs „Odpracował", plus the fair line without earnings.
+- **Margins:** producer margin = margin − own work, BOTH before tax (supersedes the 2026-10-18 after-tax rule); „Zysk netto" stays separate (project Finanse tab shows the three figures). JHJ: 13 915 − 10 100 = 3 815 (14,5 
