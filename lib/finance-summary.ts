@@ -3,9 +3,9 @@
  * „Czeka na wpłatę". Niczego nie zmieniają w rejestrze marży ani w danych.
  */
 import { clientScopeOf, type ClientGroup } from './client-groups'
-import { isInPeriod, type Period } from './finance-calc'
-import { projectShootDates } from './gear-usage'
-import type { OpenInvoice, ProjectMoney } from './money-loop'
+import { isInPeriod, periodMonths, type Period } from './finance-calc'
+import { projectShootDates, quoteShootDayCount } from './gear-usage'
+import { summarizeMoney, type OpenInvoice, type ProjectMoney } from './money-loop'
 import { plural } from './pl-plural'
 import type { Project } from './project-types'
 import type { TimelineEvent } from './event-types'
@@ -24,13 +24,18 @@ type ShootEvent = Pick<TimelineEvent, 'kind' | 'projectId' | 'start' | 'end' | '
  *
  *  - klienci: różni klienci tych projektów; grupa klientów to jeden klient
  *    (jak na ekranie Klienci — `clientScopeOf`); projekt bez klienta nie liczy się;
- *  - dni zdjęciowe: dni `shoot_day` (nieusunięte; `prep_day` nie) tych projektów
- *    z datą w okresie. Wydarzenie wielodniowe liczy każdy swój dzień w okresie;
- *    para (projekt, dzień) liczy się raz, jak w podsumowaniu kalendarza.
+ *  - dni zdjęciowe, per projekt: gdy projekt ma w kalendarzu JAKIKOLWIEK dzień
+ *    `shoot_day` (nieusunięty, z dowolnego roku; `prep_day` nie), liczymy jego dni
+ *    z datą w okresie — kalendarz wygrywa z wyceną, a dni tylko w innym okresie
+ *    nie robią zapasu z wyceny. Wydarzenie wielodniowe liczy każdy swój dzień w
+ *    okresie; para (projekt, dzień) liczy się raz, jak w podsumowaniu kalendarza.
+ *    Gdy projekt nie ma w kalendarzu żadnego dnia zdjęciowego — liczba dni z
+ *    wyceny (`quoteShootDayCount`; brak wyceny = 0).
+ *    Dotyczy tylko tego licznika; statystyki sprzętu liczą po swojemu.
  */
 export function periodActivity(input: {
   projectIds: readonly string[]
-  projects: ReadonlyArray<Pick<Project, 'id' | 'client'>>
+  projects: ReadonlyArray<Pick<Project, 'id' | 'client'> & { quote?: unknown }>
   events: readonly ShootEvent[]
   groups: ClientGroup[]
   period: Period
@@ -51,8 +56,12 @@ export function periodActivity(input: {
     eventsByProject.set(event.projectId, [...(eventsByProject.get(event.projectId) ?? []), event])
   })
   let shootDays = 0
-  eventsByProject.forEach((list, projectId) => {
-    shootDays += projectShootDates(projectId, list).filter((day) => isInPeriod(day, input.period)).length
+  ids.forEach((id) => {
+    const dates = projectShootDates(id, eventsByProject.get(id) ?? [])
+    shootDays +=
+      dates.length > 0
+        ? dates.filter((day) => isInPeriod(day, input.period)).length
+        : quoteShootDayCount(byId.get(id)?.quote)
   })
 
   return { projects: ids.length, clients: clients.size, shootDays }
@@ -65,6 +74,48 @@ export function activityLabel(activity: PeriodActivity): string {
     `${clients} ${plural(clients, 'klient', 'klientów', 'klientów')}`,
     `${shootDays} ${plural(shootDays, 'dzień zdjęciowy', 'dni zdjęciowe', 'dni zdjęciowych')}`,
   ].join(' · ')
+}
+
+/**
+ * Ile miesięcy okresu już minęło — dzielnik dla „~X zł / mies." pod zyskiem.
+ *
+ *  - okres zamknięty (przed dzisiaj): wszystkie jego miesiące (rok 12, półrocze 6, kwartał 3);
+ *  - okres trwający: pełne miesiące przed bieżącym + część bieżącego (dzień / dni
+ *    miesiąca), np. 30 X 2026 w roku 2026 = 9 + 30/31;
+ *  - widok miesiąca, okres przyszły i okres trwający krócej niż miesiąc: `null`
+ *    (średnia miesięczna nie ma sensu — kafel jej nie pokazuje).
+ */
+export function periodElapsedMonths(period: Period, today: string): number | null {
+  if (period.kind === 'month') return null
+  const months = periodMonths(period)
+  const current = today.slice(0, 7)
+  if (current < months[0]) return null
+  let elapsed = months.length
+  if (current <= months[months.length - 1]) {
+    const [year, month] = current.split('-').map(Number)
+    const day = Number(today.slice(8, 10))
+    if (!Number.isFinite(day) || !Number.isFinite(year) || !Number.isFinite(month)) return null
+    const daysInMonth = new Date(year, month, 0).getDate()
+    elapsed = months.indexOf(current) + Math.min(day, daysInMonth) / daysInMonth
+  }
+  return elapsed >= 1 ? elapsed : null
+}
+
+/**
+ * „W realizacji": projekty ze statusem `won`, które dotykają okresu (kotwicą albo
+ * fakturą), w zakresie filtra klienta, i ich przychód w okresie. Zawsze z pełnego
+ * rejestru — przełącznik „Zakończone projekty" nie może go opróżnić.
+ */
+export function inProgressInPeriod(
+  ledger: readonly ProjectMoney[],
+  statusById: ReadonlyMap<string, string>,
+  scope: ReadonlySet<string> | null,
+  period: Period
+): { count: number; revenue: number } {
+  const rows = summarizeMoney([...ledger], [], period).projects.filter(
+    (row) => statusById.get(row.money.id) === 'won' && (!scope || scope.has(row.money.id))
+  )
+  return { count: rows.length, revenue: rows.reduce((total, row) => total + row.revenue, 0) }
 }
 
 /**
