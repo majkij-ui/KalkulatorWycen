@@ -233,7 +233,8 @@ export function validateInboxDraft(raw: unknown, ctx: StrictContext): StrictResu
       } else if (extra.length) error(`pola spoza listy: ${extra.join(', ')} (dozwolone: ${EVENT_UPDATE_FIELDS.join(', ')})`)
       if (proposal.set.linkProject === false) error('linkProject: tylko true (odpinanie od projektu nie jest propozycją)')
       const hasData = !!proposal.set.data && Object.keys(proposal.set.data).length > 0
-      if (!proposal.set.linkProject && !proposal.set.time && !hasData) error('„set" niczego nie zmienia')
+      if (proposal.set.date && !proposal.ref.startsWith('ksef:')) error('„date" zmienia tylko propozycja z KSeF (ref ksef:…)')
+      if (!proposal.set.linkProject && !proposal.set.time && !proposal.set.date && !hasData) error('„set" niczego nie zmienia')
       if ((proposal.projectId || proposal.newProject || proposal.newProjectRef) && !proposal.set.linkProject) {
         error('projekt podany bez linkProject')
       }

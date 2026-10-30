@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createKsefClient, isReadOnlyAccessToken, isReadOnlyEndpoint, KsefApiError } from './ksef-client'
+import { createKsefClient, isReadOnlyAccessToken, isReadOnlyEndpoint, KsefApiError, queryWindows } from './ksef-client'
 import { normalizeKsefInvoice, parseInvoiceXml, type KsefInvoiceMetadata } from './ksef-invoices'
 
 const metadata: KsefInvoiceMetadata = {
@@ -141,7 +141,7 @@ test('stronicowanie i ucięty wynik: bez duplikatów, wszystkie faktury', async 
     fetchImpl: fakeFetch(
       [
         { hasMore: true, isTruncated: false, invoices: [metadata] },
-        { hasMore: false, isTruncated: true, invoices: [second] },
+        { hasMore: true, isTruncated: true, invoices: [second] },
         { hasMore: false, isTruncated: false, invoices: [second, third] },
       ],
       (url, body) => queries.push({ url, from: (body as { dateRange: { from: string } }).dateRange.from }),
@@ -152,6 +152,18 @@ test('stronicowanie i ucięty wynik: bez duplikatów, wszystkie faktury', async 
   assert.match(queries[1].url, /pageOffset=1/)
   assert.match(queries[2].url, /pageOffset=0/)
   assert.equal(queries[2].from, second.permanentStorageDate)
+})
+
+test('długi zakres: sąsiadujące okna nie dłuższe niż 100 dni, bez dziur', () => {
+  const windows = queryWindows('2027-01-01T00:00:00Z', '2028-01-01T00:00:00Z')
+  assert.ok(windows.length > 1)
+  assert.equal(windows[0].from, '2027-01-01T00:00:00.000Z')
+  assert.equal(windows.at(-1)!.to, '2028-01-01T00:00:00.000Z')
+  windows.forEach((window, index) => {
+    assert.ok(Date.parse(window.to) - Date.parse(window.from) <= 100 * 86_400_000)
+    if (index > 0) assert.equal(window.from, windows[index - 1].to)
+  })
+  assert.equal(queryWindows('2027-01-01T00:00:00Z', '2027-01-10T00:00:00Z').length, 1)
 })
 
 test('limit zapytań: błąd z czasem oczekiwania i bez tokenu w treści', async () => {

@@ -94,6 +94,24 @@ const AUTH_IN_PROGRESS = 100
 const AUTH_SUCCESS = 200
 const AUTH_POLL_ATTEMPTS = 30
 const PAGE_SIZE = 100
+/** KSeF odrzuca zakres dłuższy niż 100 dni (kod 21405), więc dłuższy dzielimy na okna. */
+const MAX_WINDOW_DAYS = 90
+const DAY_MS = 86_400_000
+
+/** Sąsiadujące okna pokrywające cały zakres; przedział odwraca się tylko przy złych danych. */
+export function queryWindows(from: string, to: string): Array<{ from: string; to: string }> {
+  const end = Date.parse(to)
+  const windows: Array<{ from: string; to: string }> = []
+  let start = Date.parse(from)
+  if (Number.isNaN(start) || Number.isNaN(end)) return [{ from, to }]
+  while (start + MAX_WINDOW_DAYS * DAY_MS < end) {
+    const next = start + MAX_WINDOW_DAYS * DAY_MS
+    windows.push({ from: new Date(start).toISOString(), to: new Date(next).toISOString() })
+    start = next
+  }
+  windows.push({ from: new Date(start).toISOString(), to: new Date(end).toISOString() })
+  return windows
+}
 
 export function createKsefClient(options: KsefClientOptions) {
   const { environment, nip, token } = options
@@ -178,7 +196,19 @@ export function createKsefClient(options: KsefClientOptions) {
   async function listInvoices({ direction, from, to }: ListInvoicesParams): Promise<KsefInvoice[]> {
     const bearer = await getAccessToken()
     const found = new Map<string, KsefInvoice>()
-    let rangeFrom = from
+    for (const window of queryWindows(from, to)) {
+      await collectWindow(bearer, direction, window, found)
+    }
+    return [...found.values()]
+  }
+
+  async function collectWindow(
+    bearer: string,
+    direction: KsefDirection,
+    window: { from: string; to: string },
+    found: Map<string, KsefInvoice>,
+  ): Promise<void> {
+    let rangeFrom = window.from
     let pageOffset = 0
     for (;;) {
       const query = `pageOffset=${pageOffset}&pageSize=${PAGE_SIZE}&sortOrder=Asc`
@@ -186,22 +216,22 @@ export function createKsefClient(options: KsefClientOptions) {
         bearer,
         json: {
           subjectType: direction === 'sale' ? 'Subject1' : 'Subject2',
-          dateRange: { dateType: 'PermanentStorage', from: rangeFrom, to },
+          dateRange: { dateType: 'PermanentStorage', from: rangeFrom, to: window.to },
         },
       })
       const page = (await response.json()) as MetadataPage
       for (const invoice of page.invoices) {
         found.set(invoice.ksefNumber.toLowerCase(), normalizeKsefInvoice(invoice, direction))
       }
-      if (page.hasMore) {
-        pageOffset += 1
-        continue
-      }
+      if (!page.hasMore) return
       // Wynik ucięty przez limit KSeF: dalej od ostatniej daty, duplikaty odpadają po numerze KSeF.
       const last = page.invoices.at(-1)
-      if (!page.isTruncated || !last) return [...found.values()]
-      rangeFrom = last.permanentStorageDate
-      pageOffset = 0
+      if (page.isTruncated && last) {
+        rangeFrom = last.permanentStorageDate
+        pageOffset = 0
+      } else {
+        pageOffset += 1
+      }
     }
   }
 

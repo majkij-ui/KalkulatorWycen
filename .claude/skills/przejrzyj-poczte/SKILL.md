@@ -61,7 +61,7 @@ billing (costs, not thread facts), newsletters and calendar auto-mails.
 | explicit acceptance / order / signed annex | `won` (never infer from "sounds good") |
 | confirmed shoot / prep dates | `shoot_day` / `prep_day` (range with `end`, `location`). **Realizacja turns these into project days with crew and costs**, so only confirmed dates; a tentative hold is a `note` with a range |
 | delivery of the film | `deadline` with `what` |
-| invoice sent / paid | `invoice_sent` (`number`, `amountNetto`, `dueDate`) / `invoice_paid` (`number`, `amount`) |
+| invoice sent / paid | `invoice_sent` (`number`, `amountNetto`, `dueDate`) / `invoice_paid` (`number`, `amount`). From 01.01.2027 invoices issued in KSeF come from `npm run data -- ksef-sync`: propose only `invoice_paid`, not `invoice_sent` |
 | contact details, client name, origin | `project_update` (`set.contact` / `leadSource` / `client`, fills empty fields) |
 | a new job | `project_new` + its events with `newProject: "<id>"` |
 | a fix to an existing event (lead → project, missing time, missing contact) | `event_update` with `eventId`; `set.linkProject: true` (+ `projectId` only when certain), `set.time: "HH:mm"`, `set.data` |

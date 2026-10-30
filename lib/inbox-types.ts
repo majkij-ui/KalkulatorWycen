@@ -14,7 +14,7 @@
  *                       wysłana, akceptacja, faktura wysłana/opłacona…),
  *  - `event_update`   — zmiana ISTNIEJĄCEGO wydarzenia: przypięcie do projektu,
  *                       godzina w `start`, uzupełnienie pól `data`. Nigdy typ,
- *                       data, status ani usunięcie,
+ *                       status ani usunięcie; dzień tylko z KSeF (`ksef:`),
  *  - `project_update` — uzupełnienie projektu (kontakt, pochodzenie, klient),
  *  - `project_new`    — nowy projekt (bez wyceny).
  *
@@ -59,7 +59,7 @@ const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/
 export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 
 /** Pola wydarzenia, które `event_update` może zmienić. Typ, data i status celowo nie. */
-export const EVENT_UPDATE_FIELDS = ['linkProject', 'time', 'data'] as const
+export const EVENT_UPDATE_FIELDS = ['linkProject', 'time', 'date', 'data'] as const
 
 /** Pola projektu, które propozycja może uzupełnić. Status celowo nie. */
 export const PROJECT_UPDATE_FIELDS = ['contact', 'leadSource', 'client'] as const
@@ -178,6 +178,8 @@ export const eventUpdateSetSchema = z
     linkProject: z.boolean().optional().catch(undefined),
     /** Godzina do dopisania w `start` (`HH:mm`); dzień się nie zmienia. */
     time: z.string().regex(TIME_PATTERN).optional().catch(undefined),
+    /** Nowy dzień (`YYYY-MM-DD`). Tylko propozycje z KSeF (`ksef:`): tam dzień pochodzi z urzędowego rejestru. */
+    date: z.string().regex(DATE_KEY).optional().catch(undefined),
     /** Pola `data` do uzupełnienia (np. kontakt, kanał leada). */
     data: z.record(z.unknown()).optional().catch(undefined),
   })

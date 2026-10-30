@@ -5,6 +5,7 @@
  *   npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]
  *   npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]
  *   npm run data -- inbox-status [--dir <folder>]
+ *   npm run data -- ksef-sync [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>] [--dry-run]
  *
  * Patch:
  *   {
@@ -34,6 +35,11 @@
  *    nie dotyka, więc działa także przy otwartej aplikacji: hub tylko czyta
  *    `inbox/`, a swoje decyzje trzyma w `inbox-decisions.json`.
  *
+ * `ksef-sync` (docs/PLAN-KSEF.md) — faktury sprzedaży z KSeF jako propozycje do
+ * skrzynki. KSeF jest tylko CZYTANY: hub nie wystawia faktur. Token z samym
+ * `InvoiceRead` leży w pęku kluczy macOS (usługa `nonoise-hub-ksef`, konto = środowisko);
+ * zmienna `KSEF_TOKEN` działa wyłącznie poza produkcją, dla prób na danych testowych.
+ *
  * Domyślny folder: dane „NonoiseMedia Hub" (`com.michal.nonoisehub`).
  */
 
@@ -52,10 +58,11 @@ import {
   inboxDecisionSchema,
   type ParsedInboxFile,
   parseInboxFile,
+  isFinalDecision,
   type InboxDecision,
 } from '../lib/inbox-types'
 import { describeProposal, validateInboxDraft } from '../lib/inbox-validate'
-import { pendingProposals } from '../lib/inbox'
+import { eventUpdateRefs, pendingProposals } from '../lib/inbox'
 import { plural } from '../lib/pl-plural'
 import { campaignSchema } from '../lib/marketing-types'
 import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
@@ -63,6 +70,9 @@ import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
 import { clientGroupSchema } from '../lib/client-groups'
 import { rentalItemSchema } from '../lib/rental-types'
+import { createKsefClient, KSEF_BASE_URLS, type KsefEnvironment } from '../lib/ksef-client'
+import { parseInvoiceXml } from '../lib/ksef-invoices'
+import { buildKsefSalesDraft, KSEF_SALES_FROM, ksefRef, type KsefSale } from '../lib/ksef-proposals'
 import { companySchema } from '../lib/company-settings-core'
 import {
   equipmentItemSchema,
@@ -272,11 +282,8 @@ function readInboxDir(dir: string): ParsedInboxFile[] {
     })
 }
 
-function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | undefined) {
-  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
-  const raw = JSON.parse(readFileSync(draftPath, 'utf8')) as unknown
-
-  const inboxDir = join(dir, INBOX_DIR)
+/** Stan skrzynki i danych potrzebny do walidacji propozycji. */
+function inboxContext(dir: string) {
   const files = readInboxDir(dir)
   const pendingRefs = new Map<string, string>()
   const projectNewRefs = new Map<string, string>()
@@ -294,6 +301,20 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
   // Propozycja, którą już rozpatrzono w aplikacji, nie „czeka" — nawet jeśli jej plik leży w inbox/.
   const decided = new Set(decisions.map((d) => d.ref))
   ;[...pendingRefs.keys()].forEach((ref) => decided.has(ref) && pendingRefs.delete(ref))
+  const pending = files.flatMap((parsed) =>
+    parsed.status === 'ok' ? parsed.proposals.filter((p) => pendingRefs.has(p.ref)) : []
+  )
+  return { projects, events, decisions, pendingRefs, projectNewRefs, pending }
+}
+
+function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | undefined) {
+  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
+  writeInbox(JSON.parse(readFileSync(draftPath, 'utf8')) as unknown, draftPath, dir, dryRun, name ?? basename(draftPath, '.json'))
+}
+
+function writeInbox(raw: unknown, label: string, dir: string, dryRun: boolean, name: string) {
+  const inboxDir = join(dir, INBOX_DIR)
+  const { projects, events, decisions, pendingRefs, projectNewRefs } = inboxContext(dir)
   const result = validateInboxDraft(raw, {
     projects,
     events,
@@ -304,7 +325,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     today: localStamp(new Date()).slice(0, 10),
   })
 
-  console.log(`${dryRun ? '[próba] ' : ''}${result.note || draftPath}`)
+  console.log(`${dryRun ? '[próba] ' : ''}${result.note || label}`)
   console.log(`folder: ${dir}\n`)
   if (result.errors.length) {
     result.errors.forEach((e) => console.error(`✗ ${e}`))
@@ -331,7 +352,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
   }
 
   const now = new Date()
-  const fileName = `${localStamp(now)}-${slugify(name ?? basename(draftPath, '.json'))}.json`
+  const fileName = `${localStamp(now)}-${slugify(name)}.json`
   const payload = {
     format: INBOX_FORMAT,
     version: INBOX_VERSION,
@@ -399,7 +420,75 @@ const USAGE = [
   '  npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]',
   '  npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]',
   '  npm run data -- inbox-status [--dir <folder>]',
+  '  npm run data -- ksef-sync [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>] [--dry-run]',
 ].join('\n')
+
+const KEYCHAIN_SERVICE = 'nonoise-hub-ksef'
+
+function ksefToken(environment: KsefEnvironment): string {
+  if (environment !== 'prod' && process.env.KSEF_TOKEN) return process.env.KSEF_TOKEN
+  try {
+    return execFileSync('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', environment, '-w'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return fail(
+      `brak tokenu KSeF w pęku kluczy. Zapisz token z samym uprawnieniem „Przeglądanie faktur” (polecenie zapyta o niego):\n` +
+        `  security add-generic-password -U -s ${KEYCHAIN_SERVICE} -a ${environment} -w`
+    )
+  }
+}
+
+async function ksefSync(args: string[]) {
+  const option = (name: string) => {
+    const index = args.indexOf(name)
+    return index >= 0 ? args[index + 1] : undefined
+  }
+  const dir = option('--dir') ?? HUB_DIR
+  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
+  const environment = (option('--env') ?? 'prod') as KsefEnvironment
+  if (!(environment in KSEF_BASE_URLS)) fail(`nieznane środowisko: ${environment}`)
+  // Na produkcji granica jest stała: rok 2026 zostaje w hubie taki, jak jest.
+  if (environment === 'prod' && option('--from')) fail('--from działa tylko na danych testowych')
+  const from = environment === 'prod' ? KSEF_SALES_FROM : (option('--from') ?? KSEF_SALES_FROM)
+
+  const company = readParsed(dir, 'company.json', companySchema)[0]
+  const nip = (option('--nip') ?? company?.contact?.taxId ?? '').replace(/\D/g, '')
+  if (!/^\d{10}$/.test(nip)) fail('brak NIP-u firmy: podaj --nip albo uzupełnij go w ustawieniach firmy')
+
+  const client = createKsefClient({ environment, nip, token: ksefToken(environment) })
+  const context = inboxContext(dir)
+  const known = new Set([...context.pendingRefs.keys(), ...context.decisions.filter(isFinalDecision).map((d) => d.ref)])
+  context.events.forEach((event) => {
+    if (event.source?.ref) known.add(event.source.ref)
+    eventUpdateRefs(event).forEach((ref) => known.add(ref))
+  })
+
+  const invoices = await client.listInvoices({
+    direction: 'sale',
+    from: `${from}T00:00:00+01:00`,
+    to: new Date().toISOString(),
+  })
+  const fresh = invoices.filter((invoice) => invoice.issueDate >= from && !known.has(ksefRef(invoice.ksefNumber)))
+  console.log(`KSeF (${environment}): ${invoices.length} faktur sprzedaży, nowych: ${fresh.length}.`)
+  const sales: KsefSale[] = []
+  for (const invoice of fresh) {
+    sales.push({ ...invoice, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+  }
+  const { draft, held } = buildKsefSalesDraft(sales, context)
+  writeInbox(draft, 'KSeF', dir, args.includes('--dry-run'), 'ksef-sprzedaz')
+  held.forEach((note) => console.log(`… ${note}`))
+}
+
+if (process.argv[2] === 'ksef-sync') {
+  try {
+    await ksefSync(process.argv.slice(3))
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error))
+  }
+  process.exit(0)
+}
 
 if (process.argv[2] === 'inbox-status') {
   const args = process.argv.slice(3)

@@ -129,7 +129,7 @@ function EventUpdateDiff({
     if (field === 'projectId') return 'Projekt'
     if (field === 'start') return 'Kiedy'
     const key = field.slice('data.'.length)
-    return kind.fields?.find((f) => f.key === key)?.label ?? LEAD_FIELD_LABELS[key] ?? key
+    return kind.fields?.find((f) => f.key === key)?.label ?? KSEF_FIELD_LABELS[key] ?? LEAD_FIELD_LABELS[key] ?? key
   }
   const show = (field: string, value: unknown): string => {
     if (value === undefined || value === null || value === '') return '—'
@@ -138,6 +138,11 @@ function EventUpdateDiff({
     if (field === 'data.quality' && isLeadQuality(value)) return LEAD_QUALITY_LABELS[value]
     if (field === 'data.campaignId') return campaignName(String(value))
     if (field === 'data.origin') return leadSourceLabel(String(value))
+    if (field === 'data.corrections' && Array.isArray(value)) {
+      return value
+        .map((c: { number?: string; netChange?: number; currency?: string }) => `${c.number ?? ''} (${c.netChange ?? '?'} ${c.currency ?? ''})`)
+        .join(', ')
+    }
     return typeof value === 'object' ? JSON.stringify(value) : String(value)
   }
   if (!changes.length && !awaitingProject) {
@@ -172,6 +177,16 @@ function EventUpdateDiff({
       ))}
     </dl>
   )
+}
+
+/** Pola faktury z KSeF, których nie ma w formularzu wydarzenia. */
+const KSEF_FIELD_LABELS: Record<string, string> = {
+  issueDate: 'Data wystawienia',
+  ksefNumber: 'Numer KSeF',
+  buyerNip: 'NIP nabywcy',
+  amountOriginal: 'Kwota na fakturze',
+  currency: 'Waluta',
+  corrections: 'Korekty',
 }
 
 function ProposalRow({

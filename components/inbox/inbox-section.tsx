@@ -74,7 +74,7 @@ export function InboxSection({ onOpenProject }: { onOpenProject: (id: string) =>
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Skrzynka</h1>
           <p className="mt-1 max-w-xl text-sm text-zinc-500">
-            Propozycje z poczty. Nic nie trafia do projektów, dopóki ich nie zaakceptujesz; statusy projektów
+            Propozycje z poczty i KSeF. Nic nie trafia do projektów, dopóki ich nie zaakceptujesz; statusy projektów
             zmieniasz sam po podpowiedzi.
           </p>
         </div>

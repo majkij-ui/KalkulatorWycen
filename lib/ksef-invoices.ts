@@ -61,6 +61,9 @@ export interface KsefInvoiceDetails {
   /** Najpóźniejszy termin z faktury; pusty, gdy faktura go nie podaje. */
   dueDate: string
   lines: KsefInvoiceLine[]
+  /** Faktura korygowana (tylko przy korekcie); puste, gdy korekta ich nie podaje. */
+  correctedKsefNumber: string
+  correctedNumber: string
 }
 
 const CORRECTION_TYPES = new Set(['Kor', 'KorZal', 'KorRoz', 'KorPef', 'KorVatRr'])
@@ -126,6 +129,8 @@ export function parseInvoiceXml(xml: string): KsefInvoiceDetails {
     .sort()
   return {
     dueDate: dueDates.at(-1) ?? '',
+    correctedKsefNumber: text(xml, 'NrKSeFFaKorygowanej'),
+    correctedNumber: text(xml, 'NrFaKorygowanej'),
     lines: elements(xml, 'FaWiersz').map((line) => ({
       name: text(line, 'P_7'),
       unit: text(line, 'P_8A'),

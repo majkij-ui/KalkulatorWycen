@@ -3,13 +3,20 @@
 > Source: M.J., 2026-10-30. Sales invoices from KSeF become the truth about invoices in the hub from
 > 01.01.2027; purchase invoices become a source of gear and cost information. 2026 data stays as it is.
 
+## 0. The hub never adds invoices to KSeF
+
+Decision of M.J., 2026-10-30: invoices are issued in the panel provided by the accounting firm. The hub only reads.
+A test in `lib/ksef-proposals.test.ts` fails if any app or script code outside `scripts/ksef-test-env.mts` touches
+the invoice-sending endpoints or asks for `InvoiceWrite`. That script issues fake invoices on the Ministry's TEST
+environment only, because the read-only client needs something to read; nothing in the app imports it.
+
 ## 1. Stages
 
 | Stage | What | Status |
 |---|---|---|
 | K0 | Read-only client, proof on the Ministry's TEST environment | done 2026-10-30 |
 | K1 | M.J.'s own token in the macOS Keychain; preview from the real account, nothing written to the hub | waits for the final token rules (§3) |
-| K2 | Sales: `npm run data -- ksef-sync` writes proposals to Skrzynka, calendar events, overwrite rules (§5) | waits for K1 and M.J.'s approval of §5 |
+| K2 | Sales: `npm run data -- ksef-sync` writes proposals to Skrzynka, calendar events, overwrite rules (§5) | built and proven on TEST 2026-10-30; §5 approved; not run on the real account |
 | K3 | „Zakupy" tab in Sprzęt: new gear, small items (`onSet: false`), other cost | waits for K1 |
 
 ## 2. Safety model
@@ -46,7 +53,7 @@
 The last row matters after a leak: revoking the one known token may not be enough. List all tokens in the
 Ministry's app and revoke every unknown one. Whether revoking a token also revokes those it created was not tested.
 
-## 5. Proposed rules for K2 and K3 (not yet approved by M.J.)
+## 5. Rules for K2 and K3 (approved by M.J. 2026-10-30)
 
 | Case | Behaviour |
 |---|---|
@@ -54,11 +61,23 @@ Ministry's app and revoke every unknown one. Whether revoking a token also revok
 | Client has several open projects | M.J. picks the project, nothing automatic |
 | No matching project | „Nieprzypisane"; revenue does not change by itself |
 | Issued 31.12, KSeF number 02.01 | Calendar 02.01 (reaches the client); revenue in the year of issue |
-| Correction invoice | Changes the original's amount and shows both documents; no new revenue |
-| Invoice in EUR | To decide in K2: invoice amounts in EUR are not modelled in the hub today |
+| Correction invoice | Changes the original's amount by the correction's net (seen on TEST: −100 for a −100 correction), keeps it in `data.corrections`; no new revenue |
+| Invoice in EUR | No amount in the zł field; `amountOriginal` + `currency` kept and shown. The plan stands until a payment brings the amount in zł, like any invoice without an amount |
+| Entry dated before 2027 | Never overwritten, even with the same number. A finished project with a 2026 invoice is not a candidate; a project still in progress is (final invoice after an advance) |
+| Two manual entries in the project | No guessing: a new invoice event, with the usual „similar event" warning |
+| Correction before its invoice is accepted, or a second one while another waits | Held and reported; the next sync returns to it, so amounts never count from a stale base |
 | Payment | Unchanged, `invoice_paid` stays in the hub; KSeF does not know about payments |
 | Purchase with several lines | Each line categorised separately; gear gets the net amount |
 | Correction or return of gear | Warning and a proposal to change the price |
 
 Limits: not in KSeF are receipts and, as a rule, invoices from foreign sellers (Adobe, Google), so costs stay
-partly manual. KSeF allows 20 exports an hour; K2 syncs on demand and uses the metadata query.
+partly manual. K2 syncs on demand with the metadata query. KSeF refuses a date range over 100 days (code 21405),
+so the client splits longer ranges into 90-day windows. Each sync reads from 01.01.2027 and skips known refs.
+
+## 6. K1 checklist (when the token rules are final)
+
+1. M.J. generates a token with only „Przeglądanie faktur" in the Ministry's app and saves it (the command asks for it):
+   `security add-generic-password -U -s nonoise-hub-ksef -a prod -w`
+2. Dry run, nothing written: `npm run data -- ksef-sync --nip <NIP> --dry-run`
+3. Check that the `per` guard accepts the production token, then run without `--dry-run`.
+   The company settings have no NIP field in the UI yet, hence `--nip`.

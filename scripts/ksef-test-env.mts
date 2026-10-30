@@ -11,7 +11,9 @@
  * Sprawdza:
  *  1. logowanie klienta tokenem z samym `InvoiceRead`,
  *  2. sprzedaż u sprzedawcy i zakup u nabywcy, razem z XML-em faktury,
- *  3. że ten token NIE wystawi faktury i NIE utworzy kolejnego tokenu.
+ *  3. że ten token NIE wystawi faktury i NIE utworzy tokenu z prawem zapisu,
+ *  4. `npm run data -- ksef-sync` na tymczasowym folderze: propozycja, ponowny
+ *     przebieg bez duplikatów, korekta.
  *
  * Nie dotyka danych huba ani pęku kluczy.
  */
@@ -27,7 +29,7 @@ import {
   randomInt,
   X509Certificate,
 } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createKsefClient, KSEF_BASE_URLS } from '../lib/ksef-client'
@@ -219,6 +221,57 @@ function testInvoiceXml(sellerNip: string, buyerNip: string, number: string, iss
   )
 }
 
+function correctionXml(
+  sellerNip: string,
+  buyerNip: string,
+  number: string,
+  issueDate: string,
+  corrected: { number: string; ksefNumber: string },
+) {
+  const party = (nip: string, name: string) =>
+    `<DaneIdentyfikacyjne><NIP>${nip}</NIP><Nazwa>${name}</Nazwa></DaneIdentyfikacyjne>` +
+    `<Adres><KodKraju>PL</KodKraju><AdresL1>ul. Testowa 1</AdresL1><AdresL2>00-001 Warszawa</AdresL2></Adres>`
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/">` +
+    `<Naglowek><KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>` +
+    `<WariantFormularza>3</WariantFormularza><DataWytworzeniaFa>${new Date().toISOString()}</DataWytworzeniaFa>` +
+    `<SystemInfo>Hub test</SystemInfo></Naglowek>` +
+    `<Podmiot1>${party(sellerNip, 'Sprzedawca Testowy')}</Podmiot1>` +
+    `<Podmiot2>${party(buyerNip, 'Nabywca Testowy')}<JST>2</JST><GV>2</GV></Podmiot2>` +
+    `<Fa><KodWaluty>PLN</KodWaluty><P_1>${issueDate}</P_1><P_2>${number}</P_2>` +
+    `<P_13_1>-100.00</P_13_1><P_14_1>-23.00</P_14_1><P_15>-123.00</P_15>` +
+    `<Adnotacje><P_16>2</P_16><P_17>2</P_17><P_18>2</P_18><P_18A>2</P_18A>` +
+    `<Zwolnienie><P_19N>1</P_19N></Zwolnienie><NoweSrodkiTransportu><P_22N>1</P_22N></NoweSrodkiTransportu>` +
+    `<P_23>2</P_23><PMarzy><P_PMarzyN>1</P_PMarzyN></PMarzy></Adnotacje>` +
+    `<RodzajFaktury>KOR</RodzajFaktury><PrzyczynaKorekty>Zwrot</PrzyczynaKorekty><TypKorekty>1</TypKorekty>` +
+    `<DaneFaKorygowanej><DataWystFaKorygowanej>${issueDate}</DataWystFaKorygowanej>` +
+    `<NrFaKorygowanej>${corrected.number}</NrFaKorygowanej><NrKSeF>1</NrKSeF>` +
+    `<NrKSeFFaKorygowanej>${corrected.ksefNumber}</NrKSeFFaKorygowanej></DaneFaKorygowanej>` +
+    `<FaWiersz><NrWierszaFa>1</NrWierszaFa><P_7>Akcesoria drobne</P_7><P_8A>szt</P_8A><P_8B>-1</P_8B>` +
+    `<P_9A>100.00</P_9A><P_11>-100.00</P_11><P_12>23</P_12></FaWiersz>` +
+    `</Fa></Faktura>`
+  )
+}
+
+/** `ksef-sync` jak z wiersza poleceń, na folderze tymczasowym; token tylko w zmiennej tego procesu. */
+function runSync(dir: string, nip: string, token: string): string {
+  return execFileSync(
+    process.execPath,
+    [
+      '--no-warnings', '--import', './scripts/register-ts.mjs', 'scripts/data.mts', 'ksef-sync',
+      // Ponad 100 dni wstecz: sprawdza też podział zakresu na okna.
+      '--env', 'test', '--nip', nip, '--from', new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10), '--dir', dir,
+    ],
+    { encoding: 'utf8', env: { ...process.env, KSEF_TOKEN: token } },
+  )
+}
+
+function inboxProposals(dir: string): Array<Record<string, any>> {
+  const inbox = join(dir, 'inbox')
+  return readdirSync(inbox).flatMap((name) => JSON.parse(readFileSync(join(inbox, name), 'utf8')).proposals)
+}
+
 async function symmetricKeyEncryption() {
   const certificates = await apiJson<Array<{ certificate: string; usage: string[] }>>(
     'GET',
@@ -396,6 +449,53 @@ async function main() {
       (error: Error) => error.message.includes('tylko do odczytu'),
     )
     check('klient odmawia pracy z tokenem, który może zapisywać', wideRefused)
+
+    // ── ksef-sync na tymczasowym folderze: projekt klienta „Nabywca Testowy” ────
+    const dataDir = join(folder, 'dane')
+    mkdirSync(dataDir)
+    const projectFile = [{ id: 'p-test', name: 'Film testowy', client: 'Nabywca Testowy sp. z o.o.', status: 'won', date: issueDate }]
+    writeFileSync(join(dataDir, 'projects.json'), JSON.stringify({ items: projectFile }))
+    const firstRun = runSync(dataDir, seller.nip, sellerRead.token)
+    const proposals = inboxProposals(dataDir)
+    const first = proposals.find((p) => p.ref === `ksef:${ksefNumber}`)
+    check(
+      'ksef-sync: faktura trafia do skrzynki z jedynym projektem klienta',
+      first?.type === 'event' && first.projectId === 'p-test' && first.event.data.amountNetto === 1100 && first.event.data.dueDate === dueDate,
+      `${first?.event?.start}, netto ${first?.event?.data?.amountNetto}`,
+    )
+    if (!firstRun.includes('✓ Zapisano')) console.log(firstRun)
+    const secondRun = runSync(dataDir, seller.nip, sellerRead.token)
+    check('ksef-sync: ponowny przebieg niczego nie dubluje', inboxProposals(dataDir).length === proposals.length && secondRun.includes('nowych: 0'))
+
+    // Przyjęcie w aplikacji = wydarzenie z tym `ref`; potem przychodzi korekta.
+    const accepted = {
+      id: 'e-test',
+      kind: 'invoice_sent',
+      projectId: 'p-test',
+      start: first?.event.start,
+      title: first?.event.title,
+      notes: '',
+      data: first?.event.data,
+      source: { type: 'inbox', ref: first?.ref },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    writeFileSync(join(dataDir, 'events.json'), JSON.stringify({ items: [accepted] }))
+    const correctionNumber = `HUB/KOR/${randomInt(100000, 999999)}`
+    const correctionKsef = await issueInvoice(
+      sellerOwner,
+      correctionXml(seller.nip, buyer.nip, correctionNumber, issueDate, { number, ksefNumber }),
+    )
+    const correctionMeta = await waitForInvoice(sellerClient, 'sale', correctionKsef, from)
+    console.log(`INFO korekta w KSeF: netto ${correctionMeta.netAmount}, typ ${correctionMeta.invoiceType}`)
+    runSync(dataDir, seller.nip, sellerRead.token)
+    const correction = inboxProposals(dataDir).find((p) => p.ref === `ksef:${correctionKsef}`)
+    check(
+      'ksef-sync: korekta zmienia kwotę oryginału i zapisuje oba dokumenty',
+      correction?.type === 'event_update' && correction.eventId === 'e-test' && correction.set.data.amountNetto === 1000 &&
+        correction.set.data.corrections[0].number === correctionNumber,
+      `1100 → ${correction?.set?.data?.amountNetto}`,
+    )
 
     const toRevoke: Array<[string, string]> = [
       [sellerOwner, sellerRead.referenceNumber],
