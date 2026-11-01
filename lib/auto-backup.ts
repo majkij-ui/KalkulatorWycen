@@ -28,6 +28,7 @@ export const AUTO_BACKUP_FILES = [
   'finances.json',
   'subscriptions.json',
   'campaigns.json',
+  'ads-exports.json',
   'equipment.json',
   'gear-kits.json',
   'crew.json',

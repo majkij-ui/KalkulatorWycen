@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, Plus } from 'lucide-react'
+import { ArrowRight, FileDown, Plus } from 'lucide-react'
 import type { Lead } from '@/lib/marketing-leads'
 import type { LeadQuality } from '@/lib/marketing-types'
 import { PROJECT_STATUS_LABELS, leadSourceLabel, type Project } from '@/lib/project-types'
@@ -44,6 +44,8 @@ export function LeadsPanel({
   onEdit,
   onRate,
   onOpenProject,
+  onExportAds,
+  adsPending = 0,
 }: {
   title: string
   leads: Lead[]
@@ -54,6 +56,10 @@ export function LeadsPanel({
   onEdit: (lead: Lead) => void
   onRate: (lead: Lead, quality: LeadQuality) => void
   onOpenProject: (id: string) => void
+  /** Otwiera okno eksportu konwersji do Google Ads (obejmuje wszystkie leady). */
+  onExportAds?: () => void
+  /** Ile wierszy czeka na potwierdzenie importu. */
+  adsPending?: number
 }) {
   const [filter, setFilter] = useState<QualityFilter>('all')
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
@@ -87,6 +93,25 @@ export function LeadsPanel({
               )
             })}
           </div>
+          {onExportAds && (
+            <button
+              type="button"
+              onClick={onExportAds}
+              className="flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/5"
+            >
+              <FileDown className="size-3.5" />
+              Eksport do Google Ads
+              {adsPending > 0 && (
+                <span
+                  className="rounded bg-amber-400/15 px-1 text-[10px] leading-4 text-amber-300"
+                  style={mono}
+                  title="Wiersze czekają na potwierdzenie importu"
+                >
+                  {adsPending}
+                </span>
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={onAdd}

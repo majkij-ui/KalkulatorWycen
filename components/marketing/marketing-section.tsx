@@ -37,6 +37,8 @@ import {
   CampaignTraffic,
   type MonthReading,
 } from './campaign-overview'
+import { AdsExportDialog } from './ads-export-dialog'
+import { useAdsExports } from './use-ads-exports'
 import { useCampaigns } from './use-campaigns'
 
 /** Wybór w selektorze: id kampanii albo leady spoza kampanii. */
@@ -56,6 +58,8 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
 
   const [selected, setSelected] = useState<string | null>(null)
   const [sheet, setSheet] = useState<SheetState>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const adsExports = useAdsExports()
 
   const leads = useMemo(() => leadsFromEvents(events), [events])
   const campaignIds = useMemo(() => new Set(campaigns.map((c) => c.id)), [campaigns])
@@ -76,6 +80,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   )
   // U1: przychód i zysk zleceń z pętli pieniędzy — jak w Finansach.
   const money = useProjectMoney()
+  const ledger = useMemo(() => [...money.values()], [money])
   const summary = useMemo(
     () =>
       current
@@ -217,6 +222,8 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
             onEdit={(lead) => setSheet({ type: 'lead', lead })}
             onRate={rate}
             onOpenProject={onOpenProject}
+            onExportAds={() => setExportOpen(true)}
+            adsPending={adsExports.records.filter((r) => r.status === 'pending').length}
           />
 
           <OriginsPanel
@@ -269,6 +276,19 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           )}
         </SheetContent>
       </Sheet>
+
+      <AdsExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        events={events}
+        projects={projects}
+        ledger={ledger}
+        records={adsExports.records}
+        today={today}
+        onAddRecords={adsExports.addRecords}
+        onResolve={adsExports.resolve}
+        onOpenProject={onOpenProject}
+      />
     </div>
   )
 }

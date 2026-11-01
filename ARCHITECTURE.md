@@ -24,6 +24,7 @@ read–change–write queue per file, defensive parsing — an unreadable record
 | `finances.json` | `fixedCostSchema` (project-types) | fixed costs and monthly corrections (`subscriptionId`) |
 | `subscriptions.json` | `subscriptionSchema` (subscription-types) | subscriptions; instalments derived on read (`subscriptions.ts`) |
 | `campaigns.json` | `campaignSchema` (marketing-types) | Google Ads campaigns and budget steps |
+| `ads-exports.json` | `adsExportRecordSchema` (ads-export-types) | offline conversions already exported to Google Ads; records never removed (`cancelled` instead), time and value frozen |
 | `equipment.json` | `equipmentItemSchema` (project-types) | gear catalogue, purchase price and date (projected onto the calendar) |
 | `gear-kits.json` | `gearKitSchema` (project-types) | gear kits |
 | `crew.json`, `crew-roles.json` | `crewMemberSchema`, `crewRoleSchema` (crew-types) | people (what I pay) and roles (what the client pays) |
@@ -95,6 +96,7 @@ produkcja" / „Rabat"); quotes without it stretch every margined item as before
 `marketing`), inne (`note`; unknown kinds render as „inne"). Status suggestions are always confirmed by
 the user; the app never changes a status silently. A lead is a `lead_in` event, not a status.
 A lead's website attribution lives in `lead_in.data.ads` (`leadAdsSchema` in `marketing-types.ts`: lead id, click ids, consent, UTM). `lib/lead-source-parse.ts` reads the mail's „Źródło" section by label; the lead form and `inbox-validate.ts` use it. Plan: `docs/PLAN-GOOGLE-ADS-EXPORT.md` (§9 = stage A as built).
+Stage B: `planAdsExport` / `buildAdsCsv` in `lib/ads-export.ts` (pure; config in `ads-export-config.ts`; SHA-256 contact hashes only) feed the „Eksport do Google Ads" dialog in Marketing → Leady; `ads-exports.json` holds the `pending` / `confirmed` / `cancelled` records (§10 of the plan).
 
 ## Money pipeline
 
