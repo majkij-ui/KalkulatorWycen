@@ -119,6 +119,14 @@ export function LeadsPanel({
                 >
                   <span className={`block truncate text-sm ${fake ? 'text-zinc-500 line-through decoration-zinc-600' : 'text-zinc-100'}`}>
                     {lead.name || 'Bez nazwy'}
+                    {lead.ads.fromAds === true && (
+                      <span
+                        className="ml-1.5 inline-block rounded bg-sky-500/15 px-1 align-middle text-[10px] font-semibold uppercase leading-4 text-sky-300"
+                        title="Lead z reklamy"
+                      >
+                        Ads
+                      </span>
+                    )}
                   </span>
                   <span className="block truncate text-[11px] text-zinc-500">
                     {[
