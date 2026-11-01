@@ -97,6 +97,7 @@ produkcja" / „Rabat"); quotes without it stretch every margined item as before
 the user; the app never changes a status silently. A lead is a `lead_in` event, not a status.
 A lead's website attribution lives in `lead_in.data.ads` (`leadAdsSchema` in `marketing-types.ts`: lead id, click ids, consent, UTM). `lib/lead-source-parse.ts` reads the mail's „Źródło" section by label; the lead form and `inbox-validate.ts` use it. Plan: `docs/PLAN-GOOGLE-ADS-EXPORT.md` (§9 = stage A as built).
 Stage B: `planAdsExport` / `buildAdsCsv` in `lib/ads-export.ts` (pure; config in `ads-export-config.ts`; SHA-256 contact hashes only) feed the „Eksport do Google Ads" dialog in Marketing → Leady; `ads-exports.json` holds the `pending` / `confirmed` / `cancelled` records (§10 of the plan).
+Switching the status pill to „W realizacji" adds a `won` event dated today when the thread has no live one (`wonEventToAdd` in `lib/won-event.ts`, called from `applyStatus` in the hub context after the status is saved, errors only logged) — the Ads export reads its win date from that event; `EventsProvider` therefore sits above `ProjectHubProvider`.
 
 ## Money pipeline
 

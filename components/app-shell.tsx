@@ -340,22 +340,22 @@ function ShellContent() {
   )
 }
 
-// Kolejność: projekty (z dokumentami wycen) → wycena otwartego projektu → reszta
-// (Ekipa czyta role z cennika otwartej wyceny).
+// Kolejność: wydarzenia (hub dopisuje `won` przy „W realizacji") → projekty (z dokumentami
+// wycen) → wycena otwartego projektu → reszta (Ekipa czyta role z cennika otwartej wyceny).
 export function AppShell() {
   return (
-    <ProjectHubProvider>
-      <QuoteProvider>
-        <EquipmentProvider>
-          <EventsProvider>
+    <EventsProvider>
+      <ProjectHubProvider>
+        <QuoteProvider>
+          <EquipmentProvider>
             <CrewProvider>
               <InboxProvider>
                 <ShellContent />
               </InboxProvider>
             </CrewProvider>
-          </EventsProvider>
-        </EquipmentProvider>
-      </QuoteProvider>
-    </ProjectHubProvider>
+          </EquipmentProvider>
+        </QuoteProvider>
+      </ProjectHubProvider>
+    </EventsProvider>
   )
 }
