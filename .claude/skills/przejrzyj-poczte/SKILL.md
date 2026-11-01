@@ -74,6 +74,23 @@ Conventions:
   `evidence` (`from`, `to`, `subject`, `date` **with local offset**, short `snippet`).
 - Times: Gmail returns UTC. Poland is UTC+2 (CEST) until the last Sunday of October and UTC+1 (CET)
   after that. `start` is local time without a zone.
+- **Mail with a „ŹRÓDŁO" section** (website form leads, subject often `[Ads] … · LEADID`): put its
+  fields in `data.ads` of the `lead_in`, in the plan's names (docs/PLAN-GOOGLE-ADS-EXPORT.md §3):
+  `leadId`, `fromAds`, `gclid` / `gbraid` / `wbraid`, `clickedAt`, `submittedAt`, `consent`
+  (`granted` / `denied` / `unknown`), `utmSource` / `utmMedium` / `utmCampaign` / `utmTerm`,
+  `landingPath`. Read the section by label (empty rows are omitted, so never by position), and only
+  after its last „ŹRÓDŁO" heading. E-mail and phone from it go to `data.email` / `data.phone`, not into
+  `ads`. Times are local `YYYY-MM-DDTHH:mm:ss`: `2026-10-31 14:22:19 Europe/Warsaw` becomes
+  `2026-10-31T14:22:19`; an ISO `…Z` value is UTC, convert it to Warsaw time. Leave a field out
+  rather than guess it. `lib/lead-source-parse.ts` does exactly this (the hub's „Wklej sekcję Źródło").
+- **Copy click ids character for character** (long random strings), then re-read each
+  one against the message before writing the proposal. `--dry-run` rejects a malformed id, but not a
+  wrong one that still looks valid.
+- **`leadId` is the duplicate key.** If an event (also a deleted one) or a pending proposal already has
+  that `data.ads.leadId`, drop the new proposal, whatever the `ref`. An `event_update` that sets
+  `data.ads` replaces the whole block, so send every field.
+- The `[Ads]` subject prefix means `fromAds: true`. `campaignId` stays a separate fact (the campaign
+  window by date); neither implies the other.
 - A group shares one project target. Keep a contact update for a *different* project out of the
   thread: leave out `threadId` and give it `client` + `projectId`.
 - Ambiguous project → leave `projectId` out (the screen asks). Never guess.
