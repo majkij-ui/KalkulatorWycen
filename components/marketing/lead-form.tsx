@@ -10,19 +10,23 @@
  */
 
 import { useId, useMemo, useState } from 'react'
-import { Loader2, Trash2, X } from 'lucide-react'
+import { ChevronDown, Loader2, Trash2, X } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import {
+  applyLeadSource,
   draftFromLead,
   emptyLeadDraft,
   leadDraftProblems,
   leadEventFromDraft,
+  setLeadFromAds,
   type Lead,
   type LeadDraft,
   type LeadProblem,
 } from '@/lib/marketing-leads'
-import { originForPlatform, type Campaign } from '@/lib/marketing-types'
+import { parseLeadSource } from '@/lib/lead-source-parse'
+import { hasAds, originForPlatform, type Campaign, type LeadAds } from '@/lib/marketing-types'
 import { campaignActiveOn } from '@/lib/marketing-calc'
 import {
   LEAD_SOURCES,
@@ -30,6 +34,7 @@ import {
   PROJECT_STATUS_LABELS,
   type Project,
 } from '@/lib/project-types'
+import { mono } from '@/components/calendar/calendar-bits'
 import { FieldLabel, QualityPicker, inputClass } from './marketing-bits'
 
 const NEW_PROJECT = '__new__'
@@ -85,8 +90,32 @@ export function LeadForm({
   // użytkownik nie wybierze jej sam. Edycja nigdy jej nie zmienia.
   const [campaignTouched, setCampaignTouched] = useState(!!lead || !defaults.followDate)
   const changeDate = (date: string) => {
+    setDateTouched(true)
     if (campaignTouched) set({ date })
     else set({ date, campaignId: campaignActiveOn(campaigns, date)?.id ?? null })
+  }
+
+  // Źródło z reklamy (`data.ads`): wklejka z maila, przełącznik i podgląd.
+  // Data nowego leada to dopiero domyślne „dziś" — wklejka może ją poprawić,
+  // dopóki użytkownik sam jej nie ruszył.
+  const [dateTouched, setDateTouched] = useState(!!lead)
+  const [adsOpen, setAdsOpen] = useState(() => hasAds(lead?.ads))
+  const [sourceText, setSourceText] = useState('')
+  const [sourceNote, setSourceNote] = useState<{ ok: boolean; text: string; problems: string[] } | null>(null)
+  const loadSource = () => {
+    const parsed = parseLeadSource(sourceText)
+    if (!parsed) {
+      setSourceNote({ ok: false, text: 'Nie znalazłem sekcji „Źródło". Wklej cały mail albo same wiersze z etykietami.', problems: [] })
+      return
+    }
+    let next = applyLeadSource(draft, parsed, { fillDate: !dateTouched })
+    if (!campaignTouched && next.date !== draft.date) {
+      next = { ...next, campaignId: campaignActiveOn(campaigns, next.date)?.id ?? null }
+    }
+    setDraft(next)
+    const fields = Object.entries(parsed).filter(([key, value]) => key !== 'problems' && value !== undefined).length
+    setSourceNote({ ok: true, text: `Wczytano ${fields} ${fields === 1 ? 'pole' : 'pól'}.`, problems: parsed.problems })
+    setSourceText('')
   }
 
   const submit = async () => {
@@ -259,6 +288,75 @@ export function LeadForm({
         </div>
       </div>
 
+      <div className="rounded-lg border border-white/10 bg-white/[0.02]">
+        <button
+          type="button"
+          onClick={() => setAdsOpen((open) => !open)}
+          aria-expanded={adsOpen}
+          aria-controls={`${id}-ads`}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-zinc-300 outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-white/60"
+        >
+          <ChevronDown className={`size-3.5 shrink-0 text-zinc-500 transition-transform ${adsOpen ? '' : '-rotate-90'}`} />
+          Źródło z reklamy
+          {draft.ads.fromAds === true && (
+            <span className="rounded bg-sky-500/15 px-1 text-[10px] font-semibold uppercase text-sky-300">Ads</span>
+          )}
+        </button>
+        {adsOpen && (
+          <div id={`${id}-ads`} className="space-y-3 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2.5">
+            <div className="flex items-center gap-2">
+              <Switch
+                id={`${id}-from-ads`}
+                checked={draft.ads.fromAds === true}
+                onCheckedChange={(on) => setDraft((d) => setLeadFromAds(d, on))}
+              />
+              <label htmlFor={`${id}-from-ads`} className="text-xs text-zinc-300">
+                Z reklamy
+              </label>
+            </div>
+
+            <div>
+              <FieldLabel htmlFor={`${id}-source`}>Wklej sekcję Źródło</FieldLabel>
+              <textarea
+                id={`${id}-source`}
+                value={sourceText}
+                onChange={(e) => setSourceText(e.target.value)}
+                rows={3}
+                placeholder={'ŹRÓDŁO\nLead ID  K7Q2M9XA\nZ reklamy  tak\n…'}
+                className={`${inputClass} h-auto resize-y py-1.5 text-xs`}
+                style={mono}
+              />
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  onClick={loadSource}
+                  disabled={!sourceText.trim()}
+                  className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-zinc-100 outline-none hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-40"
+                >
+                  Wczytaj
+                </button>
+                {sourceNote && (
+                  <span className={`text-[11px] ${sourceNote.ok ? 'text-zinc-400' : 'text-amber-300'}`} role="status">
+                    {sourceNote.text}
+                  </span>
+                )}
+              </div>
+              {sourceNote && sourceNote.problems.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-[11px] text-amber-300" role="alert">
+                  {sourceNote.problems.map((p) => (
+                    <li key={p} className="break-words">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <AdsSummary ads={draft.ads} />
+          </div>
+        )}
+      </div>
+
       <div>
         <FieldLabel htmlFor={`${id}-project`}>Projekt</FieldLabel>
         <select
@@ -353,6 +451,48 @@ export function LeadForm({
           ))}
       </div>
     </form>
+  )
+}
+
+const CONSENT_LABELS = { granted: 'udzielona', denied: 'odmowa', unknown: 'brak danych' } as const
+
+/** `2026-10-31T14:02:11` → `31.10.2026 14:02` */
+function shortTime(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
+  return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}` : value
+}
+
+/** `Cj0KCQjw…m2_Zt`: wystarcza do rozpoznania, pełny zostaje w danych. */
+function shortClickId(value: string): string {
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value
+}
+
+/** Spokojny, tylko do odczytu podgląd tego, co leży w `data.ads`. */
+function AdsSummary({ ads }: { ads: LeadAds }) {
+  const clickIds = (['gclid', 'gbraid', 'wbraid'] as const).filter((k) => typeof ads[k] === 'string' && ads[k])
+  const utm = [ads.utmSource, ads.utmMedium, ads.utmCampaign, ads.utmTerm].filter((v) => typeof v === 'string' && v)
+  const rows: [string, string][] = [
+    ['Lead ID', typeof ads.leadId === 'string' ? ads.leadId : ''],
+    ...clickIds.map((k): [string, string] => [k, shortClickId(ads[k] as string)]),
+    ['Zgoda', ads.consent ? CONSENT_LABELS[ads.consent] : ''],
+    ['Kliknięcie', typeof ads.clickedAt === 'string' ? shortTime(ads.clickedAt) : ''],
+    ['Wysłano', typeof ads.submittedAt === 'string' ? shortTime(ads.submittedAt) : ''],
+    ['UTM', utm.join(' · ')],
+    ['Strona wejścia', typeof ads.landingPath === 'string' ? ads.landingPath : ''],
+  ]
+  const shown = rows.filter(([, value]) => value)
+  if (shown.length === 0) return <p className="text-[11px] text-zinc-600">Brak zapisanych danych źródła.</p>
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+      {shown.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-zinc-600">{label}</dt>
+          <dd className="min-w-0 break-words text-zinc-400" style={mono}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 

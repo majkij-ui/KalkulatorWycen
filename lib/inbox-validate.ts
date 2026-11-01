@@ -41,6 +41,19 @@ import {
   type InboxSync,
   type Proposal,
 } from './inbox-types'
+import { adsProblems } from './marketing-types'
+
+/**
+ * `data.ads` leada: komunikaty o `ads` spoza obiektu i o click id w złym
+ * formacie. Gdy są błędy, schemat sprawdza resztę `data` bez `ads`, żeby ten
+ * sam kłopot nie wracał jeszcze raz jako ogólne „schemat poprawiłby pole".
+ */
+function leadAdsCheck(kind: string, data: Record<string, unknown>, path: string) {
+  const problems = kind === 'lead_in' ? adsProblems(data.ads, `${path}.ads`) : []
+  if (!problems.length) return { problems, data }
+  const { ads: _ads, ...rest } = data
+  return { problems, data: rest }
+}
 
 export interface StrictContext {
   /** Wszystkie projekty, łącznie z usuniętymi. */
@@ -196,8 +209,10 @@ export function validateInboxDraft(raw: unknown, ctx: StrictContext): StrictResu
       if (end && !spec.range) error(`typ „${kind}" jest jednodniowy — bez „end"`)
       if (end && end.slice(0, 10) < start.slice(0, 10)) error('koniec przed początkiem')
       if (start.length > 10 && !spec.timed) error(`typ „${kind}" nie ma godziny — sama data`)
-      const dataParsed = spec.data.safeParse(data)
-      const dataChanged = dataParsed.success ? catchDiff(data, dataParsed.data, 'event.data') : 'event.data'
+      const adsCheck = leadAdsCheck(kind, data, 'event.data')
+      adsCheck.problems.forEach(error)
+      const dataParsed = spec.data.safeParse(adsCheck.data)
+      const dataChanged = dataParsed.success ? catchDiff(adsCheck.data, dataParsed.data, 'event.data') : 'event.data'
       if (dataChanged) error(`schemat typu poprawiłby pole „${dataChanged}"`)
       if (kind === 'lead_in' && typeof data.campaignId === 'string' && !campaigns.has(data.campaignId)) {
         error(`nie ma kampanii ${data.campaignId}`)
@@ -250,9 +265,11 @@ export function validateInboxDraft(raw: unknown, ctx: StrictContext): StrictResu
           warn(`wydarzenie jest już w projekcie ${event.projectId} — przy ifMissing zostaje`)
         }
         if (hasData) {
-          const merged = { ...event.data, ...proposal.set.data }
+          const adsCheck = leadAdsCheck(event.kind, proposal.set.data as Record<string, unknown>, 'set.data')
+          adsCheck.problems.forEach(error)
+          const merged = { ...event.data, ...adsCheck.data }
           const parsed = spec.data.safeParse(merged)
-          const dataChanged = parsed.success ? catchDiff(proposal.set.data, parsed.data, 'set.data') : 'set.data'
+          const dataChanged = parsed.success ? catchDiff(adsCheck.data, parsed.data, 'set.data') : 'set.data'
           if (dataChanged) error(`schemat typu „${event.kind}" poprawiłby pole „${dataChanged}"`)
           if (typeof proposal.set.data?.campaignId === 'string' && !campaigns.has(proposal.set.data.campaignId)) {
             error(`nie ma kampanii ${proposal.set.data.campaignId}`)

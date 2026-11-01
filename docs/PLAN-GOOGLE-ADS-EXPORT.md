@@ -1,6 +1,6 @@
 # Eksport leadów do Google Ads: plan wdrożenia w hubie
 
-Stan: **decyzje podjęte (sekcja 7), etap A w toku.**
+Stan: **decyzje podjęte (sekcja 7), etap A gotowy (sekcja 9), etap B czeka.**
 Wejście: `hub-lead-export-brief.md` z repo strony (część strony wdrożona 1.11.2026).
 Ten plan zastępuje brief tam, gdzie się różnią (sekcja 2).
 
@@ -147,3 +147,31 @@ akcji i wartości leada.
 
 - [Guidelines for importing offline conversions](https://support.google.com/google-ads/answer/15081888?hl=en)
 - [Prepare your data for import, Data Manager](https://support.google.com/google-ads-data-manager/answer/14184381?hl=en)
+
+## 9. Etap A as built (1.11.2026)
+
+Gotowe: dane leada, bez eksportu (etap B).
+
+- `lib/lead-source-parse.ts` + test: `parseLeadSource(text)` czyta sekcję „Źródło" po etykietach (wielkość
+  liter i ogonki bez znaczenia; `LABEL<tab/spacje/:>wartość` oraz etykieta i wartość w osobnych liniach).
+  Czyta tylko po ostatnim nagłówku „ŹRÓDŁO"; bez nagłówka całość; brak sekcji = `null`. Czas
+  `2026-10-31 14:22:19 Europe/Warsaw` → `2026-10-31T14:22:19`, awaryjny ISO UTC jest przeliczany na czas
+  warszawski, nieczytelny jest pomijany z wpisem w `problems`. Click id musi pasować do
+  `^[A-Za-z0-9_-]{10,512}$`, inaczej trafia do `problems` i nie jest zapisywany. `fromAds` = „tak" albo
+  jakikolwiek click id w mailu (także zły).
+- `lead_in.data.ads`: `leadAdsSchema` w `marketing-types.ts`, tolerancyjny (`.catch`, `passthrough`).
+  `leadEventFromDraft` startuje od oryginalnego `ads`, więc nieznane klucze przeżywają zapis z formularza;
+  wartości, których formularz nie umie pokazać (np. `ads` jako tekst), zostają.
+- `inbox-validate.ts`: `lead_in` (także `set.data` w `event_update`) z `ads` spoza obiektu albo z click id
+  w złym formacie = błąd z czytelnym komunikatem; stare propozycje bez `ads` bez zmian.
+- Formularz leada: zwijany blok „Źródło z reklamy" (otwarty tylko, gdy lead ma `ads`): przełącznik „Z reklamy"
+  (generuje `leadId`, 8 znaków `0-9A-Z`, jeśli go brak), pole „Wklej sekcję Źródło" z przyciskiem „Wczytaj"
+  (uzupełnia puste e-mail, telefon, godzinę, a datę nowego leada dopóki nie wpisano jej ręcznie; nigdy nie
+  nadpisuje wpisanego) i podgląd pól. Na liście leadów znacznik „Ads" przy leadach z `fromAds`.
+- Skill `przejrzyj-poczte`: pola `ads` w propozycji, click id przepisywany dosłownie i sprawdzany, `leadId`
+  jako klucz duplikatów, prefiks `[Ads]` = z reklamy.
+
+Różnice względem strony (`lib/lead-source.ts`): etykiety w tekście maila mają zwykłą wielkość liter
+(`gclid`, `Lead ID`, `Zgoda ad_storage`), wielkie są dopiero przez CSS; „Z reklamy" to `tak` / `nie`; zgoda to
+`granted` / `denied` / `unknown`; e-mail i telefon są znormalizowane przez stronę (małe litery, E.164);
+strona zapisuje czas przez `Intl` (`sv-SE`), a ISO UTC tylko gdy `Intl` zawiedzie.

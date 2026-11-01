@@ -94,6 +94,7 @@ produkcja" / „Rabat"); quotes without it stretch every margined item as before
 (`invoice_sent`, `invoice_paid`, `extra_sale`), firma (`gear_purchase` projected from the catalogue,
 `marketing`), inne (`note`; unknown kinds render as „inne"). Status suggestions are always confirmed by
 the user; the app never changes a status silently. A lead is a `lead_in` event, not a status.
+A lead's website attribution lives in `lead_in.data.ads` (`leadAdsSchema` in `marketing-types.ts`: lead id, click ids, consent, UTM). `lib/lead-source-parse.ts` reads the mail's „Źródło" section by label; the lead form and `inbox-validate.ts` use it. Plan: `docs/PLAN-GOOGLE-ADS-EXPORT.md` (§9 = stage A as built).
 
 ## Money pipeline
 

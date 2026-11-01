@@ -687,3 +687,64 @@ test('grupa nie skacze w trakcie przyjmowania: kolejność i przydział liczone 
   const allDone = pendingProposals(files, [], [...done, decision('gmail:t1#contact', 'accepted'), decision('gmail:t2', 'rejected')])
   assert.deepEqual(groupProposals(allDone.pending, allDone.all), [])
 })
+
+// ── lead_in.data.ads (etap A eksportu do Google Ads) ─────────────────────────
+
+const GCLID = 'Cj0KCQjwxNmfBhDBARIsAHxDqqAcPz1Q-7a9XkLm2_Zt'
+const adsLead = (ads: unknown, extra: Record<string, unknown> = {}) => {
+  const base = lead() as { event: Record<string, unknown> }
+  return lead({ event: { ...base.event, data: { ...(base.event.data as object), ads } }, ...extra })
+}
+
+test('walidacja: lead z data.ads przechodzi, stare propozycje bez ads też', () => {
+  const ads = {
+    leadId: 'K7Q2M9XA',
+    fromAds: true,
+    gclid: GCLID,
+    clickedAt: '2026-10-06T11:20:00',
+    submittedAt: '2026-10-06T11:44:00',
+    consent: 'granted',
+    utmSource: 'google',
+    landingPath: '/oferta',
+    futureAdsKey: 1,
+  }
+  const ok = validateInboxDraft(draft([adsLead(ads)]), ctx())
+  assert.deepEqual(ok.errors, [])
+  assert.equal(ok.proposals.length, 1)
+  assert.deepEqual((ok.proposals[0] as unknown as { event: { data: { ads: unknown } } }).event.data.ads, ads)
+  assert.deepEqual(validateInboxDraft(draft([lead()]), ctx()).errors, [])
+})
+
+test('walidacja: zły click id albo ads spoza obiektu to błąd z czytelnym komunikatem', () => {
+  const cases: [unknown, RegExp][] = [
+    [{ gclid: 'Cj0KCQ jw' }, /event\.data\.ads\.gclid: nieprawidłowy click id/],
+    [{ gclid: 'krótki' }, /ads\.gclid: nieprawidłowy click id/],
+    [{ gbraid: 'a'.repeat(513) }, /ads\.gbraid: nieprawidłowy click id/],
+    [{ wbraid: 12345678901 }, /ads\.wbraid: nieprawidłowy click id/],
+    ['gclid=Cj0KCQjwxNmfBhDBARIsAHxD', /event\.data\.ads: oczekiwano obiektu/],
+    [[{ gclid: GCLID }], /ads: oczekiwano obiektu/],
+    [null, /ads: oczekiwano obiektu/],
+    [{ fromAds: 'tak' }, /schemat typu poprawiłby pole „event\.data\.ads\.fromAds"/],
+    [{ consent: 'maybe' }, /ads\.consent/],
+  ]
+  cases.forEach(([ads, pattern]) => {
+    const result = validateInboxDraft(draft([adsLead(ads)]), ctx())
+    assert.ok(result.errors.some((e) => pattern.test(e)), `${JSON.stringify(ads)} → ${result.errors.join(' | ')}`)
+    assert.equal(result.proposals.length, 0)
+  })
+  // jeden błąd ads nie dubluje się ogólnym „schemat poprawiłby pole"
+  const one = validateInboxDraft(draft([adsLead('tekst')]), ctx())
+  assert.equal(one.errors.length, 1)
+})
+
+test('walidacja event_update: data.ads sprawdzane tak samo', () => {
+  const events = [ev({ id: 'ev-lead', kind: 'lead_in', start: '2026-06-24', data: { quality: 'good' } })]
+  const run = (ads: unknown) =>
+    validateInboxDraft(
+      draft([{ type: 'event_update', id: 'u1', ref: 'gmail:upd', eventId: 'ev-lead', set: { data: { ads } } }]),
+      ctx({ events })
+    )
+  assert.deepEqual(run({ leadId: 'K7Q2M9XA', gclid: GCLID }).errors, [])
+  assert.match(run({ gclid: 'zły click id' }).errors.join(), /set\.data\.ads\.gclid: nieprawidłowy click id/)
+  assert.match(run('tekst').errors.join(), /set\.data\.ads: oczekiwano obiektu/)
+})

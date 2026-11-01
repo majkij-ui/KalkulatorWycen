@@ -14,7 +14,7 @@
 import { z } from 'zod'
 import type { EventGroup } from './calendar-palette'
 import type { ProjectStatus } from './project-types'
-import { LEAD_QUALITIES } from './marketing-types'
+import { LEAD_QUALITIES, leadAdsSchema } from './marketing-types'
 
 /** Pole formularza dla `event.data[key]`. */
 export interface EventField {
@@ -76,7 +76,7 @@ export const EVENT_KINDS: EventKind[] = [
     // Kanał TEJ wiadomości (mail, telefon, formularz) i to, kto napisał.
     // Gdy z leada powstaje projekt, kanoniczne pochodzenie klienta i kontakt
     // trzyma projekt (`leadSource`, `contact`); lead pamięta samo zapytanie.
-    // `quality`, `campaignId`, `origin` — zakładka Marketing (marketing-types.ts).
+    // `quality`, `campaignId`, `origin`, `ads` — zakładka Marketing (marketing-types.ts).
     data: z
       .object({
         channel: text,
@@ -89,6 +89,8 @@ export const EVENT_KINDS: EventKind[] = [
         contactName: text,
         email: text,
         phone: text,
+        /** Źródło ze strony: lead id, click id, zgoda, UTM (marketing-types.ts). */
+        ads: leadAdsSchema.optional().catch(undefined),
       })
       .passthrough(),
     fields: [
