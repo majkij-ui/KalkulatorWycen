@@ -58,6 +58,7 @@ import { describeProposal, validateInboxDraft } from '../lib/inbox-validate'
 import { pendingProposals } from '../lib/inbox'
 import { plural } from '../lib/pl-plural'
 import { campaignSchema } from '../lib/marketing-types'
+import { adsExportRecordSchema } from '../lib/ads-export-types'
 import { crewMemberSchema, crewRoleSchema } from '../lib/crew-types'
 import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
@@ -80,6 +81,8 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'events.json': eventSchema,
   'finances.json': fixedCostSchema,
   'campaigns.json': campaignSchema,
+  // Google Ads (etap B): wysłane konwersje; rekordów nie usuwamy, tylko zmieniamy `status`.
+  'ads-exports.json': adsExportRecordSchema,
   'equipment.json': equipmentItemSchema,
   'gear-kits.json': gearKitSchema,
   'crew-roles.json': crewRoleSchema,

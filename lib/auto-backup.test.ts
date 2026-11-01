@@ -14,6 +14,7 @@ import { EVENTS_FILE } from './events-store'
 import { FINANCES_FILE } from './finances-store'
 import { SUBSCRIPTIONS_FILE } from './subscriptions-store'
 import { CAMPAIGNS_FILE } from './campaigns-store'
+import { ADS_EXPORTS_FILE } from './ads-exports-store'
 import { EQUIPMENT_FILE } from './equipment-catalog'
 import { GEAR_KITS_FILE } from './gear-kits'
 import { CREW_FILE, CREW_ROLES_FILE } from './crew-store'
@@ -30,6 +31,7 @@ test('kopia obejmuje każdy plik danych huba', () => {
     FINANCES_FILE,
     SUBSCRIPTIONS_FILE,
     CAMPAIGNS_FILE,
+    ADS_EXPORTS_FILE,
     EQUIPMENT_FILE,
     GEAR_KITS_FILE,
     CREW_FILE,
