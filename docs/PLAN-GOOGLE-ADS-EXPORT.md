@@ -74,6 +74,7 @@ akcji i wartości leada.
 | Brak `clickedAt` | Liczymy od `submittedAt` |
 | Projekt wygrany, jest `won` i kwota | Wiersz „Zlecenie wygrane", czas = `won` (12:00 przy samej dacie), wartość = `money.revenue` |
 | Projekt `won` / `done` bez wydarzenia `won` | Odpada: „brak daty wygranej", z linkiem do projektu |
+| Status → „W realizacji" w aplikacji | Pastylka dopisuje `won` z dzisiejszą datą, gdy wątek nie ma żywego (`lib/won-event.ts`); „brak daty wygranej" jest rzadsze: zostaje dla projektów sprzed zmiany, „Zrealizowany" prosto z wyceny i usuniętego `won` |
 | Brak kwoty lub 0 zł | Odpada: „brak kwoty" |
 | Dwa leady na jeden projekt | Wygrana tylko z najwcześniejszego leada |
 | Para ma wpis `pending` lub `confirmed` | Odpada: „już wysłane" |

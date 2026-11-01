@@ -24,6 +24,9 @@ import {
 } from './project-library'
 import { backfillMissingFinancials } from './quote-financials'
 import { statusChangePatch } from './approved-price'
+import { useEvents } from './events-context'
+import { createEvent, listEvents } from './events-store'
+import { wonEventToAdd } from './won-event'
 import { getSavedUserDefault } from './pricing-config'
 import { toDateKey, type Project, type ProjectFilter, type ProjectStatus } from './project-types'
 import { blankDoc, createQuoteDocumentStore, docToSnapshot, type QuoteDocState, type QuoteDocumentStore } from './quote-documents'
@@ -381,6 +384,32 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   )
 
   /**
+   * „W realizacji" dopisuje wydarzenie `won` („Zlecenie potwierdzone"), jeśli wątek nie ma
+   * żywego (`won-event.ts`) — z niego eksport do Google Ads bierze datę wygranej. Idzie PO
+   * zmianie statusu i nigdy jej nie blokuje: błąd zapisu ląduje w konsoli. Zapis przez
+   * `useEvents().save`, więc oś czasu i kalendarz widzą wydarzenie od razu; podpowiedzi
+   * statusu (`noticeAfterSave`) nikt tu nie wywołuje. `project` = projekt sprzed zmiany.
+   */
+  const { save: saveEvent } = useEvents()
+  const wonEventInFlight = useRef(new Set<string>())
+  const addWonEvent = useCallback(
+    async (project: Pick<Project, 'id' | 'status'>, next: ProjectStatus) => {
+      if (next !== 'won' || project.status === 'won' || wonEventInFlight.current.has(project.id)) return
+      wonEventInFlight.current.add(project.id)
+      try {
+        // Wątek czytany na świeżo z magazynu (nie ze stanu), żeby nie dublować won z importu.
+        const draft = wonEventToAdd(project, await listEvents(), next, toDateKey(new Date()))
+        if (draft) await saveEvent(createEvent({ ...draft, source: { type: 'manual' } }))
+      } catch (err) {
+        console.error('Nie udało się dopisać wydarzenia „Zlecenie potwierdzone":', err)
+      } finally {
+        wonEventInFlight.current.delete(project.id)
+      }
+    },
+    [saveEvent]
+  )
+
+  /**
    * Zmiana statusu. Przyjęcie zlecenia (U1) zamraża zatwierdzoną cenę wybranego
    * wariantu — najpierw zapis czekających zmian wyceny, żeby zamrozić to, co widać.
    */
@@ -390,8 +419,9 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
       const project = projectsRef.current.find((p) => p.id === id)
       if (!project) return
       await patchProject(id, statusChangePatch(project, status, new Date()))
+      await addWonEvent(project, status)
     },
-    [patchProject, quoteDocs]
+    [addWonEvent, patchProject, quoteDocs]
   )
 
   const setStatus = useCallback(
