@@ -175,3 +175,41 @@ Różnice względem strony (`lib/lead-source.ts`): etykiety w tekście maila maj
 (`gclid`, `Lead ID`, `Zgoda ad_storage`), wielkie są dopiero przez CSS; „Z reklamy" to `tak` / `nie`; zgoda to
 `granted` / `denied` / `unknown`; e-mail i telefon są znormalizowane przez stronę (małe litery, E.164);
 strona zapisuje czas przez `Intl` (`sv-SE`), a ISO UTC tylko gdy `Intl` zawiedzie.
+
+## 10. Etap B as built (1.11.2026)
+
+Gotowe: kwalifikacja, plik CSV, zapis wysłanych i okno w Marketing → Leady. Bez Google API i bez wysyłki.
+
+- `lib/ads-export-config.ts`: nazwy akcji, wartości leada (300 / 600), `PLN`, okna 90 / 63 dni, próg ostrzeżenia
+  14 dni, start śledzenia `2026-11-01`, tolerancja kwoty 0,5 zł. `lib/ads-export.ts` (czysty, 53 testy):
+  `planAdsExport` zwraca `rows`, `rejected` (lead, klucz, powód), `warnings`, `corrections` i sumy;
+  `buildAdsCsv` daje plik UTF-8 bez BOM, linie kończone `\n`, `conversion_time` jako
+  `2026-11-04T10:12:00 Europe/Warsaw`, e-mail i telefon wyłącznie jako SHA-256 (test na wektorze `abc`).
+- Powody na poziomie leada w kolejności z §4 promptu: `fake`, `unrated`, `pre_tracking` / `no_data`, `not_ads`,
+  `consent_denied`, `no_consent_contact`, `no_identifier`. Dla pary (lead, klucz) dalej: `already_sent` (przed
+  oknem, żeby dawno wysłane nie wracały jako „poza oknem"), potem dla wygranej: projekt `won` / `done` (inny status
+  = brak wiersza i brak powodu), `won_on_other_lead`, `no_won_date`, `no_amount`, na końcu `out_of_window`.
+- „Najwcześniejszy lead" przy wygranej to najwcześniejszy z tych, które przeszły kontrole leada (fałszywy
+  wcześniejszy lead nie blokuje). Jeśli wygrana projektu już poszła (`pending` / `confirmed`) z jakiegoś leada, to ten
+  lead ją zachowuje, a pozostałe dostają `won_on_other_lead`, żeby kwota nie pojechała dwa razy.
+- Click id o złym formacie (`isClickId`) nie liczy się jako click id. Telefon: `+` i 8–15 cyfr albo goły numer z 9
+  cyframi (`+48`); `0048…` i `48…` bez plusa to brak telefonu. E-mail bez poprawnego `@` i domeny to brak e-maila.
+- Korekty (tylko informacja, dla `pending` i `confirmed`): lead fałszywy (oba klucze), inna wartość leada (klucz
+  `lead`), projekt `lost` i kwota inna o więcej niż 0,5 zł (klucz `won`). Cofnięty rekord nie daje korekt.
+- `ads-exports.json` (`adsExportRecordSchema`, `lib/ads-exports-store.ts`, wzorzec `campaigns-store`): rekordy z
+  `leadEventId`, kluczem, nazwą, zamrożonym czasem lokalnym i wartością, `status`, `exportedAt` (jeden na plik),
+  `confirmedAt` / `cancelledAt`. Brak `remove`; nieznany `status` czyta się jako `pending`, nieznany
+  `conversionKey` zostaje tekstem, więc zapis pliku niczego nie gubi. Dopisane do `AUTO_BACKUP_FILES` (test
+  `auto-backup.test.ts`) i do `SCHEMAS` w `scripts/data.mts`.
+- UI: „Eksport do Google Ads" w nagłówku listy leadów (obejmuje wszystkie leady, nie tylko kampanię; licznik
+  oczekujących na przycisku). Okno: sekcja „Czeka na potwierdzenie" (grupy po `exportedAt`, wiersze, suma,
+  „Potwierdź import" / „Cofnij"), sumy, ostrzeżenia, „Do ręcznej korekty", powody z listą leadów (`pre_tracking` tylko
+  liczba; `no_won_date` z linkiem „Otwórz projekt"). „Zapisz plik" jest wyłączony przy zero wierszy. Rekordy
+  `pending` powstają dopiero po udanym zapisie; anulowanie okna „Zapisz jako…" niczego nie zapisuje. W przeglądarce
+  zapis to pobranie pliku i liczy się jako udany.
+- Tauri: bez zmian w uprawnieniach (`fs:allow-write-file` w `$HOME/**`, `dialog:allow-save`, plik danych w `$APPDATA`).
+- Dane prawdziwe (tylko odczyt, 1.11.2026): 41 leadów, 0 wierszy; `fake` 4, `pre_tracking` 37.
+- Sprawdzone w przeglądarce (eksport statyczny, syntetyczne dane): okno, sumy, powody, „Czeka na potwierdzenie"
+  przeżywa przeładowanie, „Potwierdź import" zapisuje `confirmed` i rekord zostaje.
+- Niesprawdzone, do głównej sesji na buildzie produkcyjnym: natywne „Zapisz jako…" i `writeFile` (anulowanie nic nie
+  zapisuje, udany zapis dopisuje `pending`), odczyt `ads-exports.json` po restarcie aplikacji, wygląd okna w Tauri.
