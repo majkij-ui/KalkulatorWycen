@@ -10,6 +10,7 @@ import {
   resolveRealizationDays,
   restoreDays,
   softDeleteDay,
+  suggestedNextDayDate,
 } from './realization-days'
 import { duplicateGearDay, projectGearDays } from './gear-usage'
 import { projectSchema, type GearDay, type Project } from './project-types'
@@ -297,4 +298,14 @@ test('dzień poza wydarzeniem bierze datę z rekordu wydarzenia, nie z nieaktual
     ['2026-11-04'],
     'statystyki tak samo'
   )
+})
+
+test('suggestedNextDayDate: dzień po ostatnim datowanym dniu, bez usuniętych', () => {
+  assert.equal(suggestedNextDayDate([]), '')
+  assert.equal(suggestedNextDayDate([{ date: '' }]), '')
+  assert.equal(
+    suggestedNextDayDate([{ date: '2025-03-12' }, { date: '' }, { date: '2025-03-31' }, { date: '2025-04-05', deletedAt: 'x' }]),
+    '2025-04-01'
+  )
+  assert.equal(suggestedNextDayDate([{ date: '2024-12-31' }]), '2025-01-01')
 })

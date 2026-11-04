@@ -287,6 +287,21 @@ export function gearDaysForSave(visible: GearDay[], stored: GearDay[] | null | u
   return [...visible, ...(stored ?? []).filter((d) => d.deletedAt && !ids.has(d.id))]
 }
 
+/**
+ * Podpowiedź daty dla „+ Dzień": dzień po ostatnim datowanym dniu realizacji
+ * projektu (bez usuniętych). Projekt bez żadnego datowanego dnia nie dostaje
+ * podpowiedzi ('') — data księgowa / faktury to nie dzień zdjęć, a podpowiedź
+ * z datą od razu wstawia wydarzenie do kalendarza.
+ */
+export function suggestedNextDayDate(days: Pick<GearDay, 'date' | 'deletedAt'>[]): string {
+  const dated = days
+    .filter((day) => !day.deletedAt && /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .map((day) => day.date)
+    .sort()
+  const last = dated[dated.length - 1]
+  return last ? addDays(last, 1) : ''
+}
+
 /** Miękkie usunięcie dnia (koszty dnia: `softDeleteDayCosts` z tym samym znacznikiem). */
 export function softDeleteDay(days: GearDay[], dayId: string, deletedAt: string): GearDay[] {
   return days.map((day) => (day.id === dayId ? { ...day, deletedAt } : day))

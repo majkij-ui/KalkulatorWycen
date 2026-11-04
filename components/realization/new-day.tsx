@@ -19,7 +19,14 @@ export interface NewDay {
   location: string
 }
 
-export function NewDayButton({ onAdd }: { onAdd: (day: NewDay) => Promise<void> | void }) {
+export function NewDayButton({
+  onAdd,
+  suggestedDate = '',
+}: {
+  onAdd: (day: NewDay) => Promise<void> | void
+  /** Podpowiedź daty przy otwarciu (dzień po ostatnim dniu projektu); '' = bez. */
+  suggestedDate?: string
+}) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<RealizationKind>('shoot_day')
   const [date, setDate] = useState('')
@@ -38,7 +45,8 @@ export function NewDayButton({ onAdd }: { onAdd: (day: NewDay) => Promise<void> 
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) reset()
+        if (next) setDate(suggestedDate)
+        else reset()
       }}
     >
       <PopoverTrigger asChild>
@@ -85,6 +93,9 @@ export function NewDayButton({ onAdd }: { onAdd: (day: NewDay) => Promise<void> 
               onChange={(e) => setDate(e.target.value)}
               className={`${fieldClass} mt-1 w-full [color-scheme:dark]`}
             />
+            {suggestedDate && date === suggestedDate && (
+              <span className="mt-1 block text-zinc-600">Podpowiedź: dzień po ostatnim dniu projektu.</span>
+            )}
           </label>
           {dated && (
             <label className="text-[11px] text-zinc-500">

@@ -80,6 +80,7 @@ import {
   linkDayToEvent,
   realizationDayLabel,
   resolveRealizationDays,
+  suggestedNextDayDate,
   restoreDays,
   softDeleteDay,
   REALIZATION_KIND_LABELS,
@@ -691,7 +692,7 @@ function RealizationView({ project }: { project: Project }) {
     rentals: dictionary,
   }
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
-  const newDayButton = <NewDayButton onAdd={addDay} />
+  const newDayButton = <NewDayButton onAdd={addDay} suggestedDate={suggestedNextDayDate(days)} />
   const enteredCount = liveCosts(costs).length
 
   const eventSheet = (
