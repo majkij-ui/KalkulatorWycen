@@ -212,3 +212,8 @@ React StrictMode in `npm run dev` runs effects twice; verify effect-order-sensit
 - Shoot days (`periodActivity`): a project with any calendar `shoot_day` counts those inside the period; one with none counts `quoteShootDayCount`. Gear statistics are separate.
 - Company costs (ZUS, fixed, marketing, gear) in a period that contains today count only up to the current month (`companyCostsThrough` in `margin-ledger.ts`); past and future periods stay whole. One capped list feeds `marginSummary` and the Raport.
 - „Zakończone projekty" (Finanse › Projekty) filters the ledger to `done` before the margin input; company costs, „W realizacji" and the Raport use the unfiltered data.
+
+## Quote extras (W1)
+
+- Przekazanie praw i surowy materiał: `lib/quote-extras.ts` (`resolveExtra`, `extraAmount`, `buildOptionLines`). Optional `rightsMode`/`rawMode` (+ `*AmountKind`, `*FixedAmount`) on `QuoteData`; absent = legacy rule (`przekazanie` → „W cenie", else hidden). Percent base is `getExtrasBase` (price with margin, without both items); percents live in the quote's `pricing.dodatkowe`.
+- „Jako opcja" lines are computed at render time and printed above the manual „Opcje dodatkowe" text (never stored in the draft); „W cenie" items land in „Inne koszty" and are named in its description. Neither item is a Realizacja cost line.
