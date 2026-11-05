@@ -803,7 +803,7 @@ test('projekt z fakturą w tym okresie, ale z kotwicą wcześniej: tylko częś�
   const row = q3.projects.find((p) => p.id === 'wczesny')!
   assert.equal(row.anchored, false)
   near(row.revenue, 6_000, 'tylko faktura z III kwartału')
-  near(row.costs, 0, 'koszty projektu leżą w II kwartale')
+  near(row.costs, 600, 'koszty idą za fakturami: 6 000 z 10 000 przychodu')
   assert.equal(q3.crew.members.length, 0, 'ekipa tego zlecenia jest w II kwartale')
   assert.equal(q3.gear.onSet.length, 0)
   assert.match(sectionText(q3), /tylko część przychodu w okresie/)

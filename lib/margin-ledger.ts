@@ -71,9 +71,11 @@ export interface ProjectMargin {
   money: ProjectMoney
   /** Kotwica w okresie: tu leżą koszty projektu. */
   anchored: boolean
+  /** Część kosztów i mojej pracy projektu w okresie (0–1): za fakturami, inaczej w kotwicy. */
+  costShare: number
   /** Przychód w okresie (kawałki z datą w okresie). */
   revenue: number
-  /** Koszty bezpośrednie w okresie (projekt zakotwiczony; nieznane = 0). */
+  /** Koszty bezpośrednie w okresie (udział wg faktur albo kotwica; nieznane = 0). */
   costs: number
   /** Warstwa 1 w okresie. */
   margin: number
@@ -239,12 +241,13 @@ export function marginSummary(input: MarginInput, period: Period): MarginSummary
   const provisional = months[months.length - 1] >= input.today.slice(0, 7)
 
   const all: ProjectMargin[] = money.projects.map((row) => {
-    const costs = row.anchored ? (row.money.costs ?? 0) : 0
-    const ownWork = row.anchored ? row.money.ownWork : 0
+    const costs = (row.money.costs ?? 0) * row.costShare
+    const ownWork = row.money.ownWork * row.costShare
     const tax = row.revenue * (row.money.taxRatePercent / 100)
     return {
       money: row.money,
       anchored: row.anchored,
+      costShare: row.costShare,
       revenue: row.revenue,
       costs,
       margin: row.revenue - costs,

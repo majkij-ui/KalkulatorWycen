@@ -450,7 +450,7 @@ test('„Sprzęt spoza katalogu" powiązany z katalogiem: stałe bez zmian, sprz
   near(s.company.gear, 5_156.73)
 })
 
-test('dodatkowa faktura w następnym roku: przychód w tym roku, koszty zostają w roku kotwicy', () => {
+test('dodatkowa faktura w następnym roku: przychód i część kosztów idą za fakturą', () => {
   const projects = [project('a', { date: '2026-11-10', costs: [cost(2_000)] })]
   const events = [
     ev('a', 'invoice_sent', '2026-11-20', { amountNetto: 10_000 }),
@@ -461,9 +461,9 @@ test('dodatkowa faktura w następnym roku: przychód w tym roku, koszty zostają
   const r = row(next, 'a')
   assert.equal(r.anchored, false)
   assert.equal(r.revenue, 1_000)
-  assert.equal(r.costs, 0)
-  assert.equal(r.margin, 1_000)
-  assert.equal(row(marginSummary(input(projects, { events }), YEAR(2026)), 'a').margin, 8_000)
+  near(r.costs, (2_000 * 1_000) / 11_000)
+  near(r.margin, 1_000 - (2_000 * 1_000) / 11_000)
+  near(row(marginSummary(input(projects, { events }), YEAR(2026)), 'a').margin, 10_000 - (2_000 * 10_000) / 11_000)
 })
 
 // ── U1: EBBT (plan §17.2) ────────────────────────────────────────────────────
@@ -509,4 +509,92 @@ test('U1 EBBT roku bez przychodu: −ZUS; projekty bez przychodu nie niosą udzi
   )
   near(row(zero, 'a').ebbt, -500, 'bez przychodu: W1 − podatek, bez udziału w ZUS')
   near(zero.totals.ebbt, -1_500)
+})
+
+// ── Koszty idą za fakturami (decyzja 2026-11-05) ─────────────────────────────
+
+/** „Z natury gościnni": faktury 7 431 (czerwiec) i 22 293 (sierpień), koszty 19 535, moja praca 16 600. */
+const naturaProject = (extra: Partial<P> = {}) =>
+  project('natura', {
+    date: '2025-06-13',
+    financials: financials(29_724, 19_535),
+    costs: [cost(19_535), { ...cost(16_600), ownWork: true } as ProjectCost],
+    ...extra,
+  })
+const naturaEvents = [
+  ev('natura', 'invoice_sent', '2025-06-13', { amountNetto: 7_431 }),
+  ev('natura', 'invoice_sent', '2025-08-13', { amountNetto: 22_293 }),
+]
+
+test('koszty za fakturami: czerwiec 25 %, sierpień 75 % kosztów i mojej pracy; marża producencka idzie za nimi', () => {
+  const projects = [naturaProject()]
+  const june = row(marginSummary(input(projects, { events: naturaEvents }), MONTH(2025, 6)), 'natura')
+  near(june.revenue, 7_431)
+  near(june.costs, 4_883.75)
+  near(june.margin, 2_547.25)
+  near(june.ownWork, 4_150)
+  near(june.producerMargin, 7_431 - 4_883.75 - 4_150)
+  assert.equal(june.anchored, true)
+  const august = row(marginSummary(input(projects, { events: naturaEvents }), MONTH(2025, 8)), 'natura')
+  near(august.costs, 14_651.25)
+  near(august.ownWork, 12_450)
+  assert.equal(august.anchored, false)
+})
+
+test('koszty za fakturami: wynik firmy w czerwcu i sierpniu, a rok bez zmian', () => {
+  const projects = [naturaProject()]
+  const fixedCosts = [fixed('f6', '2025-06', 1_000), fixed('f8', '2025-08', 1_000)]
+  const all = input(projects, { events: naturaEvents, fixedCosts })
+  const june = marginSummary(all, MONTH(2025, 6))
+  const august = marginSummary(all, MONTH(2025, 8))
+  near(june.totals.margin, 7_431 - 4_883.75)
+  near(august.totals.margin, 22_293 - 14_651.25)
+  near(june.totals.result, june.totals.margin - june.company.total)
+  const year = marginSummary(all, YEAR(2025))
+  near(year.totals.margin, 29_724 - 19_535)
+  const months = Array.from({ length: 12 }, (_, i) => marginSummary(all, MONTH(2025, i + 1)).totals.margin)
+  near(
+    months.reduce((a, b) => a + b, 0),
+    29_724 - 19_535,
+    'dwanaście miesięcy = rok'
+  )
+})
+
+test('koszty za fakturami: jedna faktura albo wszystkie w jednym miesiącu — jak dotąd, całość w kotwicy', () => {
+  const one = [naturaProject()]
+  const single = [ev('natura', 'invoice_sent', '2025-06-13', { amountNetto: 29_724 })]
+  near(row(marginSummary(input(one, { events: single }), MONTH(2025, 6)), 'natura').costs, 19_535)
+  const sameMonth = [
+    ev('natura', 'invoice_sent', '2025-06-13', { amountNetto: 7_431 }),
+    ev('natura', 'invoice_sent', '2025-06-27', { amountNetto: 22_293 }),
+  ]
+  const june = row(marginSummary(input(one, { events: sameMonth }), MONTH(2025, 6)), 'natura')
+  near(june.costs, 19_535)
+  near(june.ownWork, 16_600)
+})
+
+test('koszty za fakturami: bez faktur (plan przy dacie projektu) albo z nieznanym przychodem — całość w kotwicy', () => {
+  const planned = marginSummary(input([project('a', { date: '2025-06-13', costs: [cost(3_000)] })]), MONTH(2025, 6))
+  near(row(planned, 'a').costs, 3_000)
+  const unknown = marginSummary(
+    input([project('b', { date: '2025-06-13', financials: undefined, costs: [cost(3_000)] })]),
+    MONTH(2025, 6)
+  )
+  assert.equal(row(unknown, 'b').known, false)
+  near(row(unknown, 'b').costs, 3_000)
+  assert.equal(marginSummary(input([project('b', { date: '2025-06-13', financials: undefined, costs: [cost(3_000)] })]), MONTH(2025, 8)).projects.length, 0)
+})
+
+test('koszty za fakturami: faktury w dwóch latach dzielą koszty także między lata', () => {
+  const projects = [project('a', { date: '2025-11-10', costs: [cost(4_000)] })]
+  const events = [
+    ev('a', 'invoice_sent', '2025-11-20', { amountNetto: 6_000 }),
+    ev('a', 'invoice_sent', '2026-01-15', { amountNetto: 4_000 }),
+  ]
+  const y25 = row(marginSummary(input(projects, { events }), YEAR(2025)), 'a')
+  const y26 = row(marginSummary(input(projects, { events }), YEAR(2026)), 'a')
+  near(y25.costs, 2_400)
+  near(y26.costs, 1_600)
+  near(y25.costs + y26.costs, 4_000, 'udziały sumują się do kosztów')
+  near(y26.margin, 4_000 - 1_600)
 })

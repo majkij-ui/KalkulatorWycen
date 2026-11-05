@@ -392,6 +392,8 @@ export interface PeriodProjectMoney {
   anchored: boolean
   /** Przychód projektu w tym okresie (część całości, gdy faktury są w kilku miesiącach). */
   revenue: number
+  /** Jaka część kosztów i mojej pracy projektu leży w tym okresie (0–1), patrz `periodCostShare`. */
+  costShare: number
 }
 
 export interface MoneySummary {
@@ -400,7 +402,7 @@ export interface MoneySummary {
   /** Najlepsza wiedza: kawałki przychodu z datą w okresie. */
   revenue: number
   tax: number
-  /** Koszty projektów zakotwiczonych w okresie. */
+  /** Koszty projektów w okresie: udział wg faktur (`periodCostShare`), inaczej w kotwicy. */
   costs: number
   /** Zysk z projektów: przychód − podatek − koszty. */
   profit: number
@@ -429,6 +431,22 @@ export interface MoneySummary {
   netMarginPct: number | null
 }
 
+/**
+ * Koszty idą za fakturami (decyzja 2026-11-05): gdy przychód projektu jest znany
+ * (> 0) i ma kawałki przychodu, okres dostaje koszty × (kawałki w okresie / suma
+ * wszystkich kawałków) — to samo dla mojej pracy, a z nią marży producenckiej.
+ * Inaczej (brak faktur i planu, przychód nieznany albo 0) całość leży w kotwicy.
+ * Udziały jednego projektu dają razem dokładnie 1.
+ */
+export function periodCostShare(money: ProjectMoney, period: Period): number {
+  const onAnchor = isInPeriod(money.anchor, period) ? 1 : 0
+  if (money.revenue === null || money.revenue <= EPSILON) return onAnchor
+  const total = sum(money.pieces.map((piece) => piece.amount))
+  if (total <= EPSILON) return onAnchor
+  const here = sum(money.pieces.filter((piece) => isInPeriod(piece.day, period)).map((piece) => piece.amount))
+  return Math.min(1, Math.max(0, here / total))
+}
+
 const marginOf = (profit: number, revenue: number) => (revenue > 0 ? (profit / revenue) * 100 : null)
 
 export function summarizeMoney(ledger: ProjectMoney[], fixedCosts: FixedCost[], period: Period): MoneySummary {
@@ -449,7 +467,8 @@ export function summarizeMoney(ledger: ProjectMoney[], fixedCosts: FixedCost[], 
     if (!anchored && inPeriod.length === 0) return
 
     const periodRevenue = sum(inPeriod.map((piece) => piece.amount))
-    projects.push({ money, anchored, revenue: periodRevenue })
+    const costShare = periodCostShare(money, period)
+    projects.push({ money, anchored, revenue: periodRevenue, costShare })
     revenue += periodRevenue
     tax += periodRevenue * (money.taxRatePercent / 100)
     invoicedRevenue += sum(inPeriod.filter((piece) => piece.source !== 'plan').map((piece) => piece.amount))
@@ -459,8 +478,8 @@ export function summarizeMoney(ledger: ProjectMoney[], fixedCosts: FixedCost[], 
     if (inPeriod.some((piece) => !piece.paid)) awaiting.count += 1
     else if (inPeriod.length > 0) paid.count += 1
 
+    costs += (money.costs ?? 0) * costShare
     if (!anchored) return
-    costs += money.costs ?? 0
     coverage.projects += 1
     if (money.revenueBasis === 'invoices') coverage.invoiced += 1
     if (money.revenueNote === 'partial' || money.revenueNote === 'missing_amount') coverage.partial += 1

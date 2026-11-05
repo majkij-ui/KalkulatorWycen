@@ -101,3 +101,22 @@ Projekt ma cenę końcową, gdy:
 Usunięte: blokujące pytanie „Zastąpić finanse z importu…" w nagłówku projektu (`needs-confirmation`, `confirmReplace`, `discard`) i ścieżka „zmiany czekają w pamięci". Zmiany zapisują się od razu jak w każdej wycenie.
 
 Wyceny sprzed zmiany (YoPro, Misty Cliffs for WOO, Z natury gościnni): Realizacja i Finanse projektu pokazują już cenę z faktur (reguła a). Ekrany czytające `financials.sumaNetto` wprost (rozbicie płatności, Klienci bez pętli) wymagają patcha `imports/2026-11-05-cena-koncowa.json` (generator: `scripts/final-price-patch.mts`; ręcznie tylko `--dry-run`, zastosowanie przy zamkniętym hubie). Finanse firmy 2021–2026 (przychód, koszty, zysk) bez zmian — pętla pieniędzy nietknięta.
+
+## Koszty idą za fakturami (5.11.2026)
+
+Decyzja M.J.: koszty projektu nie leżą już w całości w miesiącu kotwicy (pierwsza faktura), tylko idą za fakturami.
+
+**Reguła** (jeden helper: `periodCostShare(money, period)` w `lib/money-loop.ts`): gdy przychód projektu jest znany (> 0) i ma kawałki przychodu, okres dostaje koszty × (kawałki w okresie / suma wszystkich kawałków). Tak samo moja praca (`ownWork`), a z nią marża producencka. W przeciwnym razie — jak dotąd, całość w kotwicy. Udziały jednego projektu sumują się do 1. Używają go `summarizeMoney`, `marginSummary` (`costShare` na wierszu) i `periodRentals` (wynajem jako część kosztów). `anchored` zostaje tam, gdzie znaczy kotwicę (liczniki, dni zdjęciowe, ekipa i sprzęt na planie, dosprzedaż).
+
+| Przypadek | Wynik |
+|---|---|
+| „Z natury gościnni", czerwiec 2025 | przychód 7 431, koszty 4 884 (25 %), marża ≈ 2 547 |
+| „Z natury gościnni", sierpień 2025 | koszty ≈ 14 651 |
+| Cała firma, czerwiec 2025 (sprzęt rozłożony) | marża −6 604 → ≈ 8 047; wynik −11 508 → ≈ 3 143 |
+| Cała firma, sierpień 2025 | marża 22 293 → ≈ 7 642; wynik 17 251 → ≈ 2 600 |
+| Rok 2025, pozostałe miesiące | bez zmian (suma marży roku 59 939 przed i po) |
+| Jedna faktura albo wszystkie w jednym miesiącu | bez zmian |
+| Brak faktur (plan przy dacie projektu) / przychód nieznany | bez zmian (kotwica) |
+| Faktury w dwóch latach | koszty dzielą się także między lata |
+
+Zmienione testy (dotąd „koszty zostają w kotwicy"): dodatek na późniejszej fakturze w `money-loop`, `margin-ledger`, `r2-money` i `period-report`.

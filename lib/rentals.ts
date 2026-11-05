@@ -384,6 +384,8 @@ export interface PeriodProjectRow {
   money: { id: string; counts: boolean; costsBasis: 'actual' | 'plan' | 'none' }
   /** Kotwica w okresie — tu leżą koszty projektu. */
   anchored: boolean
+  /** Część kosztów projektu w okresie (0–1); brak = kotwica. */
+  costShare?: number
 }
 
 export interface PeriodRentals {
@@ -409,7 +411,8 @@ export function periodRentals(
   const projects: PeriodRentals['projects'] = []
   const top = new Map<string, { itemId: string; name: string; times: number; amount: number }>()
   rows.forEach((row) => {
-    if (!row.anchored || !row.money.counts || row.money.costsBasis === 'none') return
+    const share = row.costShare ?? (row.anchored ? 1 : 0)
+    if (share <= 0 || !row.money.counts || row.money.costsBasis === 'none') return
     const project = projectsById.get(row.money.id)
     if (!project) return
     const lines =
@@ -417,7 +420,7 @@ export function periodRentals(
         ? draftCosts(quotePlanRows((project.quote ?? null) as FinancialsSource | null).rows, [])
         : liveCosts(project.costs)
     const counted = lines.filter(countsAsRental)
-    const amount = counted.reduce((sum, cost) => sum + costAmount(cost), 0)
+    const amount = counted.reduce((sum, cost) => sum + costAmount(cost), 0) * share
     if (amount === 0) return
     projects.push({ id: project.id, name: project.name, amount })
     counted.forEach((cost) => {
@@ -429,7 +432,7 @@ export function periodRentals(
         amount: 0,
       }
       entry.times += 1
-      entry.amount += costAmount(cost)
+      entry.amount += costAmount(cost) * share
       top.set(cost.rentalItemId, entry)
     })
   })

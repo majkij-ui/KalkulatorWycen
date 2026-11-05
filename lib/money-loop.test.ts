@@ -12,6 +12,7 @@ import {
   summarizeMoney,
   type MoneyEvent,
   type MoneyProject,
+  periodCostShare,
 } from './money-loop'
 import { paymentState } from './payments'
 import type { FixedCost, Project, ProjectCost } from './project-types'
@@ -106,7 +107,7 @@ test('3. dodatek na tej samej fakturze: oczekiwany = plan + dodatek, faktura go 
   assert.ok(m.extras[0].id, 'U1: id wydarzenia do edycji w Finansach')
 })
 
-test('4. dodatek na osobnej, późniejszej fakturze: każda faktura w swoim miesiącu, koszty zostają w kotwicy', () => {
+test('4. dodatek na osobnej, późniejszej fakturze: każda faktura w swoim miesiącu, koszty idą za fakturami', () => {
   const ledger = moneyLedger(
     [project({ costs: [cost(2_500)] })],
     [
@@ -120,9 +121,9 @@ test('4. dodatek na osobnej, późniejszej fakturze: każda faktura w swoim mies
   const october = summarizeMoney(ledger, [], month(2026, 10))
   const january = summarizeMoney(ledger, [], month(2027, 1))
   assert.equal(october.revenue, 10_000, 'październik się nie zmienia, gdy w styczniu dochodzi faktura')
-  assert.equal(october.costs, 2_500)
+  near(october.costs, (2_500 * 10_000) / 11_500)
   assert.equal(january.revenue, 1_500)
-  assert.equal(january.costs, 0, 'koszty nie wędrują za fakturą za dodatek')
+  near(january.costs, (2_500 * 1_500) / 11_500, 'koszty idą za fakturą za dodatek')
   assert.equal(january.projects.length, 1)
   assert.equal(january.projects[0].anchored, false)
   assert.equal(january.coverage.projects, 0, 'pokrycie liczy projekty zakotwiczone w okresie')
@@ -491,4 +492,29 @@ test('dni do zapłaty w okresie: mediana, najdłużej, ile po terminie (tylko pr
   assert.deepEqual(paymentDays(ledger, month(2026, 3)), { paidCount: 2, medianDays: 91.5, maxDays: 171, lateCount: 1 })
   assert.deepEqual(paymentDays(ledger, month(2026, 12)), { paidCount: 0, medianDays: null, maxDays: null, lateCount: 0 })
   assert.equal(ledger[1].daysToPaid, 30, 'mediana na projekt (12, 30, 35)')
+})
+
+// ── Koszty idą za fakturami (decyzja 2026-11-05) ─────────────────────────────
+
+test('periodCostShare: udział = kawałki w okresie / suma kawałków; udziały jednego projektu dają 1', () => {
+  const ledger = moneyLedger(
+    [project({ costs: [cost(19_535)] })],
+    [ev('invoice_sent', '2026-09-16', { amountNetto: 2_500 }), ev('invoice_sent', '2026-11-20', { amountNetto: 7_500 })],
+    TODAY
+  )
+  const money = ledger[0]
+  near(periodCostShare(money, month(2026, 9)), 0.25)
+  near(periodCostShare(money, month(2026, 11)), 0.75)
+  near(periodCostShare(money, month(2026, 10)), 0)
+  near(periodCostShare(money, { kind: 'year', year: 2026 }), 1)
+  const all = Array.from({ length: 12 }, (_, i) => periodCostShare(money, month(2026, i + 1)))
+  near(all.reduce((a, b) => a + b, 0), 1)
+  near(summarizeMoney(ledger, [], month(2026, 9)).costs, 19_535 * 0.25)
+})
+
+test('periodCostShare: przychód nieznany albo 0 — całość w kotwicy', () => {
+  const unknown = moneyLedger([project({ financials: undefined, costs: [cost(1_000)] })], [], TODAY)[0]
+  assert.equal(unknown.revenue, null)
+  assert.equal(periodCostShare(unknown, month(2026, 9)), 1)
+  assert.equal(periodCostShare(unknown, month(2026, 10)), 0)
 })
