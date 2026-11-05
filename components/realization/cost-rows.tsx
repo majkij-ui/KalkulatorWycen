@@ -5,8 +5,8 @@
  * koszt (kategoria, opis, kwota). Kwoty wpisuje się po polsku („1 234,50").
  */
 
-import { useEffect, useId, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { Scissors, X } from 'lucide-react'
 import { parseAmount } from '@/lib/event-draft'
 import { useCrew } from '@/lib/crew-context'
 import { costRowRolePatch } from '@/lib/crew-rates'
@@ -14,6 +14,7 @@ import { crewMemberById, rolesForPerson } from '@/lib/crew-types'
 import { costAmount, type CrewSuggestion } from '@/lib/project-costs'
 import { COST_CATEGORIES, costCategoryLabel, type ProjectCost } from '@/lib/project-types'
 import { isPlainAmount, plainAmountPatch } from '@/lib/realization-costs'
+import { canSplit, quantityValue } from '@/lib/realization-control'
 import { pln } from '@/components/calendar/calendar-bits'
 import { PersonPicker } from './person-picker'
 import { RentalItemPicker, type RentalDictionary } from './rental-item-picker'
@@ -65,6 +66,124 @@ export function AmountInput({
       }}
       className={`${fieldClass} text-right tabular-nums ${className}`}
     />
+  )
+}
+
+
+function quantityText(value: number): string {
+  return String(value).replace('.', ',')
+}
+
+/** W2: ilość wiersza (dni, osoby, sztuki) — liczba ≥ 0, także ułamkowa („0,5"). */
+export function QuantityInput({
+  value,
+  onChange,
+  className = '',
+}: {
+  value: number
+  onChange: (value: number) => void
+  className?: string
+}) {
+  const [text, setText] = useState(() => quantityText(value))
+  const focused = useRef(false)
+  useEffect(() => {
+    if (!focused.current) setText(quantityText(value))
+  }, [value])
+  return (
+    <input
+      inputMode="decimal"
+      value={text}
+      aria-label="Ilość"
+      title="Ilość (dni, osoby, sztuki)"
+      onFocus={() => {
+        focused.current = true
+      }}
+      onBlur={() => {
+        focused.current = false
+        setText(quantityText(value))
+      }}
+      onChange={(e) => {
+        setText(e.target.value)
+        onChange(quantityValue(parseAmount(e.target.value) ?? 0))
+      }}
+      className={`${fieldClass} w-12 shrink-0 text-right tabular-nums ${className}`}
+    />
+  )
+}
+
+/** Ilość × stawka: pole ilości i „×". */
+function QuantityPart({ cost, onChange, dim }: { cost: ProjectCost; onChange: (patch: Partial<ProjectCost>) => void; dim: string }) {
+  return (
+    <>
+      <QuantityInput value={cost.quantity ?? 1} onChange={(quantity) => onChange({ quantity })} className={dim} />
+      <span className="shrink-0 text-xs text-zinc-500" aria-hidden>
+        ×
+      </span>
+    </>
+  )
+}
+
+/** Wartość wiersza po polu stawki — widoczna, gdy ilość ≠ 1. */
+function RowValue({ cost }: { cost: ProjectCost }) {
+  if ((cost.quantity ?? 1) === 1) return null
+  return (
+    <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-zinc-400" title="Wartość wiersza (ilość × stawka)">
+      = {pln(costAmount(cost))}
+    </span>
+  )
+}
+
+/** Dzień do wyboru przy przenoszeniu pojedynczego wiersza. */
+export interface MoveTarget {
+  id: string
+  label: string
+}
+
+/** W2: „Rozdziel" (ilość > 1) i „Przenieś do dnia…" przy pojedynczym wierszu. */
+export function RowTools({
+  cost,
+  targets,
+  onSplit,
+  onMove,
+}: {
+  cost: ProjectCost
+  targets?: MoveTarget[]
+  onSplit?: () => void
+  onMove?: (dayId: string) => void
+}) {
+  const options = (targets ?? []).filter((t) => t.id !== cost.dayId)
+  const split = !!onSplit && canSplit(cost)
+  if (!split && !(onMove && options.length > 0)) return null
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {split && (
+        <button
+          type="button"
+          onClick={onSplit}
+          aria-label="Rozdziel na pojedyncze wiersze"
+          title="Rozbija wiersz na pojedyncze (ilość 1) — suma się nie zmienia"
+          className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-zinc-400 outline-none hover:bg-white/5 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-white/60"
+        >
+          <Scissors className="size-3" />
+          Rozdziel
+        </button>
+      )}
+      {onMove && options.length > 0 && (
+        <select
+          value=""
+          aria-label="Przenieś ten wiersz do dnia"
+          onChange={(e) => e.target.value && onMove(e.target.value)}
+          className="h-7 w-[92px] rounded-md border border-white/10 bg-black/40 px-1 text-[11px] text-zinc-400"
+        >
+          <option value="">Do dnia…</option>
+          {options.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </span>
   )
 }
 
@@ -141,8 +260,11 @@ export function CrewRow({
   onChange,
   onRemove,
   mechanics,
+  tools,
 }: {
   cost: ProjectCost
+  /** W2: „Rozdziel" i „Przenieś do dnia…". */
+  tools?: ReactNode
   /** R2: zaznaczenie i „Moja praca"; brak = wiersz jak dotąd. */
   mechanics?: LineMechanics
   /** Imiona z innych projektów spoza bazy — trzecia sekcja listy wyboru. */
@@ -154,7 +276,6 @@ export function CrewRow({
 }) {
   const ownListId = useId()
   const { allPeople, roles } = useCrew()
-  const quantity = cost.quantity ?? 1
   const member = crewMemberById(allPeople, cost.personId)
   const { own, others } = rolesForPerson(member, roles)
   const personal = own.length > 0
@@ -172,11 +293,7 @@ export function CrewRow({
         className={`${fieldClass} flex-[2] ${dim}`}
       />
       {personal && <CrewRoleDatalist id={ownListId} names={[...own, ...others].map((r) => r.name)} />}
-      {quantity !== 1 && (
-        <span className="shrink-0 text-xs tabular-nums text-zinc-500" title="Ilość (dni, osoby)">
-          {String(quantity).replace('.', ',')} ×
-        </span>
-      )}
+      <QuantityPart cost={cost} onChange={onChange} dim={dim} />
       <AmountInput
         value={cost.unitCost}
         onChange={(unitCost) => onChange({ unitCost })}
@@ -184,6 +301,8 @@ export function CrewRow({
         className={`w-24 shrink-0 ${dim}`}
       />
       <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+      <RowValue cost={cost} />
+      {tools}
       {mechanics && <WorkPill mechanics={mechanics} />}
       <RemoveButton label="Usuń osobę" onClick={onRemove} />
     </div>
@@ -218,8 +337,11 @@ export function CostRow({
   onChange,
   onRemove,
   mechanics,
+  tools,
 }: {
   cost: ProjectCost
+  /** W2: „Rozdziel" i „Przenieś do dnia…". */
+  tools?: ReactNode
   /** R2: zaznaczenie i „Moja praca"; brak = wiersz jak dotąd. */
   mechanics?: LineMechanics
   /** Koszty całego projektu mogą być też „ekipą" (np. montażysta na cały projekt). */
@@ -229,7 +351,6 @@ export function CostRow({
 }) {
   const id = useId()
   const plain = isPlainAmount(cost)
-  const quantity = plain ? 1 : (cost.quantity ?? 1)
   const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
   return (
     <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
@@ -254,11 +375,7 @@ export function CostRow({
         onChange={(e) => onChange(cost.category === 'ekipa' ? { person: e.target.value } : { label: e.target.value })}
         className={`${fieldClass} w-full flex-1 sm:w-auto ${dim}`}
       />
-      {quantity !== 1 && (
-        <span className="shrink-0 text-xs tabular-nums text-zinc-500" title={`Razem ${pln(costAmount(cost))}`}>
-          {String(quantity).replace('.', ',')} ×
-        </span>
-      )}
+      {!plain && <QuantityPart cost={cost} onChange={onChange} dim={dim} />}
       {plain ? (
         <AmountInput
           value={roundedAmount(cost)}
@@ -271,11 +388,13 @@ export function CostRow({
         <AmountInput
           value={cost.unitCost}
           onChange={(unitCost) => onChange({ unitCost })}
-          label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota (zł netto)'}
+          label="Stawka (zł netto)"
           className={`w-24 shrink-0 ${dim}`}
         />
       )}
       <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+      {!plain && <RowValue cost={cost} />}
+      {tools}
       {mechanics && <WorkPill mechanics={mechanics} />}
       <RemoveButton label="Usuń koszt" onClick={onRemove} />
     </div>
@@ -336,7 +455,10 @@ export function RentalRow({
   onRemove,
   mechanics,
   withCrewCategory = false,
+  tools,
 }: {
+  /** W2: „Rozdziel" i „Przenieś do dnia…". */
+  tools?: ReactNode
   cost: ProjectCost
   dictionary: RentalDictionary
   onChange: (patch: Partial<ProjectCost>) => void
@@ -346,7 +468,6 @@ export function RentalRow({
 }) {
   const id = useId()
   const dim = mechanics && !mechanics.counted ? 'opacity-50' : ''
-  const quantity = cost.quantity ?? 1
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
@@ -365,18 +486,16 @@ export function RentalRow({
           ))}
         </select>
         <RentalItemPicker cost={cost} dictionary={dictionary} onChange={onChange} className={`w-full flex-1 sm:w-auto ${dim}`} />
-        {quantity !== 1 && (
-          <span className="shrink-0 text-xs tabular-nums text-zinc-500" title={`Razem ${pln(costAmount(cost))}`}>
-            {String(quantity).replace('.', ',')} ×
-          </span>
-        )}
+        <QuantityPart cost={cost} onChange={onChange} dim={dim} />
         <AmountInput
           value={cost.unitCost}
           onChange={(unitCost) => onChange({ unitCost })}
-          label={quantity !== 1 ? 'Stawka (zł netto)' : 'Kwota wynajmu (zł netto)'}
+          label={(cost.quantity ?? 1) !== 1 ? 'Stawka (zł netto)' : 'Kwota wynajmu (zł netto)'}
           className={`w-24 shrink-0 ${dim}`}
         />
         <span className="w-8 shrink-0 text-xs text-zinc-500">zł</span>
+        <RowValue cost={cost} />
+        {tools}
         {mechanics && <WorkPill mechanics={mechanics} />}
         <RemoveButton label="Usuń wynajem" onClick={onRemove} />
       </div>

@@ -16,7 +16,9 @@ import type { GearDay, ProjectCost } from '@/lib/project-types'
 import { itemLabel } from '@/lib/pl-plural'
 import { KindChip, mono, pln } from '@/components/calendar/calendar-bits'
 import type { DayRemoval } from '@/components/equipment/project-equipment'
-import { CostRow, CrewRow, RentalRow, type LineMechanics } from './cost-rows'
+import { useCrew } from '@/lib/crew-context'
+import { crewRowFromPerson, crewRowFromRole } from '@/lib/realization-control'
+import { CostRow, CrewRow, RentalRow, RowTools, type LineMechanics, type MoveTarget } from './cost-rows'
 import type { RentalDictionary } from './rental-item-picker'
 import { DayCalendar, type DayCalendarActions } from './day-calendar'
 
@@ -59,12 +61,25 @@ export interface LineHandlers {
   mechanics: (cost: ProjectCost) => LineMechanics
   onChangeCost: (cost: ProjectCost, patch: Partial<ProjectCost>) => void
   onRemoveCost: (cost: ProjectCost) => void
+  /** W2: dni, do których da się przenieść pojedynczy wiersz. */
+  moveTargets?: MoveTarget[]
+  /** W2: „Rozdziel" (ilość > 1) i „Przenieś do dnia…" przy jednym wierszu. */
+  onSplitCost?: (cost: ProjectCost) => void
+  onMoveCost?: (cost: ProjectCost, dayId: string) => void
   /** U2: słownik wynajmowanego sprzętu — wiersze wynajmu wybierają z niego pozycję. */
   rentals?: RentalDictionary
 }
 
 /** Wiersze ekipy i kosztów jednej grupy (dzień albo dzień wyceny bez odpowiednika). */
 export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: LineHandlers }) {
+  const toolsFor = (cost: ProjectCost) => (
+    <RowTools
+      cost={cost}
+      targets={handlers.moveTargets}
+      onSplit={handlers.onSplitCost && (() => handlers.onSplitCost!(cost))}
+      onMove={handlers.onMoveCost && ((dayId) => handlers.onMoveCost!(cost, dayId))}
+    />
+  )
   const crew = lines.filter(isCrew)
   const rentals = lines.filter((c) => !isCrew(c) && c.category === 'wynajem')
   const other = lines.filter((c) => !isCrew(c) && c.category !== 'wynajem')
@@ -79,6 +94,7 @@ export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: 
               outsiders={handlers.outsiders}
               roleListId={handlers.roleListId}
               mechanics={handlers.mechanics(cost)}
+              tools={toolsFor(cost)}
               onChange={(patch) => handlers.onChangeCost(cost, patch)}
               onRemove={() => handlers.onRemoveCost(cost)}
             />
@@ -94,6 +110,7 @@ export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: 
                 cost={cost}
                 dictionary={handlers.rentals}
                 mechanics={handlers.mechanics(cost)}
+                tools={toolsFor(cost)}
                 onChange={(patch) => handlers.onChangeCost(cost, patch)}
                 onRemove={() => handlers.onRemoveCost(cost)}
               />
@@ -103,6 +120,7 @@ export function DayLines({ lines, handlers }: { lines: ProjectCost[]; handlers: 
                 cost={cost}
                 withCrewCategory={false}
                 mechanics={handlers.mechanics(cost)}
+                tools={toolsFor(cost)}
                 onChange={(patch) => handlers.onChangeCost(cost, patch)}
                 onRemove={() => handlers.onRemoveCost(cost)}
               />
@@ -260,10 +278,12 @@ function DayCard({
             type="button"
             onClick={() => onAddCost(day.id, { category: 'ekipa', person: '', role: '', quantity: 1, unitCost: 0 })}
             className={`${smallButton} -ml-1.5`}
+            title="Pusty wiersz ekipy do wypełnienia ręcznie"
           >
             <Plus className="size-3.5" />
-            Osoba
+            Wiersz ekipy
           </button>
+          <CrewAdder onAdd={(init) => onAddCost(day.id, init)} />
           <button
             type="button"
             onClick={() => onAddCost(day.id, { category: 'wynajem', label: '', quantity: 1, unitCost: 0 })}
@@ -286,5 +306,51 @@ function DayCard({
         </div>
       </section>
     </article>
+  )
+}
+
+/**
+ * W2: dwie równoległe listy do dodania wiersza ekipy — „Rola…" (wiersz z rolą
+ * i jej kosztem) albo „Osoba…" (jej pierwsza rola i stawka; „Ja" = moja praca).
+ */
+function CrewAdder({ onAdd }: { onAdd: (init: NewCost) => void }) {
+  const { people, activeRoles, roles } = useCrew()
+  const selectClass =
+    'h-7 w-[104px] rounded-md border border-white/10 bg-black/40 px-1 text-[11px] text-zinc-400 outline-none focus:border-white/30'
+  return (
+    <>
+      <select
+        value=""
+        aria-label="Dodaj osobę według roli"
+        onChange={(e) => {
+          const role = activeRoles.find((r) => r.id === e.target.value)
+          if (role) onAdd(crewRowFromRole(role))
+        }}
+        className={selectClass}
+      >
+        <option value="">Rola…</option>
+        {activeRoles.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.name}
+          </option>
+        ))}
+      </select>
+      <select
+        value=""
+        aria-label="Dodaj osobę z ekipy"
+        onChange={(e) => {
+          const member = people.find((m) => m.id === e.target.value)
+          if (member) onAdd(crewRowFromPerson(member, roles))
+        }}
+        className={selectClass}
+      >
+        <option value="">Osoba…</option>
+        {people.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.self ? `${m.name} (Ja)` : m.name}
+          </option>
+        ))}
+      </select>
+    </>
   )
 }
