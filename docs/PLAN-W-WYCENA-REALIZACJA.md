@@ -63,3 +63,11 @@ Przykład: cena bazowa 10 000 zł, prawa 30%, surowy 20%.
 Dane: projekty z ekipą z szybkiej wyceny, np. Filmy 5 lokacji OmniOffice („2 os. × 2 dni"
 × 4 i „Dopłata Reż-Op" × 2), Tchibo Event, S-AI, M&L Pakiet. Istniejące wiersze nie zmieniają się
 same.
+
+### W2 as built
+
+- Logika w `lib/realization-control.ts` (`splitCost`, `canSplit`, `crewRowFromRole`, `crewRowFromPerson`, `quantityValue`), testy w `lib/realization-control.test.ts`. UI: `QuantityInput` i `RowTools` w `cost-rows.tsx`, `CrewAdder` w `day-cards.tsx`, `splitRow`/`moveRow` w `project-realization.tsx`; wszystko idzie przez `targetOf`/`ensureStarted` (pierwsza zmiana szkicu zapisuje cały szkic).
+- Ilość: pole „N ×" w każdym wierszu ekipy, kosztu i wynajmu, obok „= wartość". Wiersz „Dojazd" zostaje jedną kwotą (bez pola ilości); stary km × zł/km pokazuje kwotę jak dotąd.
+- „Rozdziel": pierwszy wiersz to ten sam rekord (ilość 1), reszta to kopie tuż za nim; ułamek w ostatnim. Wiersz z planu: kopie dostają klucz `<klucz>#n` (kolejny wolny numer) i `edited`, oryginał zostaje z kluczem i `edited`, więc „Uwzględnij" niczego nie dokłada ani nie nadpisuje. Cofnięcie w komunikacie przywraca listę sprzed rozdzielenia.
+- „Przenieś do dnia…" przy wierszu: zwykła zmiana `dayId` (`edited`), także w kartach dni; grupowe przenoszenie bez zmian.
+- Dodawanie ekipy: „Wiersz ekipy" (pusty, ręczny), „Rola…" (nazwa roli i jej koszt) i „Osoba…" (pierwsza rola i stawka w niej, inaczej stawka ogólna; „Ja" = moja praca).
