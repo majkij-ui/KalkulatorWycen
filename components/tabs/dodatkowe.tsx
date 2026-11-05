@@ -36,19 +36,6 @@ const item = {
   show: { opacity: 1, y: 0 },
 }
 
-const COPYRIGHT_OPCJE: { value: QuoteData['copyrightType']; label: string; subtext: string }[] = [
-  {
-    value: 'licencja',
-    label: 'Licencja podstawowa',
-    subtext: 'Ograniczona czasowo i polami eksploatacji (w cenie)',
-  },
-  {
-    value: 'przekazanie',
-    label: 'Pełne przekazanie praw',
-    subtext: 'Warunki w Uwagach PDF; cenę ustawiasz niżej (prawa: w cenie / jako opcja)',
-  },
-]
-
 const inputClass =
   'w-20 h-8 text-right bg-black/40 border-white/10 text-sm rounded-md tabular-nums text-white'
 
@@ -495,23 +482,6 @@ export function DodatkoweTab() {
               <h3 className="font-semibold text-white">Licencja i Prawa Autorskie</h3>
             </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {COPYRIGHT_OPCJE.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => updateField('copyrightType', o.value)}
-                className={`flex flex-1 min-w-[200px] flex-col items-start rounded-lg border p-3 text-left transition-all ${
-                  data.copyrightType === o.value
-                    ? 'border-primary/50 bg-primary/10'
-                    : 'border-white/5 bg-zinc-900/50 hover:bg-white/5 hover:border-white/10'
-                }`}
-              >
-                <span className="text-sm font-medium text-white">{o.label}</span>
-                <span className="mt-0.5 text-xs text-zinc-400">{o.subtext}</span>
-              </button>
-            ))}
-          </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <ExtraControl
               id="rights"
@@ -524,7 +494,11 @@ export function DodatkoweTab() {
               fixed={rightsSetting.fixed}
               unit={unit}
               amountText={rightsView.amountText}
-              onMode={(m) => updateField('rightsMode', m)}
+              onMode={(m) => {
+                updateField('rightsMode', m)
+                // Stary czytnik copyrightType: w sync z trybem praw.
+                updateField('copyrightType', m === 'w-cenie' ? 'przekazanie' : 'licencja')
+              }}
               onKind={(k) => updateField('rightsAmountKind', k)}
               onPercent={(v) => updatePricingValue('dodatkowe', 'pelnePrzekazaniePrawProcent', v)}
               onFixed={(v) => updateField('rightsFixedAmount', v)}
@@ -547,7 +521,7 @@ export function DodatkoweTab() {
             />
           </div>
           <AnimatePresence initial={false}>
-            {data.copyrightType === 'przekazanie' && (
+            {rightsSetting.mode === 'w-cenie' && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}

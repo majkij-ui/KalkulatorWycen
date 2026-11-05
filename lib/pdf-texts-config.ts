@@ -12,6 +12,7 @@
  *   termRevisions / termRevisions_en → {count}, {price}
  */
 
+import { rightsIncluded } from './quote-extras'
 import { getLoadedCompany, LEGACY_COMPANY_KEYS, patchLoadedCompany } from './company-settings-core'
 
 export interface PdfTextsConfig {
@@ -222,7 +223,7 @@ export function buildTermsAndConditions(
   const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
 
   const out: string[] = []
-  const transfer = data.copyrightType === 'przekazanie' || data.rightsMode === 'w-cenie'
+  const transfer = rightsIncluded(data)
   if (!transfer && tplLicencja) {
     out.push(tplLicencja)
   }

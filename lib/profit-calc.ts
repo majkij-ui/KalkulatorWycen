@@ -24,6 +24,7 @@ import type {
 } from './quote-types'
 import type { PricingConfigShape } from './pricing-config'
 import { safeNum, safeArray } from './safe-numbers'
+import { rightsIncluded } from './quote-extras'
 
 export interface ProfitDerivedLine {
   key: string
@@ -284,7 +285,7 @@ export function buildDerivedCostLines(
   })
 
   // Honorarium aktorów za przekazanie praw — realny koszt (wypłacany aktorom)
-  if (data.copyrightType === 'przekazanie') {
+  if (rightsIncluded(data)) {
     const liczba = safeNum(data.liczbaAktorow, 0, 0)
     const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
     if (liczba > 0 && perActor > 0) {

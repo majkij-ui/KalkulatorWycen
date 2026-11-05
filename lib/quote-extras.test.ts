@@ -215,3 +215,31 @@ test('warianty: każdy ma własne ustawienia (dane wariantu)', () => {
   assert.equal(total(a), 13000)
   assert.equal(total(b), 12000)
 })
+
+test('sprzeczność radio/tryb: tryb praw jest jedyną prawdą (Uwagi, opis PDF, honorarium)', () => {
+  const terms = (d: QuoteData) => buildTermsAndConditions(d, DEFAULT_PDF_TEXTS, 'pl', { currency: 'PLN' })
+  const lic = terms(mergeQuoteDataPartial({ copyrightType: 'licencja' }))[0]
+  const tr = terms(mergeQuoteDataPartial({ copyrightType: 'przekazanie' }))[0]
+  const act = { liczbaAktorow: 2, actorRightsTransferAmount: 500 }
+  const costs = (d: QuoteData) => buildDerivedCostLines(d, PRICING, 1).map((l) => l.key).join()
+
+  // Dawne „Pełne przekazanie" + „Jako opcja": licencja, bez honorarium w cenie i w kosztach.
+  const optTr = quote('opcja', 'ukryj', { copyrightType: 'przekazanie', ...act })
+  assert.equal(terms(optTr)[0], lic)
+  assert.equal(total(optTr), 10000)
+  assert.doesNotMatch(pdfFor(optTr).state.rows.obsada.opis, /500/)
+  assert.doesNotMatch(costs(optTr), /aktorzyPrawa/)
+
+  // Dawna „Licencja" + „W cenie": przekazanie, honorarium liczy się.
+  const inLic = quote('w-cenie', 'ukryj', { copyrightType: 'licencja', ...act })
+  assert.equal(terms(inLic)[0], tr)
+  assert.equal(total(inLic), 11000 + 0.3 * 11000)
+  assert.match(costs(inLic), /aktorzyPrawa/)
+})
+
+test('stara wycena przekazanie z honorarium aktorów: cena i koszt jak dotąd', () => {
+  const old = mergeQuoteDataPartial({ ...BASE_PL, copyrightType: 'przekazanie', liczbaAktorow: 2, actorRightsTransferAmount: 500 })
+  assert.equal(total(old), 11000 + 3300)
+  assert.match(buildDerivedCostLines(old, PRICING, 1).map((l) => l.key).join(), /aktorzyPrawa/)
+  assert.match(pdfFor(old).state.rows.obsada.opis, /500/)
+})

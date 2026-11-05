@@ -95,6 +95,15 @@ export function newQuoteExtras(): Pick<QuoteData, 'rightsMode' | 'rightsAmountKi
   }
 }
 
+/**
+ * Prawa „W cenie" — jedyna prawda dla Uwag, opisu PDF i honorarium aktorów.
+ * `copyrightType` zostaje w danych tylko dla starych czytników (zapis w sync
+ * ze zmianą trybu); stara wycena bez `rightsMode` czyta się jak dotąd.
+ */
+export function rightsIncluded(data: Partial<ExtraFields>): boolean {
+  return resolveExtra(data, null, 'rights').mode === 'w-cenie'
+}
+
 /** Te same pola wyzerowane (do porównań „czy wycena jest pusta"). */
 export const noExtras = {
   rightsMode: undefined,

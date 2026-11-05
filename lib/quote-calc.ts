@@ -6,7 +6,7 @@ import { safeNum, safeArray } from './safe-numbers'
 import { computeFuelRatePerKm } from './profit-calc'
 import { dayGearFigures } from './quote-gear'
 import { dayCrewFigures } from './quote-crew'
-import { EXTRA_LINE_LABEL, extraAmount, extraLineValue, resolveExtra } from './quote-extras'
+import { EXTRA_LINE_LABEL, rightsIncluded, extraAmount, extraLineValue, resolveExtra } from './quote-extras'
 
 const VAT_RATE = 0.23
 
@@ -273,7 +273,7 @@ function computeBreakdown(
   // Lands in Produkcja phase so the PDF Cast bucket reflects it; the
   // percentage-based "Pełne przekazanie praw" surcharge below still stacks
   // on top (acts on the resulting subtotal).
-  if (data.copyrightType === 'przekazanie') {
+  if (rightsIncluded(data)) {
     const liczbaAktorow = safeNum(data.liczbaAktorow, 0, 0)
     const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
     if (liczbaAktorow > 0 && perActor > 0) {
@@ -390,7 +390,7 @@ export function getProductionEkipaCastSprzetNetto(
   // no margin, mirroring getBreakdownWithPricing. Always added to the Cast
   // bucket so PDF presentation matches Produkcja phase total.
   const actorRightsBucket = (() => {
-    if (data.copyrightType !== 'przekazanie') return 0
+    if (!rightsIncluded(data)) return 0
     const liczba = safeNum(data.liczbaAktorow, 0, 0)
     const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
     if (liczba <= 0 || perActor <= 0) return 0
