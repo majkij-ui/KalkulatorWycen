@@ -486,7 +486,7 @@ export function ProjectHubProvider({ children }: { children: React.ReactNode }) 
   const chooseVariant = useCallback(
     async (projectId: string, variantId: string): Promise<ChooseVariantPlan> => {
       await quoteDocs.flushProject(projectId)
-      // Zmiany czekające na „Zastąp" żyją tylko w pamięci — zamiana by je zgubiła.
+      // Zapis, który się nie udał, żyje tylko w pamięci — zamiana by go zgubiła.
       if (quoteDocs.pendingIds().some((id) => id === projectId || id.startsWith(`${projectId}#`))) return { status: 'blocked' }
       const project = projectsRef.current.find((p) => p.id === projectId)
       if (!project) return { status: 'missing' }

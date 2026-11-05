@@ -71,8 +71,6 @@ test('isBlankQuoteData: każda pozycja wyceny to już nie pusta wycena', () => {
 test('retro-projekt otwarty i zapisany bez zmian: finanse i brak wyceny zostają', () => {
   const p = project()
   const plan = planProjectSave({ project: p, snapshot: freshlyOpened(p), now: NOW })
-  assert.equal(plan.status, 'ready')
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'kept')
   assert.equal(plan.project.quote, null)
   assert.deepEqual(plan.project.financials, IMPORTED)
@@ -87,7 +85,6 @@ test('marża ani cennik bez pozycji wyceny nie nadpisują zaimportowanych finans
     snapshot: snapshot(blankQuoteSnapshot(p.client).data, { marginMultiplier: 1.5 }),
     now: NOW,
   })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'kept')
   assert.deepEqual(plan.project.financials, IMPORTED)
 })
@@ -106,7 +103,6 @@ test('pusta wycena startuje od domyślnego cennika użytkownika; bez niego migaw
     snapshot: snapshot(opened.data, { pricingConfig: opened.pricingConfig }),
     now: NOW,
   })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'kept')
   assert.equal(plan.project.quote, null)
 })
@@ -114,7 +110,6 @@ test('pusta wycena startuje od domyślnego cennika użytkownika; bez niego migaw
 test('wpisanie samego klienta aktualizuje klienta, nie zakłada wyceny', () => {
   const p = project({ client: '' })
   const plan = planProjectSave({ project: p, snapshot: snapshot({ clientName: 'Nowy Klient' }), now: NOW })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'kept')
   assert.equal(plan.project.client, 'Nowy Klient')
   assert.equal(plan.project.quote, null)
@@ -124,7 +119,6 @@ test('wpisanie samego klienta aktualizuje klienta, nie zakłada wyceny', () => {
 test('lead bez finansów i nietknięty kalkulator: zostaje leadem (bez pustej wyceny i zer)', () => {
   const p = project({ status: 'quote', financials: null })
   const plan = planProjectSave({ project: p, snapshot: freshlyOpened(p), now: NOW })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'kept')
   assert.equal(plan.project.quote, null)
   assert.equal(plan.project.financials, null)
@@ -134,7 +128,6 @@ test('lead bez finansów i zbudowana wycena: zapis wyceny z policzonymi finansam
   const p = project({ status: 'quote', financials: null })
   const snap = snapshot({ clientName: 'ACME', dniDokumentacji: 2 })
   const plan = planProjectSave({ project: p, snapshot: snap, now: NOW })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'calculator')
   assert.equal(plan.project.quote, snap)
   assert.ok(plan.project.financials)
@@ -142,29 +135,18 @@ test('lead bez finansów i zbudowana wycena: zapis wyceny z policzonymi finansam
   assert.equal(plan.project.financials.computedAt, NOW.toISOString())
 })
 
-test('retro-projekt i zbudowana wycena: bez zgody nic nie nadpisuje, pyta z obiema kwotami', () => {
+test('retro-projekt i zbudowana wycena: zapis od razu, przychód z importu zostaje ceną końcową', () => {
   const p = project()
   const plan = planProjectSave({ project: p, snapshot: snapshot({ dniDokumentacji: 2 }), now: NOW })
-  assert.equal(plan.status, 'needs-confirmation')
-  assert.ok(plan.status === 'needs-confirmation')
-  assert.deepEqual(plan.current, IMPORTED)
-  assert.ok(plan.proposed)
-  assert.ok(plan.proposed.sumaNetto > 0)
-  assert.notEqual(plan.proposed.sumaNetto, IMPORTED.sumaNetto)
+  assert.equal(plan.source, 'calculator')
+  const quote = plan.project.quote as QuoteSnapshot
+  assert.deepEqual(quote.data.approvedPrice, { pln: IMPORTED.sumaNetto, source: 'import', at: NOW.toISOString() })
+  // Przychód planu = import (zatwierdzona cena), a nie suma kalkulatora.
+  assert.equal(plan.project.financials?.sumaNetto, IMPORTED.sumaNetto)
+  assert.equal(plan.project.financials?.revenueSource, 'approved')
   // Wejściowy projekt nietknięty.
   assert.deepEqual(p.financials, IMPORTED)
   assert.equal(p.quote, null)
-})
-
-test('retro-projekt i zbudowana wycena po potwierdzeniu: finanse z kalkulatora', () => {
-  const p = project()
-  const snap = snapshot({ dniDokumentacji: 2 })
-  const plan = planProjectSave({ project: p, snapshot: snap, replaceFinancials: true, now: NOW })
-  assert.ok(plan.status === 'ready')
-  assert.equal(plan.source, 'calculator')
-  assert.equal(plan.project.quote, snap)
-  assert.ok(plan.project.financials)
-  assert.notDeepEqual(plan.project.financials, IMPORTED)
 })
 
 test('projekt z wyceną zapisuje się jak dotąd: finanse zawsze z kalkulatora, bez pytania', () => {
@@ -172,7 +154,6 @@ test('projekt z wyceną zapisuje się jak dotąd: finanse zawsze z kalkulatora, 
   const p = project({ quote: previous })
   const snap = snapshot({ dniDokumentacji: 3 })
   const plan = planProjectSave({ project: p, snapshot: snap, now: NOW })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.source, 'calculator')
   assert.equal(plan.project.quote, snap)
   assert.ok(plan.project.financials)
@@ -183,25 +164,23 @@ test('klient z nagłówka wygrywa z etykietą PDF; PDF uzupełnia tylko pustego 
   const withQuote = project({ client: 'Tchibo', quote: snapshot({ dniDokumentacji: 1 }) })
   const legalName = snapshot({ clientName: 'Tchibo Polska Sp. z o.o.', dniDokumentacji: 2 })
   const plan = planProjectSave({ project: withQuote, snapshot: legalName, now: NOW })
-  assert.ok(plan.status === 'ready')
   assert.equal(plan.project.client, 'Tchibo')
   assert.equal((plan.project.quote as QuoteSnapshot).data.clientName, 'Tchibo Polska Sp. z o.o.', 'etykieta zostaje w wycenie')
 
   const noClient = project({ client: '  ', quote: snapshot({ dniDokumentacji: 1 }) })
   const filled = planProjectSave({ project: noClient, snapshot: legalName, now: NOW })
-  assert.ok(filled.status === 'ready')
   assert.equal(filled.project.client, 'Tchibo Polska Sp. z o.o.')
 })
 
-test('edytowany szkic PDF to praca: lead dostaje wycenę, retro-projekt pyta', () => {
+test('edytowany szkic PDF to praca: lead i retro-projekt dostają wycenę', () => {
   const draft = { pdfDraft: { terminZdjec: 'listopad' } }
   const lead = project({ status: 'quote', financials: null })
   const saved = planProjectSave({ project: lead, snapshot: snapshot(blankQuoteSnapshot(lead.client).data, draft), now: NOW })
-  assert.ok(saved.status === 'ready')
   assert.equal(saved.source, 'calculator')
   assert.deepEqual((saved.project.quote as QuoteSnapshot).pdfDraft, draft.pdfDraft)
 
   const retro = project()
   const asked = planProjectSave({ project: retro, snapshot: snapshot(blankQuoteSnapshot(retro.client).data, draft), now: NOW })
-  assert.equal(asked.status, 'needs-confirmation')
+  assert.equal(asked.source, 'calculator')
+  assert.equal((asked.project.quote as QuoteSnapshot).data.approvedPrice?.source, 'import')
 })

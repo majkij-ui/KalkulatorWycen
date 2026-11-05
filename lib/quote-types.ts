@@ -258,9 +258,12 @@ export interface ApprovedPriceRecord {
   pln: number
   /**
    * `pdf` / `calculator` — zamrożona suma PDF (albo kalkulatora, gdy wycena nie
-   * ma szkicu PDF); `typed` — wpisana ręcznie w zakładce Finanse projektu.
+   * ma szkicu PDF); `typed` — wpisana ręcznie w zakładce Finanse projektu;
+   * `import` — cena końcowa z finansów z importu (zapisana przy pierwszej
+   * wycenie projektu, `final-price.ts`); `override` — cena końcowa ustawiona
+   * ręcznie po ostrzeżeniu (zastępuje fakturę / import).
    */
-  source: 'pdf' | 'calculator' | 'typed'
+  source: 'pdf' | 'calculator' | 'typed' | 'import' | 'override'
   /** Kiedy zamrożono albo wpisano (ISO). */
   at: string
   /** Kwota w walucie dokumentu (tylko EUR, do podpisu „1 460 € × 4,3661"). */

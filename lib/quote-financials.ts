@@ -263,7 +263,7 @@ export function approvedPrice(data: QuoteData, pricing: PricingConfigShape, marg
 
 // ── Zatwierdzona cena (U1, decyzja 18.3/4) ───────────────────────────────────
 
-const PRICE_SOURCES = ['pdf', 'calculator', 'typed'] as const
+const PRICE_SOURCES = ['pdf', 'calculator', 'typed', 'import', 'override'] as const
 
 /**
  * Zapisana zatwierdzona cena albo `null` (brak / zepsuty zapis — wtedy cena
