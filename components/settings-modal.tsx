@@ -109,6 +109,7 @@ const PRICING_STRUCTURE: { category: CategoryKey; title: string; rows: PricingRo
       // kosztDojazduKm usunięty z UI — dojazd liczony jest równaniem paliwowym
       // (cena paliwa × spalanie), edytowanym w zakładkach Dodatkowe/Profit.
       { key: 'pelnePrzekazaniePrawProcent', label: 'Pełne przekazanie praw (% dopłaty)', step: 1 },
+      { key: 'surowyMaterialProcent', label: 'Przekazanie surowego materiału (% dopłaty)', step: 1 },
     ],
   },
 ]

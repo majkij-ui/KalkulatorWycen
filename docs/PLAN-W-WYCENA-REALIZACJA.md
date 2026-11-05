@@ -44,6 +44,13 @@ Przykład: cena bazowa 10 000 zł, prawa 30%, surowy 20%.
 | w cenie | w cenie | 15 000 | — |
 | nie pokazuj | nie pokazuj | 10 000 | — |
 
+### W1 as built
+
+- Logika w `lib/quote-extras.ts`; pola `rightsMode`, `rawMode`, `*AmountKind`, `*FixedAmount` są opcjonalne w `QuoteData` (bez nich: reguła ze starych wycen). Procenty (30 / 20) leżą w `pricing.dodatkowe` wyceny (`surowyMaterialProcent` nowe, edytowalne w Cenniku i w zakładce Dodatkowe).
+- Nowe wyceny dostają tryb „Jako opcja" przez `blankQuoteSnapshot` i `clearedDoc` (jak `marginAsLine`); tryb startowy jest stałą w kodzie, nie polem Cennika. Własna kwota jest w `TYPED_AMOUNT_FIELDS` (przelicza się raz przy zmianie waluty).
+- Linijki „Opcji dodatkowych" liczą się przy wydruku i w podglądzie (nad polem ręcznym), nie są zapisane w szkicu. „W cenie" wpada do „Inne koszty" i jest wymienione w opisie wiersza. Prawa „W cenie" w Uwagach PDF dają te same warunki co `przekazanie`.
+- Sprawdzone na prawdziwych danych (tylko odczyt): `sumaNetto`, koszty i zysk bez zmian.
+
 ## W2. Realizacja: pełna kontrola
 
 1. **Ilość edytowalna w każdym wierszu kosztu.** Liczba ≥ 0, także ułamkowa (0,5 dnia).

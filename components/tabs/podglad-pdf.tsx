@@ -29,6 +29,8 @@ import {
 } from '@/lib/pdf-draft'
 import { isTauriRuntime } from '@/lib/storage'
 import { PDF_LABELS, type PdfLang } from '@/lib/pdf-i18n'
+import { getExtrasBase } from '@/lib/quote-calc'
+import { buildOptionLines, joinOptionText } from '@/lib/quote-extras'
 import { formatPdfAmount, pdfCurrencyUnit, type PdfCurrency } from '@/lib/pdf-currency'
 import { buildQuoteBreakdown, computeQuoteTotals, quoteViews } from '@/lib/quote-financials'
 import { formatMoney, formatRate, switchQuoteCurrency } from '@/lib/quote-currency'
@@ -418,6 +420,21 @@ export function PodgladPdfTab() {
   // templates — never read back from the stored draft snapshot. Otherwise a
   // PL-saved draft would render in PL even after toggling the PDF to English.
   const effectiveTerms = terms
+
+  // W1: pozycje „Jako opcja" (prawa, surowy materiał) — linijki liczone z kalkulatora w
+  // języku i walucie PDF; stoją nad ręcznym tekstem i go nie zmieniają (jak punkty Uwag).
+  const autoOptionLines = useMemo(
+    () =>
+      buildOptionLines(
+        clientData,
+        clientPricing,
+        getExtrasBase(clientData, marginMultiplier, clientPricing),
+        localPdfState.pdfLanguage,
+        pdfMoney.currency,
+        pdfMoney.legacy ? (amount) => amount / pdfMoney.exchangeRate : undefined
+      ),
+    [clientData, clientPricing, marginMultiplier, localPdfState.pdfLanguage, pdfMoney.currency, pdfMoney.legacy, pdfMoney.exchangeRate]
+  )
 
   const mergedTerms = useMemo(() => {
     const manual = (uwagiManualText ?? '')
@@ -997,6 +1014,11 @@ export function PodgladPdfTab() {
                           <div className="text-[8pt] font-bold uppercase tracking-widest text-zinc-700 mb-1">
                             {L.additionalOptions}
                           </div>
+                          {autoOptionLines.length > 0 && (
+                            <div data-testid="auto-option-lines" className="mb-1 whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-700">
+                              {autoOptionLines.join('\n')}
+                            </div>
+                          )}
                           <AutoGrowTextarea
                             value={localPdfState.opcjeDodatkowe}
                             onChange={(next) => {
@@ -1139,7 +1161,13 @@ export function PodgladPdfTab() {
 
           {/* Hidden printable page for react-to-print */}
           <div ref={printRef} id="printable-quote" style={{ display: 'none' }}>
-            <PrintableQuote localPdfState={{ ...localPdfState, termsAndConditions: mergedTerms }} />
+            <PrintableQuote
+              localPdfState={{
+                ...localPdfState,
+                termsAndConditions: mergedTerms,
+                opcjeDodatkowe: joinOptionText(autoOptionLines, localPdfState.opcjeDodatkowe),
+              }}
+            />
           </div>
         </GlassCard>
       </motion.div>

@@ -1,5 +1,9 @@
 import { DEFAULT_FORMAT_KEY, type PricingConfigShape } from './pricing-config'
 
+/** W cenie (dolicza się do sumy) · Jako opcja (tylko linijka w PDF) · Nie pokazuj. */
+export type ExtraMode = 'w-cenie' | 'opcja' | 'ukryj'
+export type ExtraAmountKind = 'percent' | 'fixed'
+
 export type ScenarioType = 'brak' | 'podstawowy' | 'rozbudowany'
 /** Pakiet sprzętowy w trybie szybkiej wyceny (Produkcja) */
 export type PakietSprzetu = 'minimalistyczny' | 'standard' | 'kinowy'
@@ -306,6 +310,19 @@ export interface QuoteData {
   licencjaMuzyczna: MusicLicense
   /** Licencja podstawowa (w cenie) vs pełne przekazanie praw (dopłata %) */
   copyrightType: 'licencja' | 'przekazanie'
+  /**
+   * W1: przekazanie praw i surowego materiału — dwie pozycje z tymi samymi
+   * kontrolkami (tryb, % od ceny albo własna kwota). Pola opcjonalne: stara
+   * wycena ich nie ma i czyta się przez `resolveExtra` (lib/quote-extras.ts):
+   * `przekazanie` = prawa „W cenie", reszta = „Nie pokazuj". Procenty leżą w
+   * cenniku wyceny (`pricing.dodatkowe`), własna kwota w walucie wyceny.
+   */
+  rightsMode?: ExtraMode
+  rightsAmountKind?: ExtraAmountKind
+  rightsFixedAmount?: number
+  rawMode?: ExtraMode
+  rawAmountKind?: ExtraAmountKind
+  rawFixedAmount?: number
   /** One-shot PLN net per actor for transferring copyright (independent of shooting days). */
   actorRightsTransferAmount: number
   /** Number of actors used to multiply actorRightsTransferAmount.

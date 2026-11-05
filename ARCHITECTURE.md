@@ -216,3 +216,8 @@ React StrictMode in `npm run dev` runs effects twice; verify effect-order-sensit
 ## Realizacja row controls (W2)
 
 Cost-row quantity is editable everywhere except „Dojazd" (single amount); „Rozdziel" splits a row into quantity-1 rows and plan rows keep their `planKey` (copies get `#n` + `edited`), so the quote-change banner never re-adds an aggregated line. Pure helpers live in `lib/realization-control.ts`; every action goes through `ensureStarted` so the first change writes the whole draft.
+
+## Quote extras (W1)
+
+- Przekazanie praw i surowy materiał: `lib/quote-extras.ts` (`resolveExtra`, `extraAmount`, `buildOptionLines`). Optional `rightsMode`/`rawMode` (+ `*AmountKind`, `*FixedAmount`) on `QuoteData`; absent = legacy rule (`przekazanie` → „W cenie", else hidden). Percent base is `getExtrasBase` (price with margin, without both items); percents live in the quote's `pricing.dodatkowe`.
+- „Jako opcja" lines are computed at render time and printed above the manual „Opcje dodatkowe" text (never stored in the draft); „W cenie" items land in „Inne koszty" and are named in its description. Neither item is a Realizacja cost line.

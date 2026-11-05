@@ -17,6 +17,7 @@ import type { PricingConfigShape } from './pricing-config'
 import { PDF_LABELS, type PdfLang } from './pdf-i18n'
 import { formatPdfAmount, pdfCurrencyUnit, type PdfCurrency } from './pdf-currency'
 import { quoteMoney } from './quote-currency'
+import { includedExtraKeys, rightsIncluded } from './quote-extras'
 import { safeArray, safeNum } from './safe-numbers'
 
 export const DEFAULT_EXCHANGE_RATE = 4.3
@@ -223,7 +224,7 @@ export function getOpisInitial({
     const liczbaAktorow = safeNum(data.liczbaAktorow, 0, 0)
     const perActor = safeNum(data.actorRightsTransferAmount, 0, 0)
     const hasActorRights =
-      data.copyrightType === 'przekazanie' && liczbaAktorow > 0 && perActor > 0
+      rightsIncluded(data) && liczbaAktorow > 0 && perActor > 0
     const actorRightsLine = hasActorRights
       ? `${L.opisActorRightsTransfer}: ${liczbaAktorow} ${L.opisActorUnit}(s) × ${amount(perActor)}.`
       : null
@@ -279,8 +280,13 @@ export function getOpisInitial({
   // (voiceover & music live in per-deliverable postpro now), so the PDF
   // description only mentions the copyright arrangement.
   if (key === 'inne') {
-    const prawa = data.copyrightType === 'przekazanie' ? L.copyrightTransfer : L.copyrightLicense
-    return `${L.opisCopyright}: ${prawa}.`
+    // W1: prawa „W cenie" opisują się jak przekazanie; surowy materiał „W cenie" ma własną linię.
+    const included = includedExtraKeys(data)
+    const prawa =
+      included.includes('rights') ? L.copyrightTransfer : L.copyrightLicense
+    const lines = [`${L.opisCopyright}: ${prawa}.`]
+    if (included.includes('raw')) lines.push(`${L.opisRawMaterial}: ${L.opisIncluded}.`)
+    return lines.join('\n')
   }
 
   return ''

@@ -20,6 +20,7 @@ import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
 import type { PricingConfigShape } from './pricing-config'
 import type { QuoteData } from './quote-types'
+import { newQuoteExtras, noExtras } from './quote-extras'
 
 /**
  * Pusta wycena projektu bez wyceny: klient z wątku. Jedna definicja dla
@@ -37,7 +38,8 @@ export function blankQuoteSnapshot(
   pricing?: PricingConfigShape | null
 ): { data: Partial<QuoteData>; marginMultiplier: number; pricingConfig?: PricingConfigShape } {
   return {
-    data: { clientName: client, marginAsLine: true },
+    // W1: nowa wycena zaczyna z ustawieniami praw i surowego materiału z Cennika.
+    data: { clientName: client, marginAsLine: true, ...newQuoteExtras() },
     marginMultiplier: 1,
     ...(pricing ? { pricingConfig: pricing } : {}),
   }
@@ -67,8 +69,10 @@ function sameJson(a: unknown, b: unknown): boolean {
  */
 export function isBlankQuoteData(data: Partial<QuoteData>): boolean {
   // Sposób pokazania marży (R1) to nie budowanie wyceny — stara pusta wycena bez flagi też jest pusta.
-  const current = { ...mergeQuoteDataPartial(data), clientName: '', marginAsLine: undefined }
-  const blank = { ...mergeQuoteDataPartial(blankQuoteSnapshot('').data), clientName: '', marginAsLine: undefined }
+  // To samo dla ustawień W1 (tryby praw i surowego materiału): sama zmiana trybu nie jest wyceną.
+  const ignored = { clientName: '', marginAsLine: undefined, ...noExtras }
+  const current = { ...mergeQuoteDataPartial(data), ...ignored }
+  const blank = { ...mergeQuoteDataPartial(blankQuoteSnapshot('').data), ...ignored }
   return sameJson(current, blank)
 }
 
