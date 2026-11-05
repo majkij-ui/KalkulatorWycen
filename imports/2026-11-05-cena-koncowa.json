@@ -1,0 +1,604 @@
+{
+  "note": "Cena końcowa: suma faktur w wycenie i finansach 3 retro-projektów (decyzja M.J. 2026-11-05) — wygenerowane 2026-11-05T10:29:46.073Z",
+  "update": {
+    "projects.json": [
+      {
+        "id": "p-retro2026-p06",
+        "set": {
+          "quote": {
+            "version": 2,
+            "savedAt": "2026-10-24T23:20:27.200Z",
+            "data": {
+              "clientName": "Daniel Krężołek",
+              "projectName": "",
+              "isDetailedPrepro": false,
+              "scenariusz": "brak",
+              "dniDokumentacji": 0,
+              "wizjaLokalna": false,
+              "kierownikProdukcji": false,
+              "isDetailedProdukcja": false,
+              "dniZdjeciowe": 0,
+              "wielkoscEkipy": 1,
+              "crudeRezOpSurcharge": false,
+              "crudeDroneSurcharge": false,
+              "klasaSprzetu": "standard",
+              "detailedShootingDays": [],
+              "isDetailedPostpro": false,
+              "crudeEditUnit": "dni",
+              "crudeEditCount": 0,
+              "detailedDeliverables": [],
+              "dniMontazu": 0,
+              "korekcjaBarwna": false,
+              "animacje": "brak",
+              "kosztDojazduKm": 0,
+              "lektor": false,
+              "licencjaMuzyczna": "stock",
+              "copyrightType": "licencja",
+              "actorRightsTransferAmount": 0,
+              "liczbaAktorow": 0,
+              "includeRevisionsInfo": true,
+              "includedRevisions": 2,
+              "extraRevisionPrice": 200,
+              "includeOvertimeInfo": true,
+              "standardDayHours": 10,
+              "overtimeHourlyRate": 150,
+              "opcjeDodatkowe": "",
+              "includeCatering": false,
+              "cateringRate": 100,
+              "cateringOverride": false,
+              "cateringCustomDays": 1,
+              "includeLodging": false,
+              "lodgingRate": 300,
+              "lodgingOverride": false,
+              "lodgingCustomDays": 1,
+              "profitOverrides": {},
+              "profitCustomItems": [],
+              "profitTaxRatePercent": 8.5,
+              "profitTransferAmount": null,
+              "profitFuelPricePerLiter": 6.5,
+              "profitFuelConsumption": 8,
+              "gearDiscountPercent": 0,
+              "gearValueInPdf": true,
+              "crewPeopleInPdf": false,
+              "marginAsLine": true,
+              "approvedPrice": {
+                "pln": 9180,
+                "source": "import",
+                "at": "2026-11-05T10:29:46.073Z"
+              }
+            },
+            "pricingConfig": {
+              "preprodukcja": {
+                "dzienDokumentacji": 1200,
+                "scenariuszPodstawowy": 1800,
+                "scenariuszRozbudowany": 3500,
+                "wizjaLokalna": 800,
+                "kierownikProdukcji": 1500
+              },
+              "produkcja": {
+                "stawkaOperatoraSzybkaWycena": 1200,
+                "doplataRezOpSzybkaWycena": 500,
+                "doplataDronSzybkaWycena": 300,
+                "pakietSprzetowyMinimalistyczny": 300,
+                "pakietSprzetowyStandard": 400,
+                "pakietSprzetowyKinowy": 1500,
+                "rezOp": 1500,
+                "asystentOperator": 1500,
+                "gafer": 1600,
+                "dzwiekowiec": 1500,
+                "mua": 800,
+                "aktor": 2500,
+                "model": 1500,
+                "statystaEpizodysta": 1000,
+                "kameraSonyMirrorless": 300,
+                "kameraRedKomodoX": 600,
+                "obiektywyStandard": 100,
+                "obiektywyRental": 1500,
+                "stabilizacjaStandard": 100,
+                "stabilizacjaRental": 800,
+                "podgladStandard": 0,
+                "podgladRental": 600,
+                "swiatloStandard": 400,
+                "swiatloRental": 600,
+                "dronDji": 300,
+                "dronFpv": 1500
+              },
+              "postprodukcja": {
+                "montazZaDzien": 1200,
+                "montazZaGodzine": 200,
+                "Format: do 30sek shorts/reel": 450,
+                "Format: Reportaż 1-3min": 2500,
+                "korekcjaBarwnaPodstawowa": 500,
+                "korekcjaBarwnaZaawansowana": 1200,
+                "animacje2d": 1000,
+                "animacjeAi": 1500,
+                "muzykaCopyfree": 300,
+                "muzykaKompozytor": 3000,
+                "soundDesignProsty": 500,
+                "soundDesignZlozony": 1500,
+                "masterDzwiekuPodstawowy": 400,
+                "masterDzwiekuZlozony": 1000,
+                "lektorAi": 250,
+                "lektorStudio": 1000,
+                "Format: 10min YouTube": 1850
+              },
+              "dodatkowe": {
+                "kosztDojazduKm": 2,
+                "pelnePrzekazaniePrawProcent": 0
+              }
+            },
+            "marginMultiplier": 1,
+            "pdfDraft": {
+              "clientName": "Daniel Krężołek",
+              "projectName": "",
+              "issueDateIso": "25.10.2026",
+              "validUntilIso": "24.11.2026",
+              "terminZdjec": "Do ustalenia",
+              "showVat": false,
+              "pdfLanguage": "pl",
+              "currency": "PLN",
+              "exchangeRate": 1,
+              "rows": {
+                "preprodukcja": {
+                  "key": "preprodukcja",
+                  "title": "Preprodukcja",
+                  "opis": "Dokumentacja: 0 dni.\nScenariusz: Brak.",
+                  "cenaNetto": 0
+                },
+                "ekipa": {
+                  "key": "ekipa",
+                  "title": "Ekipa filmowa",
+                  "opis": "Tryb szybkiej wyceny: 0 dni × 1 os.\nDopłata Reż-Op: Nie.",
+                  "cenaNetto": 3000
+                },
+                "obsada": {
+                  "key": "obsada",
+                  "title": "Obsada",
+                  "opis": "Brak wyceny obsady — tryb szybkiej wyceny.",
+                  "cenaNetto": 0
+                },
+                "sprzet": {
+                  "key": "sprzet",
+                  "title": "Sprzęt filmowy",
+                  "opis": "Klasa sprzętu: standard.\nDopłata Dron: Nie.",
+                  "cenaNetto": 3170
+                },
+                "logistyka": {
+                  "key": "logistyka",
+                  "title": "Logistyka",
+                  "opis": "Dojazd: 0 km.\nCatering: Nie.\nNoclegi: Nie.",
+                  "cenaNetto": 0
+                },
+                "postprodukcja": {
+                  "key": "postprodukcja",
+                  "title": "Postprodukcja",
+                  "opis": "Montaż w trybie szybkiej wyceny: 0 dni.",
+                  "cenaNetto": 0
+                },
+                "inne": {
+                  "key": "inne",
+                  "title": "Inne koszty",
+                  "opis": "Prawa autorskie: niewyłączna licencja.",
+                  "cenaNetto": 0
+                },
+                "marza": {
+                  "key": "marza",
+                  "title": "Koordynacja i produkcja",
+                  "opis": "Koordynacja projektu i produkcji: przygotowanie, kontakt, nadzór nad ekipą i harmonogramem.",
+                  "cenaNetto": 0
+                }
+              },
+              "materialyKoncowe": "",
+              "opcjeDodatkowe": "",
+              "portfolioRows": [
+                {
+                  "url": "",
+                  "description": ""
+                },
+                {
+                  "url": "",
+                  "description": ""
+                }
+              ],
+              "termsAndConditions": [
+                "Cena obejmuje realizację filmu oraz udzielenie niewyłącznej licencji na jego wykorzystanie w Internecie na kanałach własnych Zamawiającego oraz do użytku wewnętrznego, bez ograniczeń terytorialnych, na czas nieoznaczony, z zastrzeżeniem że w przypadku wykorzystania wizerunku aktorów lub materiałów licencjonowanych, okres licencji może zostać ograniczony zgodnie z warunkami udzielonych zgód i licencji.",
+                "1 dzień zdjęciowy obejmuje maksymalnie 10 godzin pracy na planie. Praca powyżej tego czasu rozliczana jest jako nadgodziny w kwocie 150 zł netto za członka ekipy, liczone za każdą rozpoczętą godzinę.",
+                "Cena obejmuje do 2 rund poprawek montażowych. Kolejne zmiany podlegają dodatkowej wycenie w kwocie 200 zł netto za rundę.",
+                "Podane kwoty są kwotami netto. Do kwot należy doliczyć VAT zgodnie z obowiązującymi przepisami."
+              ],
+              "followsQuote": true,
+              "uwagiManualText": ""
+            }
+          },
+          "financials": {
+            "sumaNetto": 9180,
+            "koszty": 0,
+            "podatek": 780.3000000000001,
+            "zysk": 8399.7,
+            "marzaPct": 91.5,
+            "computedAt": "2026-11-05T10:29:46.073Z",
+            "revenueSource": "approved"
+          }
+        }
+      },
+      {
+        "id": "p-retro2026-p01",
+        "set": {
+          "quote": {
+            "version": 2,
+            "savedAt": "2026-10-24T23:29:13.289Z",
+            "data": {
+              "clientName": "GKA Event GmbH",
+              "projectName": "",
+              "isDetailedPrepro": false,
+              "scenariusz": "brak",
+              "dniDokumentacji": 0,
+              "wizjaLokalna": false,
+              "kierownikProdukcji": false,
+              "isDetailedProdukcja": false,
+              "dniZdjeciowe": 1,
+              "wielkoscEkipy": 1,
+              "crudeRezOpSurcharge": false,
+              "crudeDroneSurcharge": false,
+              "klasaSprzetu": "standard",
+              "detailedShootingDays": [],
+              "isDetailedPostpro": false,
+              "crudeEditUnit": "dni",
+              "crudeEditCount": 0,
+              "detailedDeliverables": [],
+              "dniMontazu": 0,
+              "korekcjaBarwna": false,
+              "animacje": "brak",
+              "kosztDojazduKm": 0,
+              "lektor": false,
+              "licencjaMuzyczna": "stock",
+              "copyrightType": "licencja",
+              "actorRightsTransferAmount": 0,
+              "liczbaAktorow": 0,
+              "includeRevisionsInfo": true,
+              "includedRevisions": 2,
+              "extraRevisionPrice": 46,
+              "includeOvertimeInfo": true,
+              "standardDayHours": 10,
+              "overtimeHourlyRate": 34,
+              "opcjeDodatkowe": "",
+              "includeCatering": false,
+              "cateringRate": 23,
+              "cateringOverride": false,
+              "cateringCustomDays": 1,
+              "includeLodging": false,
+              "lodgingRate": 68,
+              "lodgingOverride": false,
+              "lodgingCustomDays": 1,
+              "profitOverrides": {},
+              "profitCustomItems": [],
+              "profitTaxRatePercent": 8.5,
+              "profitTransferAmount": null,
+              "profitFuelPricePerLiter": 6.5,
+              "profitFuelConsumption": 8,
+              "gearDiscountPercent": 0,
+              "gearValueInPdf": true,
+              "crewPeopleInPdf": false,
+              "marginAsLine": true,
+              "currencySwitchMemo": {
+                "from": "PLN",
+                "amounts": {
+                  "actorRightsTransferAmount": [
+                    0,
+                    0
+                  ],
+                  "cateringRate": [
+                    100,
+                    23
+                  ],
+                  "lodgingRate": [
+                    300,
+                    68
+                  ],
+                  "extraRevisionPrice": [
+                    200,
+                    46
+                  ],
+                  "overtimeHourlyRate": [
+                    150,
+                    34
+                  ]
+                }
+              },
+              "currency": "EUR",
+              "exchangeRate": 4.3917,
+              "exchangeRateSource": "nbp",
+              "exchangeRateDate": "2026-10-23",
+              "approvedPrice": {
+                "pln": 2100.23,
+                "source": "import",
+                "at": "2026-11-05T10:29:46.073Z"
+              }
+            },
+            "pricingConfig": {
+              "preprodukcja": {
+                "dzienDokumentacji": 1200,
+                "scenariuszPodstawowy": 1800,
+                "scenariuszRozbudowany": 3500,
+                "wizjaLokalna": 800,
+                "kierownikProdukcji": 1500
+              },
+              "produkcja": {
+                "stawkaOperatoraSzybkaWycena": 1317.51,
+                "doplataRezOpSzybkaWycena": 500,
+                "doplataDronSzybkaWycena": 300,
+                "pakietSprzetowyMinimalistyczny": 300,
+                "pakietSprzetowyStandard": 878.34,
+                "pakietSprzetowyKinowy": 1500,
+                "rezOp": 1500,
+                "asystentOperator": 1500,
+                "gafer": 1600,
+                "dzwiekowiec": 1500,
+                "mua": 800,
+                "aktor": 2500,
+                "model": 1500,
+                "statystaEpizodysta": 1000,
+                "kameraSonyMirrorless": 300,
+                "kameraRedKomodoX": 600,
+                "obiektywyStandard": 100,
+                "obiektywyRental": 1500,
+                "stabilizacjaStandard": 100,
+                "stabilizacjaRental": 800,
+                "podgladStandard": 0,
+                "podgladRental": 600,
+                "swiatloStandard": 400,
+                "swiatloRental": 600,
+                "dronDji": 300,
+                "dronFpv": 1500
+              },
+              "postprodukcja": {
+                "montazZaDzien": 1200,
+                "montazZaGodzine": 200,
+                "Format: do 30sek shorts/reel": 450,
+                "Format: Reportaż 1-3min": 2500,
+                "korekcjaBarwnaPodstawowa": 500,
+                "korekcjaBarwnaZaawansowana": 1200,
+                "animacje2d": 1000,
+                "animacjeAi": 1500,
+                "muzykaCopyfree": 300,
+                "muzykaKompozytor": 3000,
+                "soundDesignProsty": 500,
+                "soundDesignZlozony": 1500,
+                "masterDzwiekuPodstawowy": 400,
+                "masterDzwiekuZlozony": 1000,
+                "lektorAi": 250,
+                "lektorStudio": 1000,
+                "Format: 10min YouTube": 1850
+              },
+              "dodatkowe": {
+                "kosztDojazduKm": 2,
+                "pelnePrzekazaniePrawProcent": 0
+              }
+            },
+            "marginMultiplier": 1,
+            "pdfDraft": null
+          },
+          "financials": {
+            "sumaNetto": 2100.23,
+            "koszty": 1317.51,
+            "podatek": 178.51955,
+            "zysk": 604.20045,
+            "marzaPct": 28.7682991862796,
+            "computedAt": "2026-11-05T10:29:46.073Z",
+            "revenueSource": "approved"
+          }
+        }
+      },
+      {
+        "id": "p-retro2025-p14",
+        "set": {
+          "quote": {
+            "version": 2,
+            "savedAt": "2026-11-05T09:17:13.815Z",
+            "data": {
+              "clientName": "Polski Holding Hotelowy Sp. z o.o.",
+              "projectName": "",
+              "isDetailedPrepro": false,
+              "scenariusz": "brak",
+              "dniDokumentacji": 3,
+              "wizjaLokalna": false,
+              "kierownikProdukcji": false,
+              "isDetailedProdukcja": false,
+              "dniZdjeciowe": 5,
+              "wielkoscEkipy": 2,
+              "crudeRezOpSurcharge": true,
+              "crudeDroneSurcharge": true,
+              "klasaSprzetu": "kinowy",
+              "detailedShootingDays": [
+                {
+                  "id": "day-1793869832180-o41irwq",
+                  "rezOp": 0,
+                  "asystent": 0,
+                  "gafer": 0,
+                  "dzwiekowiec": 0,
+                  "mua": 0,
+                  "aktor": 0,
+                  "model": 0,
+                  "statysta": 0,
+                  "kameraSony": 0,
+                  "kameraRed": 0,
+                  "obiektywy": "brak",
+                  "stabilizacja": "brak",
+                  "podglad": "brak",
+                  "swiatlo": "brak",
+                  "dron": "brak",
+                  "dayAdjustment": 0,
+                  "crewNames": {},
+                  "crew": [
+                    {
+                      "id": "qc-1793869832180-sgypiqb",
+                      "roleId": "rezOp",
+                      "roleName": "ReżOp",
+                      "group": "ekipa",
+                      "clientRate": 1500,
+                      "costRate": 1500,
+                      "qty": 1,
+                      "personId": "cm-r1-ja",
+                      "personName": "Michał",
+                      "clientFromPerson": true,
+                      "ownWork": true
+                    },
+                    {
+                      "id": "qc-1793869866323-35n1fgc",
+                      "roleId": "cr-r1-asystent",
+                      "roleName": "Asystent",
+                      "group": "ekipa",
+                      "clientRate": 1000,
+                      "costRate": 1000,
+                      "qty": 1,
+                      "personId": "cm-1791885527221-zgvplyg",
+                      "personName": "Łukasz",
+                      "clientFromPerson": true
+                    }
+                  ]
+                }
+              ],
+              "isDetailedPostpro": true,
+              "crudeEditUnit": "dni",
+              "crudeEditCount": 0,
+              "detailedDeliverables": [
+                {
+                  "id": "del-1793869907783-uu1e5cf",
+                  "format": "Format: do 30sek shorts/reel",
+                  "ilosc": 4,
+                  "korekcjaBarwna": "brak",
+                  "animacje": "brak",
+                  "muzyka": "brak",
+                  "soundDesign": "brak",
+                  "masterDzwieku": "brak",
+                  "lektor": "brak"
+                },
+                {
+                  "id": "del-1793869920048-mzamki3",
+                  "format": "Format: Reportaż 1-3min",
+                  "ilosc": 1,
+                  "korekcjaBarwna": "brak",
+                  "animacje": "brak",
+                  "muzyka": "brak",
+                  "soundDesign": "brak",
+                  "masterDzwieku": "brak",
+                  "lektor": "brak"
+                }
+              ],
+              "dniMontazu": 0,
+              "korekcjaBarwna": false,
+              "animacje": "brak",
+              "kosztDojazduKm": 2000,
+              "lektor": false,
+              "licencjaMuzyczna": "stock",
+              "copyrightType": "przekazanie",
+              "actorRightsTransferAmount": 0,
+              "liczbaAktorow": 0,
+              "includeRevisionsInfo": true,
+              "includedRevisions": 2,
+              "extraRevisionPrice": 200,
+              "includeOvertimeInfo": true,
+              "standardDayHours": 10,
+              "overtimeHourlyRate": 150,
+              "opcjeDodatkowe": "",
+              "includeCatering": false,
+              "cateringRate": 100,
+              "cateringOverride": false,
+              "cateringCustomDays": 1,
+              "includeLodging": false,
+              "lodgingRate": 300,
+              "lodgingOverride": false,
+              "lodgingCustomDays": 1,
+              "profitOverrides": {},
+              "profitCustomItems": [],
+              "profitTaxRatePercent": 8.5,
+              "profitTransferAmount": null,
+              "profitFuelPricePerLiter": 6,
+              "profitFuelConsumption": 7.5,
+              "gearDiscountPercent": 0,
+              "gearValueInPdf": true,
+              "crewPeopleInPdf": false,
+              "marginAsLine": true,
+              "approvedPrice": {
+                "pln": 29724,
+                "source": "import",
+                "at": "2026-11-05T10:29:46.073Z"
+              }
+            },
+            "pricingConfig": {
+              "preprodukcja": {
+                "dzienDokumentacji": 1200,
+                "scenariuszPodstawowy": 1800,
+                "scenariuszRozbudowany": 3500,
+                "wizjaLokalna": 800,
+                "kierownikProdukcji": 1500
+              },
+              "produkcja": {
+                "stawkaOperatoraSzybkaWycena": 1000,
+                "doplataRezOpSzybkaWycena": 500,
+                "doplataDronSzybkaWycena": 250,
+                "pakietSprzetowyMinimalistyczny": 300,
+                "pakietSprzetowyStandard": 400,
+                "pakietSprzetowyKinowy": 1200,
+                "rezOp": 1500,
+                "asystentOperator": 1500,
+                "gafer": 1600,
+                "dzwiekowiec": 1500,
+                "mua": 800,
+                "aktor": 2500,
+                "model": 1500,
+                "statystaEpizodysta": 1000,
+                "kameraSonyMirrorless": 300,
+                "kameraRedKomodoX": 600,
+                "obiektywyStandard": 100,
+                "obiektywyRental": 1500,
+                "stabilizacjaStandard": 100,
+                "stabilizacjaRental": 800,
+                "podgladStandard": 0,
+                "podgladRental": 600,
+                "swiatloStandard": 400,
+                "swiatloRental": 600,
+                "dronDji": 300,
+                "dronFpv": 1500
+              },
+              "postprodukcja": {
+                "montazZaDzien": 1200,
+                "montazZaGodzine": 200,
+                "Format: do 30sek shorts/reel": 400,
+                "Format: Reportaż 1-3min": 3600,
+                "korekcjaBarwnaPodstawowa": 500,
+                "korekcjaBarwnaZaawansowana": 1200,
+                "animacje2d": 1000,
+                "animacjeAi": 1500,
+                "muzykaCopyfree": 300,
+                "muzykaKompozytor": 3000,
+                "soundDesignProsty": 500,
+                "soundDesignZlozony": 1500,
+                "masterDzwiekuPodstawowy": 400,
+                "masterDzwiekuZlozony": 1000,
+                "lektorAi": 250,
+                "lektorStudio": 1000,
+                "Format: 10min YouTube": 1850
+              },
+              "dodatkowe": {
+                "kosztDojazduKm": 2,
+                "pelnePrzekazaniePrawProcent": 0
+              }
+            },
+            "marginMultiplier": 1,
+            "pdfDraft": null
+          },
+          "financials": {
+            "sumaNetto": 29724,
+            "koszty": 22200,
+            "podatek": 2526.54,
+            "zysk": 4997.459999999999,
+            "marzaPct": 16.812878482034716,
+            "computedAt": "2026-11-05T10:29:46.073Z",
+            "revenueSource": "approved"
+          }
+        }
+      }
+    ]
+  }
+}
