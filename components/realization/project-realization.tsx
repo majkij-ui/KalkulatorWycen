@@ -101,6 +101,7 @@ import { EventNotice, noticeAfterSave, type EventNoticeState } from '@/component
 import { GearGrid, type DayRemoval } from '@/components/equipment/project-equipment'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CallSheetPlanner } from '@/components/planner/call-sheet-planner'
+import { splitCost } from '@/lib/realization-control'
 import { CostRow, CrewRoleDatalist, type LineMechanics } from './cost-rows'
 import { DayCalendar, formatDayLong, type DayCalendarActions } from './day-calendar'
 import { DayCards, DayLines, TotalsText, type LineHandlers } from './day-cards'
@@ -454,6 +455,28 @@ function RealizationView({ project }: { project: Project }) {
     },
   }
 
+  /**
+   * W2: „Rozdziel" — wiersz o ilości > 1 na pojedyncze (pierwsza zmiana w szkicu
+   * zapisuje cały szkic, potem rozdziela zapisany rekord).
+   */
+  const splitRow = (cost: ProjectCost) => {
+    const { list, id } = targetOf(cost)
+    if (!id) return
+    const next = splitCost(list, id)
+    if (!next) return
+    commitCosts(next)
+    const rows = next.length - list.length + 1
+    setNotice({
+      message: `Rozdzielono ${describeCost(cost)} na ${rows} ${plural(rows, 'wiersz', 'wiersze', 'wierszy')}.`,
+      undo: () => commitCosts(list),
+    })
+  }
+  /** W2: przeniesienie jednego wiersza do dnia — ręczna zmiana wiersza (z planu dostaje `edited`). */
+  const moveRow = (cost: ProjectCost, dayId: string) => {
+    ensureDaysSaved()
+    changeCost(cost, { dayId })
+  }
+
   /** Wiersze dnia wyceny bez odpowiednika → wybrany dzień Realizacji (bez znacznika „zmieniony"). */
   const moveToDay = (lines: ProjectCost[], dayId: string) => {
     ensureDaysSaved()
@@ -689,6 +712,9 @@ function RealizationView({ project }: { project: Project }) {
     mechanics,
     onChangeCost: changeCost,
     onRemoveCost: removeCost,
+    moveTargets: days.map((d, i) => ({ id: d.id, label: labelOf(d, i) })),
+    onSplitCost: splitRow,
+    onMoveCost: moveRow,
     rentals: dictionary,
   }
   const calendarDayCount = days.filter((d) => info.get(d.id)?.link === 'calendar').length
