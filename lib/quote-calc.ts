@@ -6,6 +6,7 @@ import { safeNum, safeArray } from './safe-numbers'
 import { computeFuelRatePerKm } from './profit-calc'
 import { dayGearFigures } from './quote-gear'
 import { dayCrewFigures } from './quote-crew'
+import { EXTRA_LINE_LABEL, extraAmount, extraLineValue, resolveExtra } from './quote-extras'
 
 const VAT_RATE = 0.23
 
@@ -125,6 +126,22 @@ export function getBreakdownWithPricing(
   marginMultiplier: number,
   pricing: PricingConfigShape
 ): PhaseBreakdown[] {
+  return computeBreakdown(data, marginMultiplier, pricing).phases
+}
+
+/**
+ * Podstawa % dla przekazania praw i surowego materiału (W1): cena bez tych
+ * dwóch pozycji, z marżą. Ta sama liczba dla obu i dla trybu „Jako opcja".
+ */
+export function getExtrasBase(data: QuoteData, marginMultiplier: number, pricing: PricingConfigShape): number {
+  return computeBreakdown(data, marginMultiplier, pricing).extrasBase
+}
+
+function computeBreakdown(
+  data: QuoteData,
+  marginMultiplier: number,
+  pricing: PricingConfigShape
+): { phases: PhaseBreakdown[]; extrasBase: number } {
   const preItems: LineItemRow[] = []
   const proItems: LineItemRow[] = []
   const postItems: LineItemRow[] = []
@@ -271,7 +288,6 @@ export function getBreakdownWithPricing(
     }
   }
 
-  const dod = pricing.dodatkowe
   // Dojazd liczony równaniem paliwowym (km × spalanie/100 × cena paliwa) —
   // identycznie jak koszt w zakładce Profit. Pass-through: bez marży, więc
   // klient płaci dokładnie tyle, ile wynosi realny koszt paliwa.
@@ -317,25 +333,31 @@ export function getBreakdownWithPricing(
   ]
   const baseSubtotal = phasesWithoutCopyright.reduce((s, p) => s + p.phaseNetto, 0)
 
-  if (data.copyrightType === 'przekazanie') {
-    const pct = dod.pelnePrzekazaniePrawProcent
-    const surcharge = baseSubtotal * (pct / 100)
+  // W1: prawa i surowy materiał — oba od tej samej podstawy, nigdy jedno od drugiego.
+  // „W cenie" dolicza się do sumy; „Jako opcja" i „Nie pokazuj" nie dodają linii.
+  for (const key of ['rights', 'raw'] as const) {
+    const setting = resolveExtra(data, pricing, key)
+    if (setting.mode !== 'w-cenie') continue
+    const amount = extraAmount(setting, baseSubtotal)
     dodatkoweItems.push({
-      label: 'Pełne przekazanie praw',
-      value: `${pct}% od sumy`,
+      label: EXTRA_LINE_LABEL[key],
+      value: extraLineValue(setting),
       quantity: 1,
-      unitPriceNet: surcharge,
-      lineNetto: surcharge,
+      unitPriceNet: amount,
+      lineNetto: amount,
     })
   }
 
-  return [
-    toPhase('Preprodukcja', preItems),
-    toPhase('Produkcja', proItems),
-    toPhase('Postprodukcja', postItems),
-    toPhase('Dodatkowe', dodatkoweItems),
-    ...(marginItems.length ? [toPhase(MARGIN_PHASE, marginItems)] : []),
-  ]
+  return {
+    phases: [
+      toPhase('Preprodukcja', preItems),
+      toPhase('Produkcja', proItems),
+      toPhase('Postprodukcja', postItems),
+      toPhase('Dodatkowe', dodatkoweItems),
+      ...(marginItems.length ? [toPhase(MARGIN_PHASE, marginItems)] : []),
+    ],
+    extrasBase: baseSubtotal,
+  }
 }
 
 /**

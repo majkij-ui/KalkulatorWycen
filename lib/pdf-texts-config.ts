@@ -192,6 +192,8 @@ export function renderTermRevisions(
 /** Pola wyceny, od których zależą punkty „Uwagi" w PDF. */
 export interface TermsQuoteFields {
   copyrightType: 'licencja' | 'przekazanie'
+  /** W1: prawa „W cenie" to przekazanie także w Uwagach (stare wyceny bez pola: wg copyrightType). */
+  rightsMode?: 'w-cenie' | 'opcja' | 'ukryj'
   includeOvertimeInfo: boolean
   standardDayHours: number
   overtimeHourlyRate: number
@@ -220,10 +222,11 @@ export function buildTermsAndConditions(
   const tplNetto = isEn ? pickEn(pdfTexts.termNetto_en, pdfTexts.termNetto) : (pdfTexts.termNetto ?? '')
 
   const out: string[] = []
-  if (data.copyrightType === 'licencja' && tplLicencja) {
+  const transfer = data.copyrightType === 'przekazanie' || data.rightsMode === 'w-cenie'
+  if (!transfer && tplLicencja) {
     out.push(tplLicencja)
   }
-  if (data.copyrightType === 'przekazanie' && tplPrzekazanie) {
+  if (transfer && tplPrzekazanie) {
     out.push(tplPrzekazanie)
   }
   if (data.includeOvertimeInfo && tplOvertime) {

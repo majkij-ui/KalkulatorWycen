@@ -98,6 +98,8 @@ export function fromPln(pln: number, money: QuoteMoney): number {
  */
 export const TYPED_AMOUNT_FIELDS = [
   'actorRightsTransferAmount',
+  'rightsFixedAmount',
+  'rawFixedAmount',
   'cateringRate',
   'lodgingRate',
   'extraRevisionPrice',

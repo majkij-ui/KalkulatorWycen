@@ -72,6 +72,12 @@ interface PdfLabelSet {
   scenarioExtended: string
   copyrightTransfer: string
   copyrightLicense: string
+  /** W1: pozycje „Jako opcja" w Opcjach dodatkowych i „W cenie" w opisie Inne koszty */
+  optionRights: string
+  optionRaw: string
+  optionNetSuffix: string
+  opisRawMaterial: string
+  opisIncluded: string
   unitDays: string
   unitHours: string
   equipmentMinimal: string
@@ -172,6 +178,11 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     scenarioExtended: 'Rozbudowany',
     copyrightTransfer: 'pełne przekazanie praw',
     copyrightLicense: 'niewyłączna licencja',
+    optionRights: 'Przekazanie praw autorskich',
+    optionRaw: 'Przekazanie surowego materiału',
+    optionNetSuffix: 'netto',
+    opisRawMaterial: 'Przekazanie surowego materiału',
+    opisIncluded: 'w cenie',
     unitDays: 'dni',
     unitHours: 'godz.',
     equipmentMinimal: 'minimalistyczny',
@@ -264,6 +275,11 @@ export const PDF_LABELS: Record<PdfLang, PdfLabelSet> = {
     scenarioExtended: 'Extended',
     copyrightTransfer: 'full copyright transfer',
     copyrightLicense: 'non-exclusive licence',
+    optionRights: 'Copyright transfer',
+    optionRaw: 'Raw footage handover',
+    optionNetSuffix: 'net',
+    opisRawMaterial: 'Raw footage handover',
+    opisIncluded: 'included',
     unitDays: 'days',
     unitHours: 'hrs',
     equipmentMinimal: 'minimal',

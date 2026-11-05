@@ -37,6 +37,7 @@ import { blankQuoteSnapshot, planProjectSave } from './project-save'
 import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
 import { defaultQuoteData, type QuoteData } from './quote-types'
+import { newQuoteExtras } from './quote-extras'
 import { findVariant, parseDocId } from './quote-variants'
 
 // ── Dokument ─────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export function clearedDoc(doc: QuoteDoc, pricingConfig: PricingConfigShape): Qu
       clientName: doc.data.clientName,
       projectName: doc.data.projectName,
       marginAsLine: true,
+      ...newQuoteExtras(),
       // U1: cenę zatwierdził klient — wyczyszczenie kalkulatora jej nie rusza.
       ...(doc.data.approvedPrice ? { approvedPrice: doc.data.approvedPrice } : {}),
     },

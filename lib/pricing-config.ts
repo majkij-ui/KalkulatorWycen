@@ -79,6 +79,8 @@ export interface PricingConfigShape {
     kosztDojazduKm: number
     /** Pełne przekazanie praw – % dopłaty od sumy */
     pelnePrzekazaniePrawProcent: number
+    /** W1: przekazanie surowego materiału – % dopłaty od ceny (bez obu tych pozycji) */
+    surowyMaterialProcent: number
   }
 }
 
@@ -139,6 +141,7 @@ export const DEFAULT_PRICING: PricingConfigShape = {
   dodatkowe: {
     kosztDojazduKm: 2.5,
     pelnePrzekazaniePrawProcent: 30,
+    surowyMaterialProcent: 20,
   },
 }
 
