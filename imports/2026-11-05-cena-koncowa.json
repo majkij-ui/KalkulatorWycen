@@ -1,5 +1,5 @@
 {
-  "note": "Cena końcowa: suma faktur w wycenie i finansach 3 retro-projektów (decyzja M.J. 2026-11-05) — wygenerowane 2026-11-05T10:29:46.073Z",
+  "note": "Cena końcowa: suma faktur w wycenie i finansach 3 retro-projektów (decyzja M.J. 2026-11-05) — wygenerowane 2026-11-05T11:14:44.653Z",
   "update": {
     "projects.json": [
       {
@@ -64,7 +64,7 @@
               "approvedPrice": {
                 "pln": 9180,
                 "source": "import",
-                "at": "2026-11-05T10:29:46.073Z"
+                "at": "2026-11-05T11:14:44.653Z"
               }
             },
             "pricingConfig": {
@@ -216,7 +216,7 @@
             "podatek": 780.3000000000001,
             "zysk": 8399.7,
             "marzaPct": 91.5,
-            "computedAt": "2026-11-05T10:29:46.073Z",
+            "computedAt": "2026-11-05T11:14:44.653Z",
             "revenueSource": "approved"
           }
         }
@@ -312,7 +312,7 @@
               "approvedPrice": {
                 "pln": 2100.23,
                 "source": "import",
-                "at": "2026-11-05T10:29:46.073Z"
+                "at": "2026-11-05T11:14:44.653Z"
               }
             },
             "pricingConfig": {
@@ -384,7 +384,7 @@
             "podatek": 178.51955,
             "zysk": 604.20045,
             "marzaPct": 28.7682991862796,
-            "computedAt": "2026-11-05T10:29:46.073Z",
+            "computedAt": "2026-11-05T11:14:44.653Z",
             "revenueSource": "approved"
           }
         }
@@ -522,7 +522,7 @@
               "approvedPrice": {
                 "pln": 29724,
                 "source": "import",
-                "at": "2026-11-05T10:29:46.073Z"
+                "at": "2026-11-05T11:14:44.653Z"
               }
             },
             "pricingConfig": {
@@ -594,7 +594,7 @@
             "podatek": 2526.54,
             "zysk": 4997.459999999999,
             "marzaPct": 16.812878482034716,
-            "computedAt": "2026-11-05T10:29:46.073Z",
+            "computedAt": "2026-11-05T11:14:44.653Z",
             "revenueSource": "approved"
           }
         }
