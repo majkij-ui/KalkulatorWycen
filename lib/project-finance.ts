@@ -26,6 +26,7 @@
  */
 
 import { dayKey } from './calendar-layout'
+import { finalPrice, quotePriceRecord, type FinalPrice } from './final-price'
 import { eventData } from './event-kinds'
 import { isEventDate } from './event-types'
 import { invoiceAmount, projectMoney, type ExtraSale, type MoneyEvent, type ProjectMoney } from './money-loop'
@@ -52,11 +53,13 @@ export interface PriceView {
   /** Zatwierdzona cena w zł: zapisana, a bez niej PDF / kalkulator na żywo. */
   pln: number
   /** `live` — idzie za PDF; `frozen` — zamrożona (przyjęcie, „Odśwież"); `typed` — wpisana ręcznie. */
-  state: 'live' | 'frozen' | 'typed'
+  state: 'live' | 'frozen' | 'typed' | 'final'
+  /** Cena końcowa (faktury / import / ręcznie, `final-price.ts`); `null` = cena po staremu. */
+  final: FinalPrice | null
   record: ApprovedPriceRecord | null
   /** PDF wybranego wariantu (albo kalkulator bez szkicu PDF) teraz. */
   live: ApprovedPrice
-  /** PDF − zapisana cena; `null` = zgodne (< 0,5 zł) albo cena idzie za PDF. */
+  /** PDF − zapisana cena (albo cena końcowa); `null` = zgodne (< 0,5 zł) albo cena idzie za PDF. */
   pdfDiff: number | null
 }
 
@@ -165,23 +168,29 @@ export function projectFinanceView(
   let transfer: LegacyTransferView | null = null
   if (revenue) {
     const record = revenue.frozen
-    const diff = record ? revenue.live.pln - record.pln : 0
+    // Cena końcowa (faktury / import / ręcznie): wygrywa z PDF; PDF stoi obok do porównania.
+    const final = finalPrice(project, record ?? quotePriceRecord(source), events, today)
+    const pln = final?.pln ?? revenue.approvedPln
+    const diff = final ? revenue.live.pln - final.pln : record ? revenue.live.pln - record.pln : 0
     price = {
-      pln: revenue.approvedPln,
-      state: !record ? 'live' : record.source === 'typed' ? 'typed' : 'frozen',
+      pln,
+      state: final ? 'final' : !record ? 'live' : record.source === 'typed' ? 'typed' : 'frozen',
+      final,
       record,
       live: revenue.live,
-      pdfDiff: record && Math.abs(diff) >= SHOWN_DIFF ? diff : null,
+      pdfDiff: (final || record) && Math.abs(diff) >= SHOWN_DIFF ? diff : null,
     }
     if (revenue.typedTransfer !== null) {
-      const expected = revenue.approvedPln + money.extrasTotal
+      const expected = pln + (final?.source === 'invoices' ? 0 : money.extrasTotal)
       const gap = revenue.typedTransfer - expected
       transfer = { typed: revenue.typedTransfer, expected, gap: Math.abs(gap) >= EPSILON ? gap : null }
     }
   }
   const imported = hasQuote ? null : (project.financials?.sumaNetto ?? null)
   const basePrice = price?.pln ?? imported
-  const due = basePrice === null ? null : basePrice + money.extrasTotal
+  // Cena końcowa z faktur już zawiera to, co zafakturowano (także dosprzedaż) — nie dokładamy jej drugi raz.
+  const extrasOnTop = price?.final?.source === 'invoices' ? 0 : money.extrasTotal
+  const due = basePrice === null ? null : basePrice + extrasOnTop
 
   const payments = projectPayments(events, project.id)
   const total = payments.reduce((sum, p) => sum + (p.amount ?? 0), 0)
@@ -247,6 +256,7 @@ export function revenueSourceText(view: Pick<ProjectFinanceView, 'money' | 'pric
   const extras = money.extrasTotal > 0 ? ' + dosprzedaż' : ''
   const price = view.price
   if (price?.state === 'typed') return `cena wpisana ręcznie${extras}`
+  if (price?.state === 'final') return `cena końcowa (${price.final?.label})`
   if (price?.state === 'frozen') return `zatwierdzona cena${extras}`
   if (price?.live.source === 'pdf') return `z PDF${extras}`
   if (price?.live.source === 'calculator') return `z kalkulatora, bez szkicu PDF${extras}`

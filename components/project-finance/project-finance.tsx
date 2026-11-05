@@ -16,7 +16,9 @@ import { createEvent } from '@/lib/events-store'
 import { parseAmount } from '@/lib/event-draft'
 import { editedExtraSaleData, extraSaleCategories, extraSaleData } from '@/lib/extra-sales'
 import { formatRate } from '@/lib/quote-currency'
-import { useProjectHub, useQuoteDocState } from '@/lib/project-hub-context'
+import { useProjectHub } from '@/lib/project-hub-context'
+import { overrideFinalPrice } from '@/lib/final-price'
+import { FinalPriceDialog } from './final-price-dialog'
 import { useQuote } from '@/lib/quote-context'
 import { costCategoryLabel, countsTowardRevenue, toDateKey, type Project } from '@/lib/project-types'
 import { gapAsExtraSale, projectFinanceView, refreshedPrice, revenueSourceText, typedPrice, type PaymentRow } from '@/lib/project-finance'
@@ -107,7 +109,6 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
   const { allEvents, save: saveEvent, remove: removeEvent, restore: restoreEvent } = useEvents()
   const { data, pricingConfig, marginMultiplier, pdfDraft, updateField, variantLabel } = useQuote()
   const { projects } = useProjectHub()
-  const docState = useQuoteDocState(project.id)
   const latest = projects.find((p) => p.id === project.id) ?? project
   const today = toDateKey(new Date())
   const live = useMemo(() => ({ data, pricingConfig, marginMultiplier, pdfDraft }), [data, pricingConfig, marginMultiplier, pdfDraft])
@@ -119,18 +120,25 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
   const [notice, setNotice] = useState<Notice | null>(null)
   const [showCategories, setShowCategories] = useState(false)
   const [editingPrice, setEditingPrice] = useState(false)
+  /** Cena do potwierdzenia w ostrzeżeniu o zmianie ceny końcowej; `null` = okno zamknięte. */
+  const [confirmPrice, setConfirmPrice] = useState<number | null>(null)
 
   const { money, price, transfer, plan, received } = view
   const counts = countsTowardRevenue(latest.status)
   const revenue = money.revenue
   const marginBeforeTaxPct = money.margin !== null && revenue !== null && revenue > 0 ? (money.margin / revenue) * 100 : null
-  const pendingImport = docState?.status === 'needs-confirmation'
   const hasInvoices = money.invoices.some((i) => i.state !== 'planned')
 
   const setPrice = (next: ApprovedPriceRecord | null, message: string) => {
     const before = data.approvedPrice ?? null
     updateField('approvedPrice', next)
     setNotice({ message, undo: () => updateField('approvedPrice', before) })
+  }
+  // Cena końcowa: po potwierdzeniu zapisuje się jako ręczne nadpisanie (źródło `override`).
+  const confirmFinalPrice = (next: number) => {
+    setConfirmPrice(null)
+    const overridden = overrideFinalPrice({ data: {} as { approvedPrice?: ApprovedPriceRecord } }, next, new Date().toISOString()).data.approvedPrice ?? null
+    setPrice(overridden, `Cena końcowa ustawiona ręcznie: ${pln(next)}. Faktury się nie zmieniły.`)
   }
 
   const saveExtra = async (amountNetto: number, what: string, message: string, afterSave?: () => void, undoExtra?: () => void) => {
@@ -195,7 +203,9 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
   const record = price?.record ?? null
   const priceSource = !price
     ? null
-    : price.state === 'typed'
+    : price.state === 'final'
+      ? `Cena końcowa — ${price.final?.label}. Edycja wyceny jej nie zmienia.`
+      : price.state === 'typed'
       ? `Wpisana ręcznie ${dateText(record!.at)}`
       : price.state === 'frozen'
         ? `Zatwierdzona ${record!.at ? dateText(record!.at) : ''} ${record!.source === 'calculator' ? 'z kalkulatora' : 'z PDF'}`.replace('  ', ' ')
@@ -252,7 +262,7 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
       {/* Cena, dosprzedaż, do zapłaty, wpłaty */}
       <section aria-label="Cena i przelew" className="space-y-5 rounded-xl border border-white/10 bg-zinc-900/40 p-4 sm:p-5">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">{counts || !price ? 'Zatwierdzona cena' : 'Cena (jeszcze nie zatwierdzona)'}</div>
+          <div className="text-[11px] uppercase tracking-wide text-zinc-500">{price?.final ? 'Cena końcowa' : counts || !price ? 'Zatwierdzona cena' : 'Cena (jeszcze nie zatwierdzona)'}</div>
           {price ? (
             <>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -262,6 +272,10 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
                     onCancel={() => setEditingPrice(false)}
                     onCommit={(next) => {
                       setEditingPrice(false)
+                      if (price.final) {
+                        if (Math.abs(next - price.pln) >= 0.005) setConfirmPrice(next)
+                        return
+                      }
                       const at = new Date().toISOString()
                       setPrice(typedPrice(next, price.live, counts, at), `Cena: ${pln(next)}. Przychód i zysk liczą się od niej.`)
                     }}
@@ -295,6 +309,15 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
                   <span className="text-amber-200/90">
                     {price.live.source === 'pdf' ? 'PDF' : 'Kalkulator'}: {pln(price.live.pln)} ({signedPln(price.pdfDiff)})
                   </span>
+                  {price.final ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmPrice(price.live.pln)}
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 font-medium text-zinc-100 hover:bg-white/5"
+                    >
+                      Ustaw cenę z wyceny
+                    </button>
+                  ) : (
                   <button
                     type="button"
                     onClick={() => {
@@ -306,6 +329,7 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
                     <RotateCcw className="size-3.5" />
                     Odśwież
                   </button>
+                  )}
                 </div>
               )}
               {!counts && price.state !== 'live' && price.pdfDiff === null && (
@@ -325,9 +349,7 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
                 {view.imported === null ? '—' : pln(view.imported)}
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                {pendingImport
-                  ? 'Wycena czeka na decyzję w nagłówku („Zastąp" / „Cofnij zmiany") — do tego czasu liczy się kwota z importu, a zmiany w PDF nie są zapisane.'
-                  : 'Projekt bez wyceny — przychód z importu (a gdy są faktury — z faktur).'}
+                Projekt bez wyceny — przychód z importu (a gdy są faktury — z faktur).
               </p>
             </>
           )}
@@ -515,6 +537,10 @@ export function ProjectFinance({ project, viewedVariant }: { project: Project; v
             </div>
           )}
         </section>
+      )}
+
+      {price?.final && (
+        <FinalPriceDialog final={price.final} newPln={confirmPrice} onConfirm={confirmFinalPrice} onCancel={() => setConfirmPrice(null)} />
       )}
     </div>
   )

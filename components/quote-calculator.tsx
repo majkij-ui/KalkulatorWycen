@@ -13,6 +13,7 @@ import { PodgladPdfTab } from '@/components/tabs/podglad-pdf'
 import { QuoteDocScope, useQuote } from '@/lib/quote-context'
 import { currencyUnit } from '@/lib/quote-currency'
 import { QuoteVariantsBar } from '@/components/projects/quote-variants-bar'
+import { FinalPriceStripBar } from '@/components/projects/final-price-strip'
 import type { Project } from '@/lib/project-types'
 
 // U1 (U-PDF): PDF to osobna zakładka projektu („PDF", `QuotePdfView`), nie karta kalkulatora.
@@ -66,7 +67,10 @@ export function QuoteCalculatorView({
       onTabChange={onTabChange}
       variantsBar={
         project && variantId && onSelectVariant ? (
-          <QuoteVariantsBar project={project} selectedId={variantId} onSelect={onSelectVariant} />
+          <>
+            <QuoteVariantsBar project={project} selectedId={variantId} onSelect={onSelectVariant} />
+            <FinalPriceStripBar project={project} />
+          </>
         ) : null
       }
     />
@@ -99,6 +103,7 @@ export function QuotePdfView({
     <QuoteDocScope docId={docId}>
       <main className="relative mx-auto max-w-4xl px-4 py-6">
         <QuoteVariantsBar project={project} selectedId={variantId} onSelect={onSelectVariant} />
+        <FinalPriceStripBar project={project} />
         {chosenLabel && (
           <p className="mb-4 text-xs text-amber-200/80">
             Ten wariant nie jest wybrany do rozliczeń — Finanse projektu liczą wariant {chosenLabel}.

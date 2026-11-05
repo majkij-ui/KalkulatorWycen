@@ -20,6 +20,7 @@
  */
 
 import { withFrozenPrice, withoutApprovedPrice } from './approved-price'
+import { carryFinalPrice } from './final-price'
 import { pdfRowsTotal } from './pdf-draft'
 import { blankQuoteSnapshot, clientAfterSave } from './project-save'
 import { computeQuoteTotals, computeSnapshotFinancials, computeTotalCrewDays, resolveSnapshot, quoteViews } from './quote-financials'
@@ -217,12 +218,12 @@ export type ChooseVariantPlan =
       /** Finanse przed i po (do pytania i komunikatu). */
       before: ProjectFinancials | null
       after: ProjectFinancials | null
-      /** Projekt ma finanse z importu (bez wyceny) — wybór je zastąpi, trzeba zapytać. */
-      replacesImported: boolean
+      /** Projekt ma zapisaną cenę końcową (import / ręczna) — wybór wariantu jej nie zmienia. */
+      keepsFinalPrice: boolean
       /** Id wariantu, który przestał być wybrany („Cofnij" wybiera go z powrotem). */
       previousId: string
     }
-  /** `blocked` — wycena projektu czeka na odpowiedź o finanse z importu; najpierw ona. */
+  /** `blocked` — wycena projektu nie zapisała się (błąd zapisu); najpierw ona. */
   | { status: 'unchanged' | 'missing' | 'blocked' }
 
 /**
@@ -258,7 +259,9 @@ export function chooseVariantPlan(project: Project, variantId: string, now: Date
     ({ version: 2, savedAt: at, ...blankQuoteSnapshot(project.client), pdfDraft: null } as QuoteSnapshot)
   // U1: w przyjętym zleceniu klient przyjął cenę nowego wariantu — zamrażamy ją
   // (wariant z już zapisaną ceną ją zachowuje, więc „Cofnij" wraca co do grosza).
-  const snapshot = countsTowardRevenue(project.status) ? withFrozenPrice(chosen, at) : chosen
+  const frozen = countsTowardRevenue(project.status) ? withFrozenPrice(chosen, at) : chosen
+  // Cena końcowa (import / ręczna) zostaje — nowy wariant ją przejmuje, bez pytania o finanse z importu.
+  const snapshot = carryFinalPrice(project, frozen, at)
   // Te same reguły co zapis wyceny: finanse z kalkulatora, klient projektu (albo z wyceny, gdy pusty).
   const after = computeSnapshotFinancials(snapshot, now)
   const client = clientAfterSave(project, snapshot)
@@ -275,7 +278,7 @@ export function chooseVariantPlan(project: Project, variantId: string, now: Date
     },
     before: project.financials,
     after,
-    replacesImported: !project.quote && !!project.financials,
+    keepsFinalPrice: snapshot !== frozen,
     previousId,
   }
 }
