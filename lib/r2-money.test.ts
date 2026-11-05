@@ -269,7 +269,7 @@ test('D2: marża producencka firmy = suma projektów (przed podatkiem); projekt 
   near(scoped.scoped!.producerMargin, a.producerMargin)
 })
 
-test('D2: moja praca leży w okresie kotwicy, jak koszty — późniejsza faktura jej nie przenosi', () => {
+test('D2: moja praca idzie za fakturami jak koszty (połowa i połowa)', () => {
   const p = {
     ...project({ id: 'a', financials: fin(10_000, 2_000, { ownWork: 3_000 }), date: '2026-05-10' }),
     client: 'A',
@@ -287,9 +287,9 @@ test('D2: moja praca leży w okresie kotwicy, jak koszty — późniejsza faktur
     today: TODAY,
   }
   const july = marginSummary(input, { kind: 'month', year: 2026, index: 7 })
-  near(july.totals.ownWork, 0)
-  near(july.totals.producerMargin, 5_000)
-  near(marginSummary(input, { kind: 'month', year: 2026, index: 5 }).totals.ownWork, 3_000)
+  near(july.totals.ownWork, 1_500)
+  near(july.totals.producerMargin, 5_000 - 1_000 - 1_500)
+  near(marginSummary(input, { kind: 'month', year: 2026, index: 5 }).totals.ownWork, 1_500)
 })
 
 test('plan z zapisanych finansów niesie źródło przychodu; suma PDF bez wierszy = 0', async () => {

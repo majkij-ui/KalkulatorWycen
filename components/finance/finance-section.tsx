@@ -752,7 +752,19 @@ interface TrendRow {
   result: number
 }
 
-function TrendTooltip({ active, payload }: { active?: boolean; payload?: { payload: TrendRow }[] }) {
+/** Podpis kosztów firmy z widokiem sprzętu — te same słowa w legendzie i dymku. */
+const companyCostsLabel = (spread: boolean) =>
+  `Koszty firmy (${spread ? 'sprzęt rozłożony' : 'sprzęt w miesiącu zakupu'})`
+
+function TrendTooltip({
+  active,
+  payload,
+  spread,
+}: {
+  active?: boolean
+  payload?: { payload: TrendRow }[]
+  spread: boolean
+}) {
   if (!active || !payload?.length) return null
   const row = payload[0].payload
   return (
@@ -760,7 +772,7 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
       <div className="mb-1 font-semibold text-zinc-100">{row.month}</div>
       {[
         { label: 'Marża na realizacji', value: row.margin, color: COLOR_PROFIT },
-        { label: 'Koszty firmy', value: row.companyCosts, color: COLOR_FIXED },
+        { label: companyCostsLabel(spread), value: row.companyCosts, color: COLOR_FIXED },
         { label: 'Zysk po wszystkich kosztach', value: row.result, color: COLOR_RESULT },
       ].map((item) => (
         <div key={item.label} className="flex items-center justify-between gap-4">
@@ -775,7 +787,17 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
   )
 }
 
-function TrendChart({ trend, period, scoped }: { trend: MarginTrendRow[]; period: Period; scoped: boolean }) {
+function TrendChart({
+  trend,
+  period,
+  scoped,
+  spread,
+}: {
+  trend: MarginTrendRow[]
+  period: Period
+  scoped: boolean
+  spread: boolean
+}) {
   const rows: TrendRow[] = trend.map((s, i) => ({
     month: MONTH_SHORT[i],
     inPeriod: isInPeriod(`${period.year}-${String(i + 1).padStart(2, '0')}`, period),
@@ -798,7 +820,7 @@ function TrendChart({ trend, period, scoped }: { trend: MarginTrendRow[]; period
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2.5 rounded-sm" style={{ background: COLOR_FIXED }} />
-            Koszty firmy
+            {companyCostsLabel(spread)}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-0.5 w-3 rounded-full" style={{ background: COLOR_RESULT }} />
@@ -830,7 +852,7 @@ function TrendChart({ trend, period, scoped }: { trend: MarginTrendRow[]; period
                 tickFormatter={compactPln}
               />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-              <Tooltip content={<TrendTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+              <Tooltip content={<TrendTooltip spread={spread} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
               <Bar dataKey="margin" radius={[4, 4, 0, 0]} maxBarSize={18}>
                 {rows.map((r) => (
                   <Cell key={r.month} fill={COLOR_PROFIT} fillOpacity={r.inPeriod ? 1 : 0.3} />
@@ -1099,7 +1121,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             projectsById={projectsById}
             onOpenProject={onOpenProject}
           />
-          <TrendChart trend={trend} period={period} scoped={!!scopeIds} />
+          <TrendChart trend={trend} period={period} scoped={!!scopeIds} spread={spread} />
           <PlanVsActual
             summary={margin}
             projectsById={projectsById}

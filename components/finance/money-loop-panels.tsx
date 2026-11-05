@@ -143,7 +143,7 @@ export function PlanVsActual({
         <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Plan a rzeczywistość</h2>
         <p className="text-[11px] text-zinc-500">
           Faktury zastępują plan, gdy są; koszty — gdy wpisano je w Realizacji. Marża na realizacji jest przed
-          podatkiem.{' '}
+          podatkiem. Koszty projektu dzielą się między miesiące jak jego faktury.{' '}
           {perProject
             ? 'Po kosztach firmy: minus ryczałt i część kosztów firmy wg udziału w przychodzie roku.'
             : 'Zysk po wszystkich kosztach per projekt — w widoku roku.'}
