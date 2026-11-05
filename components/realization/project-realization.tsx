@@ -40,6 +40,7 @@ import { summarizeProjectGear } from '@/lib/equipment-roi'
 import { gearEarnings } from '@/lib/gear-earnings'
 import { isRental, rebalanceRental, rentalBlock, setTypedRental } from '@/lib/rentals'
 import { differsFromPrice, quotedPrice, realizationTotals, reconcile } from '@/lib/realization-summary'
+import { finalPrice, quotePriceRecord } from '@/lib/final-price'
 import { useRentalItems } from '@/lib/use-rental-items'
 import type { FinancialsSource } from '@/lib/quote-financials'
 import { gearFromQuote } from '@/lib/gear-usage'
@@ -637,9 +638,15 @@ function RealizationView({ project }: { project: Project }) {
   )
   const totals = useMemo(() => realizationTotals(shown), [shown])
   const price = useMemo(() => quotedPrice(liveQuote), [liveQuote])
-  const reconciliation = price ? reconcile(price.pln, totals, earnings.earned) : null
+  // Cena końcowa (faktury / import / ręcznie) wygrywa z PDF; PDF stoi obok do porównania.
+  const final = useMemo(
+    () => (price ? finalPrice(project, quotePriceRecord(liveQuote), allEvents, today) : null),
+    [price, project, liveQuote, allEvents, today]
+  )
+  const mainPrice = final?.pln ?? price?.pln ?? null
+  const reconciliation = mainPrice !== null ? reconcile(mainPrice, totals, earnings.earned) : null
   const financeComparison: FinanceComparison | null =
-    price && differsFromPrice(price.pln, money.revenue)
+    mainPrice !== null && differsFromPrice(mainPrice, money.revenue)
       ? {
           amount: money.revenue as number,
           reconciliation: reconcile(money.revenue as number, totals, earnings.earned),
@@ -880,6 +887,7 @@ function RealizationView({ project }: { project: Project }) {
       <RealizationTotalsCard
         totals={totals}
         price={price}
+        final={final}
         earnings={earnings}
         reconciliation={reconciliation}
         finance={financeComparison}

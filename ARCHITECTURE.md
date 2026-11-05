@@ -132,6 +132,8 @@ number of an existing project silently: list what moves and let M.J. confirm.
 - **Money loop** (`money-loop.ts`, T6): actual revenue = issued invoices (`invoice_sent.amountNetto`, net)
   + payments without an invoice; expected = plan + `extra_sale`; costs = `Project.costs` from Realizacja,
   else the plan's. A future-dated invoice is still plan. Pairs invoice → payment: `thread-stats`.
+- **Final price** (`final-price.ts`, 2026-11-05): a `done` project with issued invoices (sum = the money loop's `invoiced`, derived on read) or imported finances at its first quote save (`approvedPrice.source = 'import'`) has a final price; Realizacja and Finanse show it, the PDF sits beside it, editing the quote never moves it.
+  Only an explicit warned override (`approvedPrice.source = 'override'`) changes it; the money loop and company totals are untouched.
 - **Subscriptions** (S1): instalments derived on read; a correction is a fixed cost with
   `subscriptionId`. Company result = project profit − fixed costs of the period (`finance-calc`).
 - **Client money** (`client-money.ts`, S2): Klienci and the Projekty client filter use the same best

@@ -11,6 +11,7 @@
 
 import { useState } from 'react'
 import type { PlanRevenue } from '@/lib/quote-financials'
+import type { FinalPrice } from '@/lib/final-price'
 import type { GearEarnings } from '@/lib/gear-earnings'
 import { parseSignedAmount, type Reconciliation, type RealizationTotals } from '@/lib/realization-summary'
 import { mono, pln } from '@/components/calendar/calendar-bits'
@@ -70,6 +71,7 @@ function Tile({ label, children }: { label: string; children: React.ReactNode })
 export function RealizationTotalsCard({
   totals,
   price,
+  final,
   earnings,
   reconciliation,
   finance,
@@ -77,6 +79,8 @@ export function RealizationTotalsCard({
 }: {
   totals: RealizationTotals
   price: PlanRevenue | null
+  /** Cena końcowa (faktury / import / ręcznie); `null` = cena po staremu. */
+  final: FinalPrice | null
   earnings: GearEarnings
   reconciliation: Reconciliation | null
   finance: FinanceComparison | null
@@ -110,8 +114,18 @@ export function RealizationTotalsCard({
           </div>
         </Tile>
 
-        <Tile label="Zatwierdzona cena">
-          {price ? (
+        <Tile label={final ? 'Cena końcowa' : 'Zatwierdzona cena'}>
+          {price && final ? (
+            <>
+              <div className="text-lg font-bold text-white" style={mono}>
+                {pln(final.pln)}
+              </div>
+              <div className="text-[11px] text-zinc-500">{final.label}</div>
+              <div className="text-[11px] text-zinc-400" style={mono}>
+                PDF: {pln(price.live.pln)}
+              </div>
+            </>
+          ) : price ? (
             <>
               <div className="text-lg font-bold text-white" style={mono}>
                 {pln(price.pln)}

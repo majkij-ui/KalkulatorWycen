@@ -78,3 +78,26 @@ same.
 - „Rozdziel": pierwszy wiersz to ten sam rekord (ilość 1), reszta to kopie tuż za nim; ułamek w ostatnim. Wiersz z planu: kopie dostają klucz `<klucz>#n` (kolejny wolny numer) i `edited`, oryginał zostaje z kluczem i `edited`, więc „Uwzględnij" niczego nie dokłada ani nie nadpisuje. Cofnięcie w komunikacie przywraca listę sprzed rozdzielenia.
 - „Przenieś do dnia…" przy wierszu: zwykła zmiana `dayId` (`edited`), także w kartach dni; grupowe przenoszenie bez zmian.
 - Dodawanie ekipy: „Wiersz ekipy" (pusty, ręczny), „Rola…" (nazwa roli i jej koszt) i „Osoba…" (pierwsza rola i stawka w niej, inaczej stawka ogólna; „Ja" = moja praca).
+
+## Cena końcowa (5.11.2026)
+
+Decyzja M.J.: pieniądze mają cztery warstwy — kalkulator → PDF (cena) → Realizacja (koszty) → Finanse (ostatnie słowo, faktury wygrywają). M.J. uzupełnia wyceny projektów, które już mają faktury, żeby Realizacja mogła ruszyć od wyceny. Stąd **cena końcowa** (`lib/final-price.ts`, jedna maszyneria z U1: `approvedPrice` / `planRevenue`).
+
+Projekt ma cenę końcową, gdy:
+- (a) jest „Zrealizowany" i ma co najmniej jedną żywą fakturę wysłaną z kwotą — cena = suma faktur, ta sama co `projectMoney().invoiced` (EUR: kwota w zł, którą liczy pętla; usunięte faktury nie liczą się). Liczone przy odczycie, bez migracji. Zaliczka w trwającym projekcie NIE blokuje ceny;
+- (b) w chwili pierwszego zapisu wyceny miał finanse z importu (`!quote && financials`) — cena = `financials.sumaNetto`, zapisana jako `approvedPrice` ze źródłem `import`;
+- (c) M.J. ustawił ją ręcznie po ostrzeżeniu — `approvedPrice` ze źródłem `override` (wygrywa z fakturami i importem).
+
+| Przypadek | Zachowanie |
+|---|---|
+| Edycja wyceny projektu z ceną końcową | Zapis od razu, bez pytania; cena się nie zmienia; Realizacja może ruszyć od wyceny |
+| W trakcie edycji | Pasek nad wyceną (zakładki Wycena i PDF), przeliczany przy każdej zmianie: „Wycena X · Cena końcowa (faktura … / import) Y · różnica Z" |
+| „Ustaw cenę z wyceny" (pasek) albo „Zmień" ceny w Finansach | Okno z ostrzeżeniem (źródło, kwota, numery faktur); dopiero „Zmień cenę" zapisuje ręczne nadpisanie; „Anuluj" nic nie zmienia |
+| Realizacja | Główna cena = cena końcowa, „PDF: X" obok |
+| Finanse projektu | Cena końcowa; brak luki płatności i „dosprzedaży" wywołanych samą różnicą PDF ↔ faktury; „Ustaw cenę z wyceny" zamiast „Odśwież" |
+| Zmiana wariantu | Cena końcowa zostaje (nowa migawka przejmuje rekord), bez pytania o finanse z importu; potwierdzenie mówi, że cena zostaje |
+| Projekt bez ceny końcowej (normalny 2026, zaliczka) | Bez zmian: PDF, zatwierdzona cena, „Odśwież", dotychczasowe pytanie przy wariancie |
+
+Usunięte: blokujące pytanie „Zastąpić finanse z importu…" w nagłówku projektu (`needs-confirmation`, `confirmReplace`, `discard`) i ścieżka „zmiany czekają w pamięci". Zmiany zapisują się od razu jak w każdej wycenie.
+
+Wyceny sprzed zmiany (YoPro, Misty Cliffs for WOO, Z natury gościnni): Realizacja i Finanse projektu pokazują już cenę z faktur (reguła a). Ekrany czytające `financials.sumaNetto` wprost (rozbicie płatności, Klienci bez pętli) wymagają patcha `imports/2026-11-05-cena-koncowa.json` (generator: `scripts/final-price-patch.mts`; ręcznie tylko `--dry-run`, zastosowanie przy zamkniętym hubie). Finanse firmy 2021–2026 (przychód, koszty, zysk) bez zmian — pętla pieniędzy nietknięta.

@@ -162,7 +162,7 @@ export function ProjectHeader({
                 onRetry={() => void quoteDocs.flush(docId)}
               />
             )}
-            {quoteState?.changedThisSession && quoteState.status !== 'needs-confirmation' && (
+            {quoteState?.changedThisSession && (
               <button
                 type="button"
                 onClick={handleRestore}
@@ -294,33 +294,6 @@ export function ProjectHeader({
             Przywrócono wycenę sprzed zmian z tej sesji.
           </p>
         )}
-
-        {quoteState?.status === 'needs-confirmation' && quoteState.prompt && (
-          // Projekt ma finanse spoza kalkulatora (np. retro-import) — zapis
-          // wyceny by je zastąpił, więc tylko po jawnej zgodzie. Do odpowiedzi
-          // zmiany w wycenie czekają w pamięci (nic nie trafia do pliku).
-          <div
-            className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90"
-            role="alert"
-          >
-            <span className="min-w-0 flex-1">
-              Ten projekt ma finanse z importu ({formatPln(quoteState.prompt.current.sumaNetto)}). Zastąpić je wyceną z
-              kalkulatora ({formatPln(quoteState.prompt.proposed?.sumaNetto ?? 0)})? Do decyzji zmiany w wycenie nie są
-              zapisane.
-            </span>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-7 px-2 text-xs"
-              onClick={() => void quoteDocs.confirmReplace(docId)}
-            >
-              Zastąp
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => quoteDocs.discard(docId)}>
-              Cofnij zmiany
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -342,9 +315,6 @@ function QuoteSaveStatus({ status, onRetry }: { status: QuoteDocStatus; onRetry:
         </button>
       </span>
     )
-  }
-  if (status === 'needs-confirmation') {
-    return <span className="text-xs text-amber-200/90">Wycena czeka na decyzję</span>
   }
   const busy = status === 'pending' || status === 'saving'
   return (

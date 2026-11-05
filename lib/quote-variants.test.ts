@@ -221,7 +221,7 @@ test('„Wybrany do rozliczeń": migawki zamieniają się, finanse z B, „Cofni
   assert.deepEqual(withoutStamp(plan.after), withoutStamp(computeSnapshotFinancials(B, NOW)))
   assert.equal(plan.before, p.financials)
   assert.equal(plan.previousId, MAIN_VARIANT_ID)
-  assert.equal(plan.replacesImported, false)
+  assert.equal(plan.keepsFinalPrice, false)
   // A jest teraz wariantem na miejscu B; kolejność listy się nie przestawia.
   assert.deepEqual(
     plan.patch.quoteVariants?.map((v) => [v.id, v.label]),
@@ -258,14 +258,15 @@ test('usuniętego wariantu nie da się wybrać', () => {
   assert.equal(chooseVariantPlan(p, 'qv-b', NOW).status, 'missing')
 })
 
-test('finanse z importu: wybór wariantu pyta (replacesImported), pusta A zostaje pustym wariantem', () => {
+test('finanse z importu: wybór wariantu przenosi cenę końcową z importu, pusta A zostaje pustym wariantem', () => {
   const p = project('retro', { financials: IMPORTED, quoteVariants: [variant('qv-b', 'B', B)] })
   const plan = chooseVariantPlan(p, 'qv-b', NOW)
   assert.equal(plan.status, 'ready')
   if (plan.status !== 'ready') return
-  assert.equal(plan.replacesImported, true)
+  assert.equal(plan.keepsFinalPrice, true)
   assert.equal(plan.before, IMPORTED)
-  assert.equal(plan.after?.sumaNetto, sumaNetto(B))
+  assert.equal(plan.after?.sumaNetto, IMPORTED.sumaNetto, 'cena końcowa z importu, nie PDF wariantu')
+  assert.equal(((plan.patch.quote as { data: QuoteData }).data).approvedPrice?.source, 'import')
   assert.equal(plan.patch.quoteVariants?.[0].snapshot, null)
   assert.equal(plan.patch.client, 'Klient retro')
 })
@@ -478,7 +479,7 @@ test('B z kopii A, edycja B: A, jego PDF i finanse nietknięte; zapis B to tylko
   assert.equal(h.writes[0].patch.financials?.sumaNetto, sumaNetto(docToSnapshot(h.store.get('p1'), NOW)))
 })
 
-test('finanse z importu: wariant zapisuje się bez pytania, edycja A dalej pyta', async () => {
+test('finanse z importu: wariant i edycja A zapisują się bez pytania; zamiana zachowuje cenę końcową', async () => {
   const h = harness([project('retro', { financials: IMPORTED, quoteVariants: [variant('qv-b', 'B', null)] })])
   h.store.edit('retro#qv-b', setDays(3))
   await h.elapse()
@@ -488,10 +489,9 @@ test('finanse z importu: wariant zapisuje się bez pytania, edycja A dalej pyta'
 
   h.store.edit('retro', setDays(2))
   await h.elapse()
-  assert.equal(h.store.state('retro').status, 'needs-confirmation')
-  // Zamiana zgubiłaby zmiany czekające na „Zastąp" — najpierw decyzja.
-  assert.equal(await h.choose('retro', 'qv-b'), 'blocked')
-  assert.equal(h.project('retro').financials, IMPORTED)
+  assert.equal(h.store.state('retro').status, 'saved')
+  assert.equal(h.project('retro').financials?.sumaNetto, IMPORTED.sumaNetto)
+  assert.equal((h.project('retro').quote as { data: QuoteData }).data.approvedPrice?.source, 'import')
 })
 
 test('wybór B z niezapisanymi zmianami w A i B: obie zapisane, potem zamiana i nowe dokumenty', async () => {

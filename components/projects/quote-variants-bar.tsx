@@ -12,10 +12,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Check, ChevronDown, Copy, FilePlus2, Pencil, Plus, Rows3, Trash2, X } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
+import { useEvents } from '@/lib/events-context'
+import { finalPrice, quotePriceRecord } from '@/lib/final-price'
 import { docToSnapshot } from '@/lib/quote-documents'
 import { computeSnapshotFinancials } from '@/lib/quote-financials'
 import { formatMoney } from '@/lib/quote-currency'
-import { countsTowardRevenue, type Project } from '@/lib/project-types'
+import { countsTowardRevenue, toDateKey, type Project } from '@/lib/project-types'
 import { hasAlternatives, listVariants, variantFigures, type VariantView } from '@/lib/quote-variants'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,7 +40,8 @@ interface ConfirmChoose {
   variant: VariantView
   before: number | null
   after: number | null
-  imported: boolean
+  /** Opis ceny końcowej, która zostaje (np. „faktura 3/03/2026 · 9 180 zł”); `null` = projekt bez ceny końcowej. */
+  finalText: string | null
 }
 
 export function QuoteVariantsBar({
@@ -53,6 +56,7 @@ export function QuoteVariantsBar({
   const { quoteDocs, addVariant, renameVariant, deleteVariant, restoreVariant, chooseVariant } = useProjectHub()
   // Porównanie i kwoty w pytaniu liczą się z dokumentów (także z niezapisanymi zmianami).
   useSyncExternalStore(quoteDocs.subscribe, quoteDocs.version, quoteDocs.version)
+  const { allEvents } = useEvents()
 
   const variants = useMemo(() => listVariants(project), [project])
   const multiple = hasAlternatives(project)
@@ -109,7 +113,7 @@ export function QuoteVariantsBar({
       if (plan.status === 'blocked') {
         setNotice({
           type: 'error',
-          message: 'Najpierw odpowiedz na pytanie o finanse z importu (nad zakładkami) — dopiero potem zmień wybór.',
+          message: 'Wycena nie zapisała się (komunikat nad zakładkami) — zapisz ją, dopiero potem zmień wybór.',
         })
         return
       }
@@ -128,14 +132,17 @@ export function QuoteVariantsBar({
   }
 
   const startChoose = (v: VariantView) => {
-    const imported = !project.quote && !!project.financials
-    // Wycena / nieprzyjęta: od razu, z „Cofnij". W realizacji, zrealizowany i finanse z importu — najpierw pytanie.
-    if (!countsTowardRevenue(project.status) && !imported) {
+    // Cena końcowa (faktury / import / ręczna) zostaje przy zmianie wariantu — mówi o tym pytanie.
+    const final = finalPrice(project, quotePriceRecord(project.quote), allEvents, toDateKey(new Date()))
+    const importedPln = !project.quote && project.financials && project.financials.sumaNetto > 0 ? project.financials.sumaNetto : null
+    const finalText = final ? `${final.label} · ${formatPln(final.pln)}` : importedPln !== null ? `import · ${formatPln(importedPln)}` : null
+    // Wycena / nieprzyjęta bez ceny końcowej: od razu, z „Cofnij". W realizacji, zrealizowany i z ceną końcową — najpierw pytanie.
+    if (!countsTowardRevenue(project.status) && finalText === null) {
       void doChoose(v)
       return
     }
     const after = computeSnapshotFinancials(docToSnapshot(quoteDocs.get(v.docId)))
-    setConfirm({ variant: v, before: project.financials?.sumaNetto ?? null, after: after?.sumaNetto ?? null, imported })
+    setConfirm({ variant: v, before: project.financials?.sumaNetto ?? null, after: after?.sumaNetto ?? null, finalText })
   }
 
   const undo = async () => {
@@ -289,8 +296,8 @@ export function QuoteVariantsBar({
           role="alert"
         >
           <span className="min-w-0 flex-1">
-            {confirm.imported
-              ? `Ten projekt ma finanse z importu (${formatPln(confirm.before ?? 0)}). Zastąpić je wariantem ${confirm.variant.label} (${formatPln(confirm.after ?? 0)})?`
+            {confirm.finalText
+              ? `Rozliczać wariant ${confirm.variant.label}? Cena końcowa zostaje: ${confirm.finalText}. Zmienia się tylko wycena i plan (PDF wariantu: ${formatPln(confirm.after ?? 0)}).`
               : `Rozliczać wariant ${confirm.variant.label}? Finanse projektu: ${formatPln(confirm.before ?? 0)} → ${formatPln(confirm.after ?? 0)}.`}
           </span>
           <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void doChoose(confirm.variant)}>

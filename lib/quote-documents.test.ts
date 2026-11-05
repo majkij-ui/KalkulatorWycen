@@ -329,113 +329,26 @@ test('A → B → A: wracasz do swojej wyceny, także zanim się zapisała', asy
   assert.equal(h.store.get('B').data.dniDokumentacji, 8)
 })
 
-test('finanse z importu: pierwsza zmiana pyta raz, do odpowiedzi nic nie trafia do pliku', async () => {
+test('finanse z importu: pierwsza zmiana zapisuje się sama, przychód z importu zostaje ceną końcową', async () => {
   const h = harness([project('R', { status: 'done', financials: IMPORTED })])
   h.store.edit('R', setField('dniDokumentacji', 1))
-  await h.elapse()
-  assert.equal(h.writes.length, 0)
-  const asked = h.store.state('R')
-  assert.equal(asked.status, 'needs-confirmation')
-  assert.deepEqual(asked.prompt?.current, IMPORTED)
-  assert.deepEqual(asked.prompt?.proposed, computeSnapshotFinancials(docToSnapshot(h.store.get('R'), NOW), NOW))
-
-  // Kolejne zmiany czekają razem z pierwszą — bez timera i bez zapisu.
+  assert.equal(h.store.state('R').status, 'pending', 'nie ma pytania blokującego')
   h.store.edit('R', setField('dniDokumentacji', 2))
-  assert.equal(h.timerCount(), 0)
-  await h.store.flushAll()
-  assert.equal(h.writes.length, 0)
-  assert.equal(h.project('R').financials, IMPORTED)
-
-  await h.store.confirmReplace('R')
-  assert.equal(h.writes.length, 1)
+  await h.elapse()
+  assert.equal(h.writes.length, 1, 'zmiany z pamięci zapisane razem')
   const quote = h.project('R').quote as QuoteSnapshot
-  assert.equal(quote.data.dniDokumentacji, 2, 'zapisuje się wycena ze wszystkimi zmianami')
-  assert.deepEqual(h.project('R').financials, computeSnapshotFinancials(quote, NOW))
+  assert.equal(quote.data.dniDokumentacji, 2)
+  assert.deepEqual(quote.data.approvedPrice, { pln: IMPORTED.sumaNetto, source: 'import', at: NOW.toISOString() })
+  assert.equal(h.project('R').financials?.sumaNetto, IMPORTED.sumaNetto, 'cena końcowa się nie rusza')
   assert.equal(h.store.state('R').status, 'saved')
+  // Dokument przejął cenę z zapisu — następny zapis niczego nie dubluje ani nie gubi.
+  assert.equal(h.store.get('R').data.approvedPrice?.source, 'import')
 
-  // Projekt ma już wycenę — następne zmiany zapisują się bez pytania.
   h.store.edit('R', setField('dniDokumentacji', 3))
   await h.elapse()
   assert.equal(h.writes.length, 2)
-})
-
-test('finanse z importu: „Cofnij zmiany" porzuca wycenę, następna zmiana pyta znowu', async () => {
-  const h = harness([project('R', { status: 'done', financials: IMPORTED })])
-  h.store.edit('R', setField('dniDokumentacji', 1))
-  await h.elapse()
-  assert.equal(h.store.state('R').status, 'needs-confirmation')
-
-  const epoch = h.store.state('R').epoch
-  h.store.discard('R')
-  assert.equal(h.store.get('R').data.dniDokumentacji, 0, 'z powrotem pusta wycena')
-  assert.equal(h.store.state('R').status, 'saved')
-  assert.ok(h.store.state('R').epoch > epoch, 'zakładki dostają nowy dokument')
-  assert.equal(h.store.state('R').changedThisSession, false, 'nic nie zapisano — nie ma czego cofać')
-
-  h.store.edit('R', setField('kierownikProdukcji', true))
-  await h.elapse()
-  assert.equal(h.store.state('R').status, 'needs-confirmation')
-  assert.equal(h.writes.length, 0)
-  assert.equal(h.project('R').financials, IMPORTED)
-})
-
-test('zmiany ciche (poprawki szkicu PDF) nie zapisują — jadą z następną zmianą', async () => {
-  const h = harness([quoted('A', snap({ dniDokumentacji: 1 }, { pdfDraft: { currency: 'PLN' } }))])
-  h.store.edit('A', (doc) => ({ ...doc, pdfDraft: { currency: 'PLN', followsQuote: true } }), { silent: true })
-  await h.elapse()
-  assert.equal(h.writes.length, 0, 'samo obejrzenie PDF niczego nie zapisuje')
-  assert.equal(h.store.state('A').changedThisSession, false)
-  assert.deepEqual(h.store.get('A').pdfDraft, { currency: 'PLN', followsQuote: true })
-
-  h.store.edit('A', setField('dniDokumentacji', 2))
-  await h.elapse()
-  assert.deepEqual((h.writes[0].patch.quote as QuoteSnapshot).pdfDraft, { currency: 'PLN', followsQuote: true })
-})
-
-test('zmiana z zewnątrz podmienia dokument, gdy nic nie czeka; czekające zmiany wygrywają', () => {
-  const h = harness([quoted('A', snap({ dniDokumentacji: 1 })), quoted('B', snap({ dniDokumentacji: 1 }))])
-  const before = h.store.get('A')
-  const epoch = h.store.state('A').epoch
-  // „Scal osoby" przepisuje wycenę w projekcie.
-  h.replaceProject(quoted('A', snap({ dniDokumentacji: 9 })))
-  assert.equal(h.store.get('A').data.dniDokumentacji, 9)
-  assert.notEqual(h.store.get('A'), before)
-  assert.equal(h.store.state('A').epoch, epoch + 1)
-
-  h.store.edit('B', setField('dniDokumentacji', 4))
-  h.replaceProject(quoted('B', snap({ dniDokumentacji: 9 })))
-  assert.equal(h.store.get('B').data.dniDokumentacji, 4)
-})
-
-test('kopia z pliku po zapisie to ten sam dokument — bez nowego epoch', async () => {
-  const h = harness([quoted('A', snap({ dniDokumentacji: 1 }))], { fileCopy: true })
-  h.store.edit('A', setField('dniDokumentacji', 2))
-  const edited = h.store.get('A')
-  const epoch = h.store.state('A').epoch
-  await h.store.flush('A')
-  assert.notEqual(h.project('A').quote, h.writes[0].patch.quote, 'w projekcie leży kopia z pliku')
-  assert.equal(h.store.get('A'), edited)
-  assert.equal(h.store.state('A').epoch, epoch)
-})
-
-test('lead: pusta wycena idzie za klientem; nietknięta nie zakłada wyceny; edytowany PDF zakłada', async () => {
-  const h = harness([project('L', { client: 'S&A' })])
-  assert.equal(h.store.get('L').data.clientName, 'S&A')
-  h.replaceProject(project('L', { client: 'S&A jewellery design' }))
-  assert.equal(h.store.get('L').data.clientName, 'S&A jewellery design', 'zmiana klienta w nagłówku')
-
-  h.store.edit('L', (doc) => ({ ...doc, marginMultiplier: 1.2 }))
-  await h.elapse()
-  assert.equal(h.writes.length, 0, 'sama marża bez pozycji to nie wycena')
-  assert.equal(h.project('L').quote, null)
-  assert.deepEqual(h.store.pendingIds(), [], 'nic nie czeka na zapis')
-  h.replaceProject(project('L', { client: 'S&A Jewellery' }))
-  assert.equal(h.store.get('L').data.clientName, 'S&A Jewellery', 'pusta wycena dalej idzie za klientem')
-
-  h.store.edit('L', (doc) => ({ ...doc, pdfDraft: { terminZdjec: 'listopad' } }))
-  await h.elapse()
-  assert.equal(h.writes.length, 1)
-  assert.deepEqual((h.project('L').quote as QuoteSnapshot).pdfDraft, { terminZdjec: 'listopad' })
+  assert.equal((h.project('R').quote as QuoteSnapshot).data.approvedPrice?.source, 'import')
+  assert.equal(h.project('R').financials?.sumaNetto, IMPORTED.sumaNetto)
 })
 
 test('„Cofnij zmiany z tej sesji": wycena i finanse jak przy otwarciu (także „brak wyceny")', async () => {
@@ -456,7 +369,6 @@ test('„Cofnij zmiany z tej sesji": wycena i finanse jak przy otwarciu (także 
 
   h.store.edit('R', setField('dniDokumentacji', 2))
   await h.elapse()
-  await h.store.confirmReplace('R')
   assert.ok(h.project('R').quote)
   await h.store.restoreSession('R')
   assert.equal(h.project('R').quote, null, 'retro-projekt znowu bez wyceny')

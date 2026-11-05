@@ -13,8 +13,8 @@
  *     „Scal osoby", daje nowy dokument i nowy `epoch`);
  *   - czekające zmiany (bufor) wygrywają z projektem, dopóki się nie zapiszą;
  *   - zapis decyduje `planProjectSave` (`project-save.ts`): projekt bez wyceny
- *     z finansami z importu pyta raz, zanim je zastąpi — do odpowiedzi zmiany
- *     zostają w pamięci, nic nie trafia do pliku;
+ *     z finansami z importu zapisuje się od razu (bez pytania); przychód z
+ *     importu zostaje ceną końcową (`final-price.ts`);
  *   - zmiany „ciche" (`silent`) — automatyczne poprawki szkicu PDF — nie
  *     wywołują zapisu; jadą z następną prawdziwą zmianą;
  *   - „Cofnij zmiany z tej sesji" przywraca wycenę i finanse z chwili, gdy
@@ -26,15 +26,14 @@
  * Q2 (warianty A/B/C, `quote-variants.ts`): klucz dokumentu to `docId`. Id
  * projektu = wariant wybrany do rozliczeń (`Project.quote`, zapis jak wyżej);
  * `projekt#wariant` = pozostały wariant — jego zapis (`writeVariant`) zmienia
- * tylko jego wpis w `Project.quoteVariants`: bez finansów i bez pytania o
- * import, bo warianty nie liczą pieniędzy. „Cofnij zmiany z tej sesji" działa
+ * tylko jego wpis w `Project.quoteVariants`: bez finansów, bo warianty nie liczą pieniędzy. „Cofnij zmiany z tej sesji" działa
  * na każdy dokument osobno.
  */
 
 import { DEFAULT_PRICING, type PricingConfigShape } from './pricing-config'
 import { mergeQuoteDataPartial, resolveSnapshot } from './quote-financials'
 import { blankQuoteSnapshot, planProjectSave } from './project-save'
-import type { Project, ProjectFinancials } from './project-types'
+import type { Project } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
 import { defaultQuoteData, type QuoteData } from './quote-types'
 import { newQuoteExtras } from './quote-extras'
@@ -143,14 +142,12 @@ export function docToSnapshot(doc: QuoteDoc, now: Date = new Date()): QuoteSnaps
 
 /**
  * `saved` — nic nie czeka · `pending` — zapis za chwilę · `saving` — w toku ·
- * `needs-confirmation` — finanse z importu, czeka na „Zastąp" · `error` — zapis się nie udał.
+ * `error` — zapis się nie udał.
  */
-export type QuoteDocStatus = 'saved' | 'pending' | 'saving' | 'needs-confirmation' | 'error'
+export type QuoteDocStatus = 'saved' | 'pending' | 'saving' | 'error'
 
 export interface QuoteDocState {
   status: QuoteDocStatus
-  /** Kwoty do pytania „Zastąpić finanse z importu?". */
-  prompt: { current: ProjectFinancials; proposed: ProjectFinancials | null } | null
   /** Rośnie, gdy dokument podmieniono w całości (wyczyszczenie, import, zmiana z zewnątrz). */
   epoch: number
   /** Czy w tej sesji coś w tej wycenie zmieniono (jest co cofnąć). */
@@ -189,10 +186,6 @@ export interface QuoteDocumentStore {
   flushAll: () => Promise<void>
   /** Zapisz teraz wszystkie dokumenty projektu (wybrany i warianty). */
   flushProject: (projectId: string) => Promise<void>
-  /** „Zastąp" — zapis wyceny zamiast finansów z importu. */
-  confirmReplace: (id: string) => Promise<void>
-  /** „Cofnij zmiany" przy pytaniu o import — porzuca czekające zmiany. */
-  discard: (id: string) => void
   /** „Cofnij zmiany z tej sesji" — wycena i finanse jak przy pierwszym otwarciu. */
   restoreSession: (id: string) => Promise<void>
   /** Projekty z niezapisanymi zmianami (np. czekające na odpowiedź). */
@@ -221,7 +214,6 @@ interface Entry {
   saving: Promise<void> | null
   timer: unknown
   status: QuoteDocStatus
-  prompt: QuoteDocState['prompt']
   epoch: number
   origin: Pick<Project, 'quote' | 'financials'>
   changedThisSession: boolean
@@ -301,7 +293,6 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
         saving: null,
         timer: null,
         status: 'saved',
-        prompt: null,
         epoch: 0,
         origin: { quote: found.quote as Project['quote'], financials: found.project.financials },
         changedThisSession: false,
@@ -333,10 +324,9 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
 
   function state(id: string): QuoteDocState {
     const entry = entryFor(id)
-    if (!entry) return { status: 'saved', prompt: null, epoch: 0, changedThisSession: false, error: null }
+    if (!entry) return { status: 'saved', epoch: 0, changedThisSession: false, error: null }
     return {
       status: entry.status,
-      prompt: entry.prompt,
       epoch: entry.epoch,
       changedThisSession: entry.changedThisSession,
       error: entry.error,
@@ -371,15 +361,12 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     entry.dirty = true
     entry.changedThisSession = true
     if (entry.saving) entry.editedDuringSave = true
-    // Czeka na „Zastąp" — zmiany zbierają się w pamięci, nic nie leci do pliku.
-    if (entry.status !== 'needs-confirmation') {
-      entry.status = entry.saving ? 'saving' : 'pending'
-      if (!entry.saving) schedule(id, entry)
-    }
+    entry.status = entry.saving ? 'saving' : 'pending'
+    if (!entry.saving) schedule(id, entry)
     notify()
   }
 
-  async function save(id: string, entry: Entry, replaceFinancials: boolean): Promise<void> {
+  async function save(id: string, entry: Entry): Promise<void> {
     const found = sourceFor(id)
     if (!found) {
       // Projekt (albo wariant) usunięty w międzyczasie — nie ma dokąd zapisać.
@@ -391,26 +378,26 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     const doc = entry.doc
     const snapshot = docToSnapshot(doc, now())
     if (variantId !== null) {
-      // Wariant nie liczy pieniędzy: sama migawka, bez finansów i bez pytania o import.
+      // Wariant nie liczy pieniędzy: sama migawka, bez finansów.
       await persist(id, entry, snapshot, () => writeVariant(project.id, variantId, snapshot))
       return
     }
-    const plan = planProjectSave({ project, snapshot, replaceFinancials, now: now() })
-    if (plan.status === 'needs-confirmation') {
-      entry.status = 'needs-confirmation'
-      entry.prompt = { current: plan.current, proposed: plan.proposed }
-      return
-    }
+    const plan = planProjectSave({ project, snapshot, now: now() })
     if (plan.source === 'kept') {
       // Pusta wycena projektu bez wyceny — nic do zapisania, projekt zostaje bez wyceny.
       entry.dirty = false
       entry.status = 'saved'
-      entry.prompt = null
       return
     }
-    await persist(id, entry, snapshot, () =>
+    // Pierwsza wycena projektu z importu niesie cenę końcową (`approvedPrice` z importu) — dokument ją przejmuje.
+    const saved = (plan.project.quote ?? snapshot) as QuoteSnapshot
+    if (saved !== snapshot) {
+      const stamped = (saved.data as { approvedPrice?: QuoteDoc['data']['approvedPrice'] }).approvedPrice
+      entry.doc = { ...entry.doc, data: { ...entry.doc.data, approvedPrice: stamped } }
+    }
+    await persist(id, entry, saved, () =>
       options.write(id, {
-        quote: snapshot,
+        quote: saved,
         financials: plan.project.financials,
         client: plan.project.client,
       })
@@ -432,7 +419,6 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
       entry.sourceRef = snapshot
       entry.sourceKey = JSON.stringify(snapshot)
       entry.savedThisSession = true
-      entry.prompt = null
       entry.error = null
       if (entry.editedDuringSave) {
         entry.status = 'pending'
@@ -447,14 +433,13 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     }
   }
 
-  async function flushEntry(id: string, replaceFinancials: boolean): Promise<void> {
+  async function flushEntry(id: string): Promise<void> {
     const entry = entries.get(id)
     if (!entry) return
     cancelTimer(entry)
     while (entry.saving) await entry.saving
     if (!entry.dirty) return
-    if (entry.status === 'needs-confirmation' && !replaceFinancials) return
-    const run = save(id, entry, replaceFinancials).catch((err) => {
+    const run = save(id, entry).catch((err) => {
       entry.status = 'error'
       entry.error = describeError(err)
     })
@@ -467,7 +452,7 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     }
   }
 
-  const flush = (id: string) => flushEntry(id, false)
+  const flush = (id: string) => flushEntry(id)
 
   async function flushAll(): Promise<void> {
     await Promise.all([...entries.keys()].map((id) => flush(id)))
@@ -479,32 +464,15 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     await Promise.all([...entries.keys()].filter(ofProject(projectId)).map((id) => flush(id)))
   }
 
-  async function confirmReplace(id: string): Promise<void> {
-    const entry = entries.get(id)
-    if (!entry || entry.status !== 'needs-confirmation') return
-    entry.status = 'pending'
-    await flushEntry(id, true)
-  }
-
   function resetToSource(entry: Entry) {
     cancelTimer(entry)
     entry.dirty = false
     entry.editedDuringSave = false
     entry.status = 'saved'
-    entry.prompt = null
     entry.error = null
     // Następny odczyt zbuduje dokument z projektu od nowa.
     entry.sourceRef = undefined
     entry.sourceKey = ''
-  }
-
-  function discard(id: string) {
-    const entry = entries.get(id)
-    if (!entry) return
-    resetToSource(entry)
-    // Porzucone zmiany nigdy nie trafiły do pliku — zostaje tylko to, co zapisano wcześniej.
-    entry.changedThisSession = entry.savedThisSession
-    notify()
   }
 
   async function restoreSession(id: string): Promise<void> {
@@ -551,8 +519,6 @@ export function createQuoteDocumentStore(options: QuoteDocumentStoreOptions): Qu
     flush,
     flushAll,
     flushProject,
-    confirmReplace,
-    discard,
     restoreSession,
     pendingIds,
     forget,

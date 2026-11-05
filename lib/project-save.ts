@@ -4,18 +4,20 @@
  *
  * Projekt bez wyceny (`quote: null`) otwiera się z PUSTĄ wyceną. Taki
  * projekt może mieć finanse spoza kalkulatora (retro-import z przychodem i
- * kosztami, np. `p-retro2026-…`). Ślepy zapis policzyłby je od nowa z pustej
- * wyceny i po cichu wyzerował prawdziwy przychód w Finansach. Dlatego:
+ * kosztami, np. `p-retro2026-…`):
  *
  *   wycena nietknięta (ani PDF)             → wycena zostaje `null`, finanse bez zmian
  *   wycena zbudowana, projekt bez finansów  → zwykły zapis wyceny + policzone finanse
- *   wycena zbudowana, finanse spoza kalk.   → zapis dopiero po jawnym potwierdzeniu
+ *   wycena zbudowana, finanse z importu     → zapis OD RAZU, bez pytania; przychód
+ *                                             z importu zostaje CENĄ KOŃCOWĄ
+ *                                             (`approvedPrice` ze źródłem `import`,
+ *                                             `final-price.ts`) — edycja wyceny jej nie rusza
  *
- * Projekt, który MA wycenę, zapisuje się jak dotąd: jego finanse zawsze
- * pochodzą z kalkulatora, więc przeliczenie niczego nie niszczy.
+ * Projekt, który MA wycenę, zapisuje się jak dotąd.
  */
 
 import { computeSnapshotFinancials, mergeQuoteDataPartial } from './quote-financials'
+import { stampImportedPrice } from './final-price'
 import type { Project, ProjectFinancials } from './project-types'
 import type { QuoteSnapshot } from './quote-library'
 import type { PricingConfigShape } from './pricing-config'
@@ -86,45 +88,30 @@ export function clientAfterSave(project: Pick<Project, 'client'>, snapshot: Pick
   return project.client.trim() ? project.client : (snapshot.data.clientName ?? '').trim()
 }
 
-export type ProjectSavePlan =
-  | {
-      status: 'ready'
-      project: Project
-      /** `kept` — wycena i finanse projektu zostały nietknięte. */
-      source: 'calculator' | 'kept'
-    }
-  | {
-      /** Zapis nadpisałby finanse spoza kalkulatora — trzeba zapytać użytkownika. */
-      status: 'needs-confirmation'
-      current: ProjectFinancials
-      proposed: ProjectFinancials | null
-    }
+export interface ProjectSavePlan {
+  project: Project
+  /** `kept` — wycena i finanse projektu zostały nietknięte. */
+  source: 'calculator' | 'kept'
+}
 
 export function planProjectSave(params: {
   project: Project
   /** Bieżący dokument wyceny (`docToSnapshot`). */
   snapshot: QuoteSnapshot
-  /** Jawna zgoda na zastąpienie finansów spoza kalkulatora. */
-  replaceFinancials?: boolean
   now?: Date
 }): ProjectSavePlan {
-  const { project, snapshot, replaceFinancials = false, now = new Date() } = params
+  const { project, now = new Date() } = params
   const updatedAt = now.toISOString()
-  const client = clientAfterSave(project, snapshot)
+  const client = clientAfterSave(project, params.snapshot)
 
   // Szkic PDF to też praca: edytowany PDF zakłada wycenę jak każda zmiana.
-  if (!project.quote && isBlankQuoteData(snapshot.data) && snapshot.pdfDraft == null) {
-    return { status: 'ready', source: 'kept', project: { ...project, client, updatedAt } }
+  if (!project.quote && isBlankQuoteData(params.snapshot.data) && params.snapshot.pdfDraft == null) {
+    return { source: 'kept', project: { ...project, client, updatedAt } }
   }
 
+  // Pierwsza wycena projektu z importu: przychód z importu to cena końcowa.
+  const imported = !project.quote && project.financials ? project.financials : null
+  const snapshot = imported ? stampImportedPrice(params.snapshot, imported, updatedAt) : params.snapshot
   const financials = computeSnapshotFinancials(snapshot, now)
-  if (!project.quote && project.financials && !replaceFinancials) {
-    return { status: 'needs-confirmation', current: project.financials, proposed: financials }
-  }
-
-  return {
-    status: 'ready',
-    source: 'calculator',
-    project: { ...project, quote: snapshot, client, financials, updatedAt },
-  }
+  return { source: 'calculator', project: { ...project, quote: snapshot, client, financials, updatedAt } }
 }
