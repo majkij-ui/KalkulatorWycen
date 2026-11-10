@@ -258,6 +258,8 @@ export const gearLineSchema = z
     itemId: z.string().min(1),
     /** Ile sztuk pojechało tego dnia (≥ 1). */
     qty: z.number().int().min(1).catch(1),
+    /** Stawka dnia tej pozycji w tym projekcie (za sztukę), np. zestaw z retro-uzupełnienia; brak = stawka z katalogu. */
+    dayRate: z.number().finite().min(0).optional().catch(undefined),
   })
   .passthrough()
 export type GearLine = z.infer<typeof gearLineSchema>
