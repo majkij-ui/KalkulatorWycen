@@ -17,7 +17,7 @@
  * kalendarzu — popover dnia dostaje ją od rodzica (`renderDayDate`).
  */
 
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { Copy, Layers, Package, PackageOpen, Printer, Search, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
@@ -26,6 +26,8 @@ import {
   buildPackingList,
   cycleGearQty,
   duplicateGearDay,
+  gearDayDate,
+  soldBeforeDay,
   setGearLine,
   toggleGearItemAllDays,
   updateGearDay,
@@ -130,11 +132,19 @@ export function GearGrid({
   const valueById = useMemo(() => new Map(summary.items.map((u) => [u.itemId, u.rentValue])), [summary])
 
   /** Pozycje w siatce: bez wycofanych (chyba że były w tym projekcie), pogrupowane. */
+  /** Sprzedany przed datą tego dnia (bez daty: dziś) — nie do dodania na ten dzień. */
+  const soldOnDay = useCallback(
+    (item: EquipmentItem, day: GearDay) => soldBeforeDay(item, gearDayDate(day, project)),
+    [project]
+  )
+
   const groups = useMemo(() => {
     const needle = normalize(query.trim())
     const visible = items.filter(
       (item) =>
         (!item.retiredAt || usedIds.has(item.id)) &&
+        // Sprzedany przed wszystkimi dniami projektu: nie oferujemy (chyba że już tu jest).
+        (usedIds.has(item.id) || days.length === 0 || days.some((day) => !soldOnDay(item, day))) &&
         (!onlyUsed || usedIds.has(item.id)) &&
         (!needle || normalize(item.name).includes(needle))
     )
@@ -150,7 +160,7 @@ export function GearGrid({
         category,
         items: list.sort((a, b) => a.name.localeCompare(b.name, 'pl')),
       }))
-  }, [items, usedIds, onlyUsed, query])
+  }, [items, usedIds, onlyUsed, query, days, soldOnDay])
 
   const qtyOf = (day: GearDay, itemId: string) => day.lines.find((l) => l.itemId === itemId)?.qty ?? 0
 
@@ -319,7 +329,7 @@ export function GearGrid({
                     kits={kits}
                     hasCrew={(kitCrewOfDay?.(day) ?? []).length > 0}
                     onApplyKit={(kit) => {
-                      if (kit.lines.length > 0) commit(applyKitToGearDay(days, day.id, kit.lines, items))
+                      if (kit.lines.length > 0) commit(applyKitToGearDay(days, day.id, kit.lines, items, project.date))
                       if (kit.crew?.length) onKitCrew?.(day, kit.crew)
                     }}
                     onSaveKit={(name) => void addKit(name, day.lines, kitCrewOfDay?.(day) ?? [])}
@@ -359,7 +369,7 @@ export function GearGrid({
                       >
                         <button
                           type="button"
-                          onClick={() => commit(toggleGearItemAllDays(days, item.id, owned))}
+                          onClick={() => commit(toggleGearItemAllDays(days, item.id, owned, (day) => soldOnDay(item, day)))}
                           title={days.length > 1 ? 'Wszystkie dni naraz' : undefined}
                           className="min-w-0 rounded-md px-1 py-1 text-left"
                         >
@@ -369,6 +379,11 @@ export function GearGrid({
                             {item.retiredAt && (
                               <span className="ml-1.5 rounded bg-zinc-800 px-1 py-px text-[10px] text-zinc-400">
                                 wycofany
+                              </span>
+                            )}
+                            {item.soldDate && (
+                              <span className="ml-1.5 rounded bg-zinc-800 px-1 py-px text-[10px] text-zinc-400">
+                                sprzedany {formatDate(item.soldDate)}
                               </span>
                             )}
                           </div>
@@ -381,6 +396,18 @@ export function GearGrid({
                         {days.map((day, index) => {
                           const qty = qtyOf(day, item.id)
                           const on = qty > 0
+                          if (!on && soldOnDay(item, day)) {
+                            return (
+                              <div key={day.id} className="flex justify-center">
+                                <span
+                                  title={`Sprzedany ${formatDate(item.soldDate ?? '')} — nie do dodania na ten dzień`}
+                                  className="flex size-8 items-center justify-center rounded-lg border border-transparent text-xs text-zinc-800"
+                                >
+                                  ×
+                                </span>
+                              </div>
+                            )
+                          }
                           return (
                             <div key={day.id} className="flex justify-center">
                               <button

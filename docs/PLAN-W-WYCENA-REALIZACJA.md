@@ -140,3 +140,35 @@ Uzupełnienie użycia własnego sprzętu w projektach 2021–2024 (dotąd bez sp
 | `equipmentDates` | `purchaseDate` w katalogu zaktualizowany |
 
 Podsumowanie na stderr: zmienione / pominięte projekty oraz per pozycja dni, Odpracował i Zarobił.
+
+## Sprzęt: przejrzane, na plusie, sprzedaż (10.11.2026)
+
+Decyzje M.J. Trzy zmiany w sekcji Sprzęt; Finanse bez zmian (sprzedaż to nie przychód, rozkładanie kosztów sprzętu nietknięte).
+
+**„Bez sprzętu"** — pole `noGear` w projekcie („przejrzany: projekt bez mojego sprzętu", np. postprodukcja). Ostrzeżenie „projekt nie ma wpisanego sprzętu" ma przycisk „Bez sprzętu" przy każdym wierszu, „Wszystkie przejrzane — bez sprzętu" (jeden zapis) i zwijaną listę „Przejrzane bez sprzętu (N)" z „Cofnij".
+
+| Przypadek | Zachowanie |
+|---|---|
+| oznaczony | nie ma go w ostrzeżeniu |
+| nowy zrealizowany projekt bez sprzętu i bez flagi | jest w ostrzeżeniu |
+| oznaczony, który później dostał sprzęt | liczy się normalnie, flaga bez znaczenia |
+
+**„Na plusie"** = Zarobił − zainwestowane (`gearBalance`; zainwestowane = sztuki × cena zakupu). Zielone „+X zł" albo „Do spłaty X zł"; w panelu pozycji i jako kolumna na liście. Bez ceny zakupu — brak.
+
+| Pozycja | Saldo (dane z 10.11.2026) |
+|---|---|
+| Sony FE 100-400 GM | +6 548 |
+| Sony A7 III | +3 371 |
+| Sony A7S III | +3 231 |
+| Manfrotto | +1 764 |
+| 28-135 | −1 487 |
+| RED Komodo X | −50 267 |
+
+**Sprzedaż** — `soldDate` + `soldPrice` w pozycji (blok „Sprzedaż" w panelu; puste = nie sprzedany). Po sprzedaży „Wynik końcowy" = Zarobił + cena sprzedaży − zainwestowane, plakietka „Sprzedany <data>" na liście. Odpracował/Zarobił liczą przeszłość dalej. Listy wyboru (siatka Realizacji, wybór sprzętu w wycenie, zestawy) nie oferują pozycji sprzedanej PRZED datą dnia (bez daty — dziś); istniejące linie projektów zostają.
+
+| Przypadek | Wynik |
+|---|---|
+| A7 III: zarobił 11 871, sprzedany za 3 000, zainwestowane 8 500 | końcowy +6 371 |
+| RED: zarobił 6 733, sprzedany za 30 000, zainwestowane 57 000 | końcowy −20 267 |
+| sprzedaż wyczyszczona | wraca „Na plusie" |
+| 2 szt. | zainwestowane = 2 × cena |

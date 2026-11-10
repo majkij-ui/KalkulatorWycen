@@ -227,9 +227,22 @@ export const equipmentItemSchema = z
      * dotychczasowe pozycje). Tylko `false` ma znaczenie; `true` nie jest zapisywane.
      */
     onSet: z.literal(false).optional().catch(undefined),
+    /** Sprzedany (YYYY-MM-DD). Brak = nie sprzedany. Statystyki zostają; nie jest przychodem. */
+    soldDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
+    /** Cena sprzedaży (PLN, ≥ 0). Liczy się tylko razem z `soldDate`. */
+    soldPrice: z.number().finite().nonnegative().optional().catch(undefined),
   })
   .passthrough()
 export type EquipmentItem = z.infer<typeof equipmentItemSchema>
+
+/**
+ * Czy pozycja była już sprzedana PRZED podanym dniem (YYYY-MM-DD) — wtedy nie
+ * oferujemy jej w listach wyboru tego dnia. Brak daty sprzedaży = dostępna.
+ * Dzień sprzedaży jeszcze się liczy (rano mogła jechać na plan).
+ */
+export function isSoldBefore(item: Pick<EquipmentItem, 'soldDate'>, dateKey: string): boolean {
+  return !!item.soldDate && !!dateKey && item.soldDate < dateKey
+}
 
 /** Liczba posiadanych sztuk (brak pola = 1). */
 export function unitsOwned(item: Pick<EquipmentItem, 'quantity'>): number {
@@ -630,6 +643,12 @@ export const projectSchema = z
      * starym kształcie (`equipment`); pusta lista = świadomie bez sprzętu.
      */
     gearDays: lenientArray(gearDaySchema).optional(),
+    /**
+     * Przejrzany: projekt bez mojego sprzętu (np. postprodukcja). Znika z
+     * ostrzeżenia „projekt nie ma wpisanego sprzętu". Gdy projekt dostanie
+     * sprzęt, flaga nic nie znaczy — liczy się normalnie.
+     */
+    noGear: z.boolean().optional().catch(undefined),
     /**
      * Koszty rzeczywiste (zakładka Realizacja): ekipa, wynajem, dojazd…
      * Brak = nic jeszcze nie wpisano. Nie zmieniają `financials` (to T6).

@@ -16,6 +16,7 @@
  * W szybkiej wycenie dni szczegółowe nie wchodzą do ceny, więc i ich sprzęt nie.
  */
 
+import { isSoldBefore, toDateKey } from './project-types'
 import { safeArray, safeNum } from './safe-numbers'
 import type { QuoteData, QuoteExternalRental, QuoteGearLine, ShootingDay } from './quote-types'
 
@@ -150,13 +151,16 @@ export function setQuoteGearLine(
 export function addKitToQuoteGear(
   lines: QuoteGearLine[] | undefined,
   kit: { itemId: string; qty: number }[],
-  catalog: { id: string; name: string; rentalDayRate: number; retiredAt?: string }[]
+  catalog: { id: string; name: string; rentalDayRate: number; retiredAt?: string; soldDate?: string }[],
+  /** Dzień wyceny nie ma daty, więc domyślnie dziś: sprzedane przed tym dniem są pomijane. */
+  today: string = toDateKey(new Date())
 ): QuoteGearLine[] {
   const byId = new Map(catalog.map((item) => [item.id, item]))
   let next = lines ?? []
   kit.forEach((entry) => {
     const item = byId.get(entry.itemId)
     if (!item || item.retiredAt || next.some((line) => line.itemId === entry.itemId)) return
+    if (isSoldBefore(item, today)) return
     next = setQuoteGearLine(next, item, entry.qty)
   })
   return next

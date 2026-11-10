@@ -11,7 +11,7 @@ import { ArrowRightLeft, ArrowUpRight, RotateCcw, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { itemUsageHistory, type EquipmentRoi } from '@/lib/equipment-roi'
+import { formatGearBalance, gearBalance, itemUsageHistory, type EquipmentRoi } from '@/lib/equipment-roi'
 import { isOnSet, withOnSet } from '@/lib/gear-backstage'
 import {
   EQUIPMENT_CATEGORIES,
@@ -58,6 +58,8 @@ interface Draft {
   purchasePrice: string
   purchaseDate: string
   rentalDayRate: string
+  soldDate: string
+  soldPrice: string
   notes: string
 }
 
@@ -72,6 +74,8 @@ function toDraft(item: EquipmentItem | null, knownCategories: string[]): Draft {
     purchasePrice: item?.purchasePrice ? String(item.purchasePrice) : '',
     purchaseDate: item?.purchaseDate ?? '',
     rentalDayRate: item?.rentalDayRate ? String(item.rentalDayRate) : '',
+    soldDate: item?.soldDate ?? '',
+    soldPrice: item?.soldDate && item.soldPrice ? String(item.soldPrice) : '',
     notes: item?.notes ?? '',
   }
 }
@@ -145,6 +149,14 @@ export function EquipmentItemSheet({
     const next: EquipmentItem = { ...item, ...fields }
     if (quantity > 1) next.quantity = quantity
     else delete next.quantity
+    // Sprzedaż: puste pola = nie sprzedany. Cena bez daty nie znaczy nic.
+    if (DATE_KEY.test(draft.soldDate)) {
+      next.soldDate = draft.soldDate
+      next.soldPrice = amount(draft.soldPrice)
+    } else {
+      delete next.soldDate
+      delete next.soldPrice
+    }
     await updateItem(next)
     setSaved(true)
   }
@@ -168,6 +180,7 @@ export function EquipmentItemSheet({
     await updateItem(next)
   }
 
+  const balance = item && roi ? gearBalance(roi, item) : null
   const label = 'text-[11px] text-zinc-500'
   const field = 'mt-1 h-9 border-white/10 bg-black/40 text-sm'
 
@@ -225,6 +238,20 @@ export function EquipmentItemSheet({
                     : 'podaj cenę zakupu'
             }
           />
+          {balance && (
+            <Stat
+              label={balance.final ? 'Wynik końcowy' : 'Na plusie'}
+              value={formatGearBalance(balance)}
+              sub={
+                balance.final
+                  ? `Zarobił + sprzedaż ${pln(item.soldPrice ?? 0)} − zainwestowane`
+                  : balance.balance >= 0
+                    ? 'Zarobił − zainwestowane'
+                    : 'jeszcze do zarobienia na zakup'
+              }
+              good={balance.balance >= 0}
+            />
+          )}
           <div className="col-span-2 text-[11px] text-zinc-600">
             Pierwsze użycie {formatDate(roi.firstUsed)} · ostatnie {formatDate(roi.lastUsed)}
           </div>
@@ -265,6 +292,34 @@ export function EquipmentItemSheet({
             />
           </label>
         </div>
+        {item && !backstage && (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/5 p-3">
+            <h3 className="col-span-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Sprzedaż</h3>
+            <label className={label}>
+              Data sprzedaży
+              <Input
+                type="date"
+                value={draft.soldDate}
+                onChange={(e) => set({ soldDate: e.target.value })}
+                className={`${field} [color-scheme:dark]`}
+              />
+            </label>
+            <label className={label}>
+              Cena sprzedaży{quantity > 1 ? ' (łącznie)' : ''}
+              <Input
+                inputMode="decimal"
+                value={draft.soldPrice}
+                placeholder="zł"
+                onChange={(e) => set({ soldPrice: e.target.value })}
+                className={`${field} tabular-nums`}
+              />
+            </label>
+            <p className="col-span-2 text-[11px] text-zinc-600">
+              Puste pola = nie sprzedany. Sprzedaż to nie przychód: liczy się tylko w wyniku końcowym pozycji.
+              Statystyki zostają, a sprzęt nie pojawia się w wyborze na dni po sprzedaży.
+            </p>
+          </div>
+        )}
         {!backstage && draft.category === CUSTOM && (
           <label className={label}>
             Nazwa kategorii

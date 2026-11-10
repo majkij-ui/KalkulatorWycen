@@ -14,6 +14,8 @@ import { addDays, daysBetween } from './calendar-layout'
 import {
   createGearDayId,
   equipmentCategoryRank,
+  isSoldBefore,
+  toDateKey,
   type EquipmentItem,
   type GearDay,
   type GearLine,
@@ -156,11 +158,29 @@ export function cycleGearQty(current: number, owned: number): number {
  * w przeciwnym razie dochodzi do brakujących dni (komplet sztuk), a dni, w
  * których już jest, zachowują swoją liczbę.
  */
-export function toggleGearItemAllDays(days: GearDay[], itemId: string, owned: number): GearDay[] {
-  const inEvery = days.length > 0 && days.every((day) => day.lines.some((l) => l.itemId === itemId))
+export function toggleGearItemAllDays(
+  days: GearDay[],
+  itemId: string,
+  owned: number,
+  /** Dni, w których pozycji nie wolno dodać (sprzedana przed tym dniem); istniejące wpisy zostają. */
+  blocked?: (day: GearDay) => boolean
+): GearDay[] {
+  const addable = (day: GearDay) => !blocked?.(day)
+  const targets = days.filter((day) => day.lines.some((l) => l.itemId === itemId) || addable(day))
+  const inEvery = targets.length > 0 && targets.every((day) => day.lines.some((l) => l.itemId === itemId))
   if (inEvery) return setGearLineEverywhere(days, itemId, 0)
   const qty = Math.max(1, Math.floor(owned))
-  return days.map((day) => (day.lines.some((l) => l.itemId === itemId) ? day : withLine(day, itemId, qty)))
+  return days.map((day) =>
+    day.lines.some((l) => l.itemId === itemId) || !addable(day) ? day : withLine(day, itemId, qty)
+  )
+}
+
+/**
+ * Czy pozycji NIE oferujemy w liście wyboru na dany dzień: sprzedana przed
+ * tym dniem. Bez daty dnia liczy się dziś. Istniejące wpisy projektu zostają.
+ */
+export function soldBeforeDay(item: Pick<EquipmentItem, 'soldDate'>, dayDate: string | undefined, today = toDateKey(new Date())): boolean {
+  return isSoldBefore(item, dayDate || today)
 }
 
 // ── Podpowiedź dni ───────────────────────────────────────────────────────────
@@ -336,7 +356,9 @@ export function applyKitToGearDay(
   days: GearDay[],
   dayId: string,
   kit: { itemId: string; qty: number }[],
-  catalog: Pick<EquipmentItem, 'id' | 'quantity' | 'retiredAt' | 'onSet'>[]
+  catalog: Pick<EquipmentItem, 'id' | 'quantity' | 'retiredAt' | 'onSet' | 'soldDate'>[],
+  /** Data księgowa projektu — dla dni bez własnej daty; sprzedane przed dniem są pomijane. */
+  projectDate?: string
 ): GearDay[] {
   const byId = new Map(onSetItems(catalog).map((item) => [item.id, item]))
   return days.map((day) => {
@@ -345,6 +367,7 @@ export function applyKitToGearDay(
     kit.forEach((entry) => {
       const item = byId.get(entry.itemId)
       if (!item || item.retiredAt || next.lines.some((l) => l.itemId === entry.itemId)) return
+      if (soldBeforeDay(item, gearDayDate(day, { date: projectDate ?? '' }))) return
       const owned = item.quantity && item.quantity > 0 ? item.quantity : 1
       next = withLine(next, entry.itemId, Math.min(Math.max(1, entry.qty), owned))
     })
