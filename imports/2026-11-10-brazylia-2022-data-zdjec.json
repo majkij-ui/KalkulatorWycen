@@ -1,0 +1,8 @@
+{
+  "note": "Stream BAKL Brazil 2022: dzień zdjęciowy przesunięty z 2022-08-08 na 2022-08-25 (M.J. 10.11.2026: 28-135, kupiony 23.08.2022, był na planie).",
+  "update": {
+    "events.json": [
+      { "id": "ev-retro2022-p27-shoot", "set": { "start": "2022-08-25", "updatedAt": "2026-11-10T10:00:00.000Z" } }
+    ]
+  }
+}

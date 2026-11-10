@@ -1,0 +1,4576 @@
+{
+  "note": "Sprzęt retro 2021–2024: 51 projektów (wybór /private/tmp/claude-501/-Users-michal-Documents-VibeCoding-QuoteGen/d1ec09c2-9d91-4c44-a254-776416226819/scratchpad/sel-full.json) — wygenerowane 2026-11-10T09:06:20.121Z",
+  "upsert": {
+    "events.json": [
+      {
+        "id": "ev-retro-sprzet-p-retro2023-p20-1",
+        "kind": "shoot_day",
+        "projectId": "p-retro2023-p20",
+        "start": "2023-07-27",
+        "title": "",
+        "notes": "Data umowna (import): dzień dołożony przy uzupełnieniu sprzętu.",
+        "data": {},
+        "source": {
+          "type": "import",
+          "ref": "gear-retro#p-retro2023-p20"
+        },
+        "createdAt": "2026-11-10T09:06:20.121Z",
+        "updatedAt": "2026-11-10T09:06:20.121Z"
+      }
+    ]
+  },
+  "update": {
+    "projects.json": [
+      {
+        "id": "p-retro2021-p01",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p01-1",
+              "label": "",
+              "date": "2021-07-10",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p01-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 568.69
+        }
+      },
+      {
+        "id": "p-retro2021-p03",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p03-1",
+              "label": "",
+              "date": "2021-07-26",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p03-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 1588.6
+        }
+      },
+      {
+        "id": "p-retro2021-p04",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p04-1",
+              "label": "",
+              "date": "2021-08-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p04-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 101.67
+        }
+      },
+      {
+        "id": "p-retro2021-p05",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p05-1",
+              "label": "",
+              "date": "2021-08-10",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2021-p05-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 169.25
+        }
+      },
+      {
+        "id": "p-retro2021-p06",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p06-1",
+              "label": "",
+              "date": "2021-08-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p06-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2021-p06-2",
+              "label": "",
+              "date": "2021-08-26",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p06-shoot",
+              "eventDay": 1
+            }
+          ],
+          "gearEarnedOverride": 1961.55
+        }
+      },
+      {
+        "id": "p-retro2021-p07",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p07-1",
+              "label": "",
+              "date": "2021-08-28",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2021-p07-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 576.06
+        }
+      },
+      {
+        "id": "p-retro2021-p08",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p08-1",
+              "label": "",
+              "date": "2021-09-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-2",
+              "label": "",
+              "date": "2021-09-06",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-3",
+              "label": "",
+              "date": "2021-09-07",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-4",
+              "label": "",
+              "date": "2021-09-08",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-5",
+              "label": "",
+              "date": "2021-09-09",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-6",
+              "label": "",
+              "date": "2021-09-10",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2021-p08-7",
+              "label": "",
+              "date": "2021-09-11",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p08-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 2773.69
+        }
+      },
+      {
+        "id": "p-retro2021-p12",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p12-1",
+              "label": "",
+              "date": "2021-11-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-2",
+              "label": "",
+              "date": "2021-11-02",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-3",
+              "label": "",
+              "date": "2021-11-03",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-4",
+              "label": "",
+              "date": "2021-11-04",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-5",
+              "label": "",
+              "date": "2021-11-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-6",
+              "label": "",
+              "date": "2021-11-06",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2021-p12-7",
+              "label": "",
+              "date": "2021-11-07",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2021-p12-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 1716.89
+        }
+      },
+      {
+        "id": "p-retro2021-p13",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2021-p13-1",
+              "label": "",
+              "date": "2021-11-11",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2021-p13-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 229.71
+        }
+      },
+      {
+        "id": "p-retro2022-p03",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p03-1",
+              "label": "",
+              "date": "2022-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2022-p03-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 113.18
+        }
+      },
+      {
+        "id": "p-retro2022-p04",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p04-1",
+              "label": "",
+              "date": "2022-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p04-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p04-2",
+              "label": "",
+              "date": "2022-01-02",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p04-shoot",
+              "eventDay": 1
+            }
+          ],
+          "gearEarnedOverride": 1065.91
+        }
+      },
+      {
+        "id": "p-retro2022-p07",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p07-1",
+              "label": "",
+              "date": "2022-01-30",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2022-p07-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 233.04
+        }
+      },
+      {
+        "id": "p-retro2022-p08",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p08-1",
+              "label": "",
+              "date": "2022-01-30",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2022-p08-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 116.52
+        }
+      },
+      {
+        "id": "p-retro2022-p10",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p10-1",
+              "label": "",
+              "date": "2022-02-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p10-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 175.91
+        }
+      },
+      {
+        "id": "p-retro2022-p17",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p17-1",
+              "label": "",
+              "date": "2022-05-07",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p17-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 175
+        }
+      },
+      {
+        "id": "p-retro2022-p18",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p18-1",
+              "label": "",
+              "date": "2022-05-09",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p18-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 150
+        }
+      },
+      {
+        "id": "p-retro2022-p19",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p19-1",
+              "label": "",
+              "date": "2022-05-09",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p19-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 75
+        }
+      },
+      {
+        "id": "p-retro2022-p20",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p20-1",
+              "label": "",
+              "date": "2022-05-09",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p20-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 150
+        }
+      },
+      {
+        "id": "p-retro2022-p21",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p21-1",
+              "label": "",
+              "date": "2022-05-10",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p21-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 175
+        }
+      },
+      {
+        "id": "p-retro2022-p24",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p24-1",
+              "label": "",
+              "date": "2022-06-23",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-2",
+              "label": "",
+              "date": "2022-06-24",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-3",
+              "label": "",
+              "date": "2022-06-25",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-4",
+              "label": "",
+              "date": "2022-06-26",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-5",
+              "label": "",
+              "date": "2022-06-27",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-6",
+              "label": "",
+              "date": "2022-06-28",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2022-p24-7",
+              "label": "",
+              "date": "2022-06-29",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2022-p24-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 3677.33
+        }
+      },
+      {
+        "id": "p-retro2022-p25",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p25-1",
+              "label": "",
+              "date": "2022-07-04",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2022-p25-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 500
+        }
+      },
+      {
+        "id": "p-retro2022-p27",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p27-1",
+              "label": "",
+              "date": "2022-08-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-2",
+              "label": "",
+              "date": "2022-08-26",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-3",
+              "label": "",
+              "date": "2022-08-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-4",
+              "label": "",
+              "date": "2022-08-28",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-5",
+              "label": "",
+              "date": "2022-08-29",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-6",
+              "label": "",
+              "date": "2022-08-30",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2022-p27-7",
+              "label": "",
+              "date": "2022-08-31",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p27-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 2828.64
+        }
+      },
+      {
+        "id": "p-retro2022-p28",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p28-1",
+              "label": "",
+              "date": "2022-08-26",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-2",
+              "label": "",
+              "date": "2022-08-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-3",
+              "label": "",
+              "date": "2022-08-28",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-4",
+              "label": "",
+              "date": "2022-08-29",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-5",
+              "label": "",
+              "date": "2022-08-30",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-6",
+              "label": "",
+              "date": "2022-08-31",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2022-p28-7",
+              "label": "",
+              "date": "2022-09-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p28-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 4178.83
+        }
+      },
+      {
+        "id": "p-retro2022-p30",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p30-1",
+              "label": "",
+              "date": "2022-09-19",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-2",
+              "label": "",
+              "date": "2022-09-20",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-3",
+              "label": "",
+              "date": "2022-09-21",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-4",
+              "label": "",
+              "date": "2022-09-22",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-5",
+              "label": "",
+              "date": "2022-09-23",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-6",
+              "label": "",
+              "date": "2022-09-24",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2022-p30-7",
+              "label": "",
+              "date": "2022-09-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p30-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 3805.99
+        }
+      },
+      {
+        "id": "p-retro2022-p31",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p31-1",
+              "label": "",
+              "date": "2022-10-16",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-2",
+              "label": "",
+              "date": "2022-10-17",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-3",
+              "label": "",
+              "date": "2022-10-18",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-4",
+              "label": "",
+              "date": "2022-10-19",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-5",
+              "label": "",
+              "date": "2022-10-20",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-6",
+              "label": "",
+              "date": "2022-10-21",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2022-p31-7",
+              "label": "",
+              "date": "2022-10-22",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p31-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 3712.75
+        }
+      },
+      {
+        "id": "p-retro2022-p32",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p32-1",
+              "label": "",
+              "date": "2022-11-11",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p32-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p32-2",
+              "label": "",
+              "date": "2022-11-12",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p32-shoot",
+              "eventDay": 1
+            }
+          ],
+          "gearEarnedOverride": 998.24
+        }
+      },
+      {
+        "id": "p-retro2022-p33",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2022-p33-1",
+              "label": "",
+              "date": "2022-11-24",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p33-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2022-p33-2",
+              "label": "",
+              "date": "2022-11-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p33-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2022-p33-3",
+              "label": "",
+              "date": "2022-11-26",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p33-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2022-p33-4",
+              "label": "",
+              "date": "2022-11-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p33-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2022-p33-5",
+              "label": "",
+              "date": "2022-11-28",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2022-p33-shoot",
+              "eventDay": 4
+            }
+          ],
+          "gearEarnedOverride": 2682.26
+        }
+      },
+      {
+        "id": "p-retro2023-p01",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p01-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p01-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 233.44
+        }
+      },
+      {
+        "id": "p-retro2023-p02",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p02-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2023-p02-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 525.24
+        }
+      },
+      {
+        "id": "p-retro2023-p03",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p03-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p03-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 175.08
+        }
+      },
+      {
+        "id": "p-retro2023-p04",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p04-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p04-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 116.77
+        }
+      },
+      {
+        "id": "p-retro2023-p05",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p05-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p05-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 117.45
+        }
+      },
+      {
+        "id": "p-retro2023-p06",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p06-1",
+              "label": "",
+              "date": "2023-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p06-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 235.02
+        }
+      },
+      {
+        "id": "p-retro2023-p08",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p08-1",
+              "label": "",
+              "date": "2023-01-02",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p08-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 235.38
+        }
+      },
+      {
+        "id": "p-retro2023-p09",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p09-1",
+              "label": "",
+              "date": "2023-01-25",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 175
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2023-p09-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 118.67
+        }
+      },
+      {
+        "id": "p-retro2023-p12",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p12-1",
+              "label": "",
+              "date": "2023-02-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p12-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p12-2",
+              "label": "",
+              "date": "2023-02-28",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p12-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p12-3",
+              "label": "",
+              "date": "2023-03-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p12-shoot",
+              "eventDay": 2
+            }
+          ],
+          "gearEarnedOverride": 1759.16
+        }
+      },
+      {
+        "id": "p-retro2023-p15",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p15-1",
+              "label": "",
+              "date": "2023-03-16",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-2",
+              "label": "",
+              "date": "2023-03-17",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-3",
+              "label": "",
+              "date": "2023-03-18",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-4",
+              "label": "",
+              "date": "2023-03-19",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-5",
+              "label": "",
+              "date": "2023-03-20",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-6",
+              "label": "",
+              "date": "2023-03-21",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-7",
+              "label": "",
+              "date": "2023-03-22",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 6
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-8",
+              "label": "",
+              "date": "2023-03-23",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 7
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-9",
+              "label": "",
+              "date": "2023-03-24",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 8
+            },
+            {
+              "id": "gd-retro-p-retro2023-p15-10",
+              "label": "",
+              "date": "2023-03-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p15-shoot",
+              "eventDay": 9
+            }
+          ],
+          "gearEarnedOverride": 3989.43
+        }
+      },
+      {
+        "id": "p-retro2023-p16",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p16-1",
+              "label": "",
+              "date": "2023-03-31",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-2",
+              "label": "",
+              "date": "2023-04-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-3",
+              "label": "",
+              "date": "2023-04-02",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-4",
+              "label": "",
+              "date": "2023-04-03",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-5",
+              "label": "",
+              "date": "2023-04-04",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-6",
+              "label": "",
+              "date": "2023-04-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2023-p16-7",
+              "label": "",
+              "date": "2023-04-06",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p16-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 2869.69
+        }
+      },
+      {
+        "id": "p-retro2023-p18",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p18-1",
+              "label": "",
+              "date": "2023-04-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2023-p18-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 1372.09
+        }
+      },
+      {
+        "id": "p-retro2023-p19",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p19-1",
+              "label": "",
+              "date": "2023-05-08",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2023-p19-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 2483.14
+        }
+      },
+      {
+        "id": "p-retro2023-p20",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p20-1",
+              "label": "",
+              "date": "2023-07-27",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro-sprzet-p-retro2023-p20-1",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 1106.2
+        }
+      },
+      {
+        "id": "p-retro2023-p21",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p21-1",
+              "label": "",
+              "date": "2023-07-12",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-2",
+              "label": "",
+              "date": "2023-07-13",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-3",
+              "label": "",
+              "date": "2023-07-14",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-4",
+              "label": "",
+              "date": "2023-07-15",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-5",
+              "label": "",
+              "date": "2023-07-16",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-6",
+              "label": "",
+              "date": "2023-07-17",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-7",
+              "label": "",
+              "date": "2023-07-18",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 6
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-8",
+              "label": "",
+              "date": "2023-07-19",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 7
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-9",
+              "label": "",
+              "date": "2023-07-20",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 8
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-10",
+              "label": "",
+              "date": "2023-07-21",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 9
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-11",
+              "label": "",
+              "date": "2023-07-22",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 10
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-12",
+              "label": "",
+              "date": "2023-07-23",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 11
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-13",
+              "label": "",
+              "date": "2023-07-24",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 12
+            },
+            {
+              "id": "gd-retro-p-retro2023-p21-14",
+              "label": "",
+              "date": "2023-07-25",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p21-shoot",
+              "eventDay": 13
+            }
+          ],
+          "gearEarnedOverride": 7188.75
+        }
+      },
+      {
+        "id": "p-retro2023-p22",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p22-1",
+              "label": "",
+              "date": "2023-08-30",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-2",
+              "label": "",
+              "date": "2023-08-31",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-3",
+              "label": "",
+              "date": "2023-09-01",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-4",
+              "label": "",
+              "date": "2023-09-02",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-5",
+              "label": "",
+              "date": "2023-09-03",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-6",
+              "label": "",
+              "date": "2023-09-04",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2023-p22-7",
+              "label": "",
+              "date": "2023-09-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p22-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 3455.78
+        }
+      },
+      {
+        "id": "p-retro2023-p23",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p23-1",
+              "label": "",
+              "date": "2023-10-02",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-2",
+              "label": "",
+              "date": "2023-10-03",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 1
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-3",
+              "label": "",
+              "date": "2023-10-04",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 2
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-4",
+              "label": "",
+              "date": "2023-10-05",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 3
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-5",
+              "label": "",
+              "date": "2023-10-06",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 4
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-6",
+              "label": "",
+              "date": "2023-10-07",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 5
+            },
+            {
+              "id": "gd-retro-p-retro2023-p23-7",
+              "label": "",
+              "date": "2023-10-08",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 228.57
+                },
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 171.43
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 57.14
+                }
+              ],
+              "eventId": "ev-retro2023-p23-shoot",
+              "eventDay": 6
+            }
+          ],
+          "gearEarnedOverride": 3303.51
+        }
+      },
+      {
+        "id": "p-retro2023-p25",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2023-p25-1",
+              "label": "",
+              "date": "2023-11-07",
+              "lines": [
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 250
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 187.5
+                },
+                {
+                  "itemId": "eq-1791902120490-x6uy34b",
+                  "qty": 1,
+                  "dayRate": 62.5
+                }
+              ],
+              "eventId": "ev-retro2023-p25-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 379.2
+        }
+      }
+    ],
+    "events.json": [
+      {
+        "id": "ev-retro2021-p06-shoot",
+        "set": {
+          "end": "2021-08-26",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2021-p08-shoot",
+        "set": {
+          "end": "2021-09-11",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2021-p12-shoot",
+        "set": {
+          "end": "2021-11-07",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p04-shoot",
+        "set": {
+          "end": "2022-01-02",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p24-shoot",
+        "set": {
+          "end": "2022-06-29",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p27-shoot",
+        "set": {
+          "end": "2022-08-31",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p28-shoot",
+        "set": {
+          "end": "2022-09-01",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p30-shoot",
+        "set": {
+          "end": "2022-09-25",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p31-shoot",
+        "set": {
+          "end": "2022-10-22",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p32-shoot",
+        "set": {
+          "end": "2022-11-12",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2022-p33-shoot",
+        "set": {
+          "end": "2022-11-28",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p12-shoot",
+        "set": {
+          "end": "2023-03-01",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p15-shoot",
+        "set": {
+          "end": "2023-03-25",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p16-shoot",
+        "set": {
+          "end": "2023-04-06",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p17-shoot",
+        "set": {
+          "deletedAt": "2026-11-10T09:06:20.121Z",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p21-shoot",
+        "set": {
+          "end": "2023-07-25",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p22-shoot",
+        "set": {
+          "end": "2023-09-05",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      },
+      {
+        "id": "ev-retro2023-p23-shoot",
+        "set": {
+          "end": "2023-10-08",
+          "updatedAt": "2026-11-10T09:06:20.121Z"
+        }
+      }
+    ],
+    "equipment.json": [
+      {
+        "id": "eq-1791902120490-x6uy34b",
+        "set": {
+          "purchaseDate": "2020-01-01"
+        }
+      }
+    ]
+  }
+}
