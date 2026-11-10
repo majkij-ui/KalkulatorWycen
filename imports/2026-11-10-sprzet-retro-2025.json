@@ -1,0 +1,255 @@
+{
+  "note": "Sprzęt retro 2021–2024: 7 projektów (wybór /private/tmp/claude-501/-Users-michal-Documents-VibeCoding-QuoteGen/d1ec09c2-9d91-4c44-a254-776416226819/scratchpad/sel-2025.json) — wygenerowane 2026-11-10T09:17:37.933Z",
+  "update": {
+    "projects.json": [
+      {
+        "id": "p-retro2025-p01",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2025-p01-1",
+              "label": "",
+              "date": "2025-01-01",
+              "lines": [
+                {
+                  "itemId": "eq-red-komodo-x",
+                  "qty": 1,
+                  "dayRate": 400
+                },
+                {
+                  "itemId": "eq-16-35mm-komodo-ef-rf",
+                  "qty": 1,
+                  "dayRate": 100
+                },
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 200
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 150
+                },
+                {
+                  "itemId": "eq-1791902090783-pift4ku",
+                  "qty": 1,
+                  "dayRate": 75
+                },
+                {
+                  "itemId": "eq-1791902256392-6b83qxl",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2025-p01-shoot",
+              "eventDay": 0
+            },
+            {
+              "id": "gd-retro-p-retro2025-p01-2",
+              "label": "",
+              "date": "2025-01-02",
+              "lines": [
+                {
+                  "itemId": "eq-red-komodo-x",
+                  "qty": 1,
+                  "dayRate": 400
+                },
+                {
+                  "itemId": "eq-16-35mm-komodo-ef-rf",
+                  "qty": 1,
+                  "dayRate": 100
+                },
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 200
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 150
+                },
+                {
+                  "itemId": "eq-1791902090783-pift4ku",
+                  "qty": 1,
+                  "dayRate": 75
+                },
+                {
+                  "itemId": "eq-1791902256392-6b83qxl",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2025-p01-shoot",
+              "eventDay": 1
+            }
+          ],
+          "gearEarnedOverride": 2225
+        }
+      },
+      {
+        "id": "p-retro2025-p02",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2025-p02-1",
+              "label": "",
+              "date": "2025-01-15",
+              "lines": [
+                {
+                  "itemId": "eq-red-komodo-x",
+                  "qty": 1,
+                  "dayRate": 400
+                },
+                {
+                  "itemId": "eq-16-35mm-komodo-ef-rf",
+                  "qty": 1,
+                  "dayRate": 100
+                },
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 200
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 150
+                },
+                {
+                  "itemId": "eq-1791902090783-pift4ku",
+                  "qty": 1,
+                  "dayRate": 75
+                },
+                {
+                  "itemId": "eq-1791902256392-6b83qxl",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2025-p02-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 625
+        }
+      },
+      {
+        "id": "p-retro2025-p04",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2025-p04-1",
+              "label": "",
+              "date": "2025-01-31",
+              "lines": [
+                {
+                  "itemId": "eq-red-komodo-x",
+                  "qty": 1,
+                  "dayRate": 400
+                },
+                {
+                  "itemId": "eq-16-35mm-komodo-ef-rf",
+                  "qty": 1,
+                  "dayRate": 100
+                },
+                {
+                  "itemId": "eq-sony-a7s-iii",
+                  "qty": 1,
+                  "dayRate": 200
+                },
+                {
+                  "itemId": "eq-sony-fe-28-135mm-f-4-pz",
+                  "qty": 1,
+                  "dayRate": 150
+                },
+                {
+                  "itemId": "eq-1791902256392-6b83qxl",
+                  "qty": 1,
+                  "dayRate": 175
+                }
+              ],
+              "eventId": "ev-retro2025-p04-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 700
+        }
+      },
+      {
+        "id": "p-retro2025-p06",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2025-p06-1",
+              "label": "",
+              "date": "2025-03-02",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2025-p06-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 650
+        }
+      },
+      {
+        "id": "p-retro2025-p07",
+        "set": {
+          "gearDays": [
+            {
+              "id": "gd-retro-p-retro2025-p07-1",
+              "label": "",
+              "date": "2025-03-12",
+              "lines": [
+                {
+                  "itemId": "eq-1791703810543-vbtn4qw",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-100-400mm-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                },
+                {
+                  "itemId": "eq-sony-fe-135mm-f-1-8-gm",
+                  "qty": 1,
+                  "dayRate": 133.33
+                }
+              ],
+              "eventId": "ev-retro2025-p07-shoot",
+              "eventDay": 0
+            }
+          ],
+          "gearEarnedOverride": 375
+        }
+      }
+    ],
+    "events.json": [
+      {
+        "id": "ev-retro2025-p01-shoot",
+        "set": {
+          "end": "2025-01-02",
+          "updatedAt": "2026-11-10T09:17:37.933Z"
+        }
+      }
+    ]
+  }
+}
