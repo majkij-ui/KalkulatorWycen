@@ -23,7 +23,7 @@ export function GearCostsPanel({ gear, periodLabel }: { gear: GearPeriodCost; pe
   const biggestCarried = [...carriedLines].sort((a, b) => b.amount - a.amount)[0]
   const lines = all ? gear.lines : gear.lines.slice(0, VISIBLE_LINES)
   const undatedTotal = gear.undated.reduce((sum, p) => sum + p.price, 0)
-  const empty = gear.lines.length === 0 && gear.manualCosts.length === 0
+  const empty = gear.lines.length === 0 && gear.sales.length === 0 && gear.manualCosts.length === 0
 
   return (
     <section className="mb-6 rounded-xl border border-white/5 bg-zinc-900/40 p-4" aria-label="Sprzęt w kosztach firmy">
@@ -64,7 +64,9 @@ export function GearCostsPanel({ gear, periodLabel }: { gear: GearPeriodCost; pe
                 {line.mode === 'spread'
                   ? ` · ${pln(line.monthly)} / mies. ${monthLabel(line.firstMonth)}–${monthLabel(line.lastMonth)}`
                   : ' · jednorazowo'}
-                {line.retiredMonth && ` · wycofany ${monthLabel(line.retiredMonth)}`}
+                {line.soldMonth
+                  ? ` · sprzedany ${monthLabel(line.soldMonth)}`
+                  : line.retiredMonth && ` · wycofany ${monthLabel(line.retiredMonth)}`}
               </span>
               <span className="w-24 text-right tabular-nums text-zinc-100">{pln(amount)}</span>
             </div>
@@ -78,6 +80,17 @@ export function GearCostsPanel({ gear, periodLabel }: { gear: GearPeriodCost; pe
               {all ? 'Pokaż mniej' : `Pokaż wszystkie (${gear.lines.length})`}
             </button>
           )}
+          {gear.sales.map(({ sale, amount }) => (
+            <div key={`sale-${sale.itemId}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-sm">
+              <span className="min-w-0 flex-1 truncate text-emerald-200">Sprzedaż sprzętu: {sale.name}</span>
+              <span className="text-[11px] tabular-nums text-zinc-500">
+                {formatDate(sale.date)} · sprzedano za {pln(sale.soldPrice)}
+                {sale.unspread > 0.005 && ` · minus nierozłożona reszta zakupu ${pln(sale.unspread)}`}
+                {' · ujemna kwota = zysk, zmniejsza koszt sprzętu'}
+              </span>
+              <span className="w-24 text-right tabular-nums text-zinc-100">{pln(amount)}</span>
+            </div>
+          ))}
           {gear.manualCosts.map(({ cost, counted, link }) => (
             <div key={cost.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-sm">
               <span className="min-w-0 flex-1 truncate text-zinc-300">

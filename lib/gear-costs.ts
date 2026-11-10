@@ -10,8 +10,16 @@
  *  - W CAŁOŚCI (wyłączony): każdy zakup w całości w swoim miesiącu — tak, jak
  *    zakupy uderzyły w konto.
  *  - Wycofany / sprzedany sprzęt przestaje się rozkładać po miesiącu
- *    wycofania; nierozłożona reszta jest pokazywana, ale się nie liczy (nie ma
- *    jeszcze ceny sprzedaży). W widoku „w całości" wycofanie niczego nie zmienia.
+ *    wycofania (sprzedaży); nierozłożona reszta bez ceny sprzedaży jest
+ *    pokazywana, ale się nie liczy. W widoku „w całości" samo wycofanie
+ *    niczego nie zmienia.
+ *  - SPRZEDAŻ (wariant C, 10.11.2026): sprzęt z `soldDate` + `soldPrice` daje w
+ *    miesiącu sprzedaży osobny wiersz „Sprzedaż sprzętu: <nazwa>" — w rozłożonym
+ *    widoku `nierozłożona reszta − cena sprzedaży`, w widoku „w całości"
+ *    `−cena sprzedaży` (ujemny = zysk, zmniejsza koszt sprzętu). Netto, bez
+ *    podatku, nie jest przychodem zleceń. Całe życie: oba widoki = cena − sprzedaż.
+ *    `soldDate` bez `soldPrice` = wycofanie. Sprzedaż po `through` jeszcze się
+ *    nie liczy (jak przyszłe koszty).
  *  - Bez daty zakupu: nie wiadomo, w którym miesiącu — nie liczy się nigdzie,
  *    jest na liście do uzupełnienia. Bez ceny: to samo.
  *
@@ -92,10 +100,29 @@ export interface GearCostLine {
   retiredMonth: string | null
   /** Rozkładanie przerwane wycofaniem: ta reszta się nie liczy (brak ceny sprzedaży). */
   unspread: number
+  /** Miesiąc sprzedaży z ceną (`YYYY-MM`); `null` = nie sprzedany albo bez ceny. */
+  soldMonth: string | null
+}
+
+/** Sprzedaż sprzętu jako osobny wiersz kosztu (ujemny = zysk). */
+export interface GearSaleLine {
+  itemId: string
+  name: string
+  /** Data sprzedaży `YYYY-MM-DD`. */
+  date: string
+  month: string
+  /** Cena sprzedaży (cała pozycja, wszystkie sztuki). */
+  soldPrice: number
+  /** Nierozłożona reszta ceny zakupu w chwili sprzedaży (`full`: 0). */
+  unspread: number
+  /** Kwota w kosztach: `unspread − soldPrice`. */
+  amount: number
 }
 
 export interface GearCostLines {
   lines: GearCostLine[]
+  /** Sprzedaże z ceną (tylko pozycje z liczonym zakupem). */
+  sales: GearSaleLine[]
   /** Pozycje z ceną bez daty zakupu — nie liczą się w żadnym miesiącu. */
   undated: GearPurchase[]
   /** Pozycje bez ceny zakupu (z datą albo bez). */
@@ -107,6 +134,7 @@ export function gearCostLines(items: EquipmentItem[], spread: boolean, settings:
   const live = items.filter((item) => !(item as { deletedAt?: unknown }).deletedAt)
   const byId = new Map(live.map((item) => [item.id, item]))
   const lines: GearCostLine[] = []
+  const sales: GearSaleLine[] = []
   const undated: GearPurchase[] = []
   const unpriced: GearPurchase[] = []
   gearPurchases(live).forEach((purchase) => {
@@ -120,7 +148,12 @@ export function gearCostLines(items: EquipmentItem[], spread: boolean, settings:
     }
     const item = byId.get(purchase.itemId)
     const retiredAt = item?.retiredAt && DATE_KEY.test(item.retiredAt) ? item.retiredAt : null
-    const retiredMonth = retiredAt ? retiredAt.slice(0, 7) : null
+    const soldDate = item?.soldDate && DATE_KEY.test(item.soldDate) ? item.soldDate : null
+    const soldPrice = item && typeof item.soldPrice === 'number' && Number.isFinite(item.soldPrice) && item.soldPrice >= 0 ? item.soldPrice : null
+    const soldMonth = soldDate && soldPrice !== null ? soldDate.slice(0, 7) : null
+    // Koniec rozkładania: wcześniejsze z wycofania i sprzedaży (sprzedaż bez ceny = wycofanie).
+    const endDates = [retiredAt, soldDate].filter((d): d is string => d !== null).sort()
+    const retiredMonth = endDates.length > 0 ? endDates[0].slice(0, 7) : null
     const first = monthIndex(purchase.date)
     const isSpread = spread && purchase.price >= settings.thresholdPln
     if (!isSpread) {
@@ -136,7 +169,11 @@ export function gearCostLines(items: EquipmentItem[], spread: boolean, settings:
         monthly: purchase.price,
         retiredMonth,
         unspread: 0,
+        soldMonth,
       })
+      if (soldMonth && soldDate && soldPrice !== null) {
+        sales.push({ itemId: purchase.itemId, name: purchase.name, date: soldDate, month: soldMonth, soldPrice, unspread: 0, amount: -soldPrice })
+      }
       return
     }
     const monthly = purchase.price / settings.months
@@ -145,6 +182,7 @@ export function gearCostLines(items: EquipmentItem[], spread: boolean, settings:
     // najmniej miesiąc zakupu — wycofany „przed zakupem" to błąd daty).
     if (retiredMonth) last = Math.min(last, Math.max(first, monthIndex(retiredMonth)))
     const counted = last - first + 1
+    const unspread = counted < settings.months ? purchase.price - monthly * counted : 0
     lines.push({
       itemId: purchase.itemId,
       name: purchase.name,
@@ -156,10 +194,14 @@ export function gearCostLines(items: EquipmentItem[], spread: boolean, settings:
       lastMonth: monthFromIndex(last),
       monthly,
       retiredMonth,
-      unspread: counted < settings.months ? purchase.price - monthly * counted : 0,
+      unspread,
+      soldMonth,
     })
+    if (soldMonth && soldDate && soldPrice !== null) {
+      sales.push({ itemId: purchase.itemId, name: purchase.name, date: soldDate, month: soldMonth, soldPrice, unspread, amount: unspread - soldPrice })
+    }
   })
-  return { lines, undated, unpriced }
+  return { lines, sales, undated, unpriced }
 }
 
 /** Koszt wiersza w miesiącach `from`..`to` (`YYYY-MM`, włącznie). */
@@ -221,6 +263,12 @@ export interface GearPeriodLine {
   carried: boolean
 }
 
+export interface GearPeriodSale {
+  sale: GearSaleLine
+  /** Kwota w okresie (ujemna = zysk ze sprzedaży). */
+  amount: number
+}
+
 export interface GearPeriodCost {
   spread: boolean
   settings: GearSpreadSettings
@@ -228,6 +276,10 @@ export interface GearPeriodCost {
   catalogue: number
   /** …w tym reszta rozkładania zakupów sprzed okresu. */
   carried: number
+  /** …w tym sprzedaże sprzętu w okresie (ujemne zmniejszają koszt). */
+  salesTotal: number
+  /** Sprzedaże sprzętu z miesiącem w okresie (do `through`). */
+  sales: GearPeriodSale[]
   /** Ręczne „Sprzęt spoza katalogu" (po odjęciu powiązanych z katalogiem). */
   manual: number
   total: number
@@ -257,7 +309,7 @@ export function gearCostInPeriod(
   const months = periodMonths(period)
   const from = months[0]
   const to = through && through < months[months.length - 1] ? through : months[months.length - 1]
-  const { lines, undated, unpriced } = gearCostLines(items, spread, settings)
+  const { lines, sales: allSales, undated, unpriced } = gearCostLines(items, spread, settings)
 
   const periodLines: GearPeriodLine[] = []
   lines.forEach((line) => {
@@ -266,7 +318,12 @@ export function gearCostInPeriod(
     periodLines.push({ line, amount, carried: line.firstMonth < from })
   })
   periodLines.sort((a, b) => Number(b.carried) - Number(a.carried) || a.line.date.localeCompare(b.line.date))
-  const catalogue = periodLines.reduce((sum, l) => sum + l.amount, 0)
+  const periodSales: GearPeriodSale[] = allSales
+    .filter((s) => s.month >= from && s.month <= to)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((sale) => ({ sale, amount: sale.amount }))
+  const salesTotal = periodSales.reduce((sum, s) => sum + s.amount, 0)
+  const catalogue = periodLines.reduce((sum, l) => sum + l.amount, 0) + salesTotal
   const carried = periodLines.filter((l) => l.carried).reduce((sum, l) => sum + l.amount, 0)
 
   const manualCosts = fixedCosts
@@ -280,11 +337,13 @@ export function gearCostInPeriod(
     settings,
     catalogue,
     carried,
+    salesTotal,
+    sales: periodSales,
     manual,
     total: catalogue + manual,
     lines: periodLines,
     manualCosts,
-    retired: lines.filter((l) => l.unspread > 0.005 && l.retiredMonth !== null && l.retiredMonth >= from && l.retiredMonth <= to),
+    retired: lines.filter((l) => l.unspread > 0.005 && l.retiredMonth !== null && l.soldMonth === null && l.retiredMonth >= from && l.retiredMonth <= to),
     undated,
     unpriced,
   }

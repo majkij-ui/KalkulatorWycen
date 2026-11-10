@@ -379,6 +379,13 @@ function gearSection(report: PeriodReport): ReportSection {
       l.mode === 'spread' ? `${pln(l.monthly)} / mies. ${monthText(l.firstMonth)}–${monthText(l.lastMonth)}` : 'jednorazowo',
       pln(l.amount),
     ]),
+    ...g.sales.map((e) => [
+      `Sprzedaż sprzętu: ${e.name}`,
+      formatDate(e.date),
+      pln(e.soldPrice),
+      e.unspread > 0.005 ? `nierozłożona reszta ${pln(e.unspread)} − cena sprzedaży` : 'cena sprzedaży (netto)',
+      pln(e.amount),
+    ]),
     ...g.manualEntries.map((e) => [e.label, monthText(e.month), pln(e.amount), 'ręczny wpis spoza katalogu', pln(e.counted)]),
   ]
   if (costRows.length > 0) {
