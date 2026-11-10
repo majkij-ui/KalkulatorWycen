@@ -120,3 +120,23 @@ Decyzja M.J.: koszty projektu nie leżą już w całości w miesiącu kotwicy (p
 | Faktury w dwóch latach | koszty dzielą się także między lata |
 
 Zmienione testy (dotąd „koszty zostają w kotwicy"): dodatek na późniejszej fakturze w `money-loop`, `margin-ledger`, `r2-money` i `period-report`.
+
+## Sprzęt retro 2021–2024 (10.11.2026)
+
+Uzupełnienie użycia własnego sprzętu w projektach 2021–2024 (dotąd bez sprzętu) z wyboru zrobionego w jednorazowym narzędziu. Finanse (przychód, koszty, wynik) się nie zmieniają.
+
+- Nowe pole `dayRate` w pozycji dnia sprzętu (`gearLineSchema`): stawka dnia pozycji w tym projekcie (za sztukę); brak = stawka z katalogu. Czytają je „Odpracował" (`equipment-roi.ts`) i podział „Zarobił" (`gear-earnings.ts`); zmiana liczby sztuk w siatce zostawia `dayRate`.
+- Generator: `node --import ./scripts/register-ts.mjs scripts/gear-retro-patch.mts <wybor.json> [folder] > imports/<nazwa>.json`, potem `npm run data -- apply imports/<nazwa>.json --dry-run` (tylko odczyt danych; zapis dopiero przy zamkniętym hubie). Logika: `lib/gear-retro.ts`.
+
+| Przypadek | Zachowanie |
+|---|---|
+| Zestaw + N dni | N dni sprzętu, w każdym każda pozycja zestawu (1 szt.); `dayRate` = cena zestawu × stawka pozycji / suma stawek z katalogu CAŁEGO zestawu (np. Kite 500: 200/150/50 → 250 / 187,5 / 62,5) |
+| Pozycja kupiona po dacie projektu (`purchaseDate` po zastosowaniu `equipmentDates`) | pozycja pominięta w tym projekcie, jej udział znika (cena zestawu spada razem z nią), wymieniona na stderr |
+| `gearEarnedOverride` | zaokrąglone do 2 miejsc: procent × przychód netto projektu w zł z `moneyLedger` (dziś); brak przychodu = bez kwoty + ostrzeżenie. Np. 3 dni, 6 354 zł, 25% → Odpracował 1 500, kwota 1 588,50 |
+| postOnly | bez sprzętu i kwoty; miękko usuwane (`deletedAt`) tylko importowe dni zdjęciowe („Data umowna (import)") |
+| Zestaw `null`, nie postOnly | projekt nietknięty |
+| Projekt ma już `gearDays` (albo stary `equipment`) lub `gearEarnedOverride` | nietknięty, wymieniony na stderr |
+| Kalendarz | każdy dzień sprzętu wskazuje dzień zdjęciowy (`eventId` + `eventDay`), po datach; brakujące dni: ostatni importowy placeholder wydłużamy (`end`), a gdy ostatnie wydarzenie jest „prawdziwe" lub nie ma żadnego — nowe jednodniowe wydarzenia `ev-retro-sprzet-<projekt>-<n>` w kolejnych dniach (bez wydarzeń: od daty projektu); gdy dni zdjęciowych jest więcej niż N, łączymy pierwsze N, resztę zostawiamy |
+| `equipmentDates` | `purchaseDate` w katalogu zaktualizowany |
+
+Podsumowanie na stderr: zmienione / pominięte projekty oraz per pozycja dni, Odpracował i Zarobił.

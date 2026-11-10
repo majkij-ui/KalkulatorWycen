@@ -120,7 +120,7 @@ export interface GearEarningsInput {
   override?: number | null
 }
 
-type GearLineLike = { itemId: string; qty: number }
+type GearLineLike = { itemId: string; qty: number; /** Stawka dnia tej pozycji w projekcie; brak = z katalogu. */ dayRate?: number }
 
 /** Mój sprzęt z dni szczegółowej wyceny (pozycje katalogu, także „gratis" — był na planie). */
 function quoteGearLines(quote: FinancialsSource | null | undefined): GearLineLike[] {
@@ -150,13 +150,14 @@ export function gearEarnings(input: GearEarningsInput): GearEarnings {
   lines.forEach((line) => {
     const item = input.catalog.get(line.itemId)
     if (!item || item.onSet === false) return
-    if (!(item.rentalDayRate > 0)) {
+    const rate = line.dayRate ?? item.rentalDayRate
+    if (!(rate > 0)) {
       noRate.set(item.id, item)
       return
     }
     const share = byItem.get(item.id) ?? { itemId: item.id, item, unitDays: 0, weight: 0, earned: 0 }
     share.unitDays += line.qty
-    share.weight += line.qty * item.rentalDayRate
+    share.weight += line.qty * rate
     byItem.set(item.id, share)
   })
   const shares = [...byItem.values()].sort((a, b) => b.weight - a.weight || a.item.name.localeCompare(b.item.name, 'pl'))

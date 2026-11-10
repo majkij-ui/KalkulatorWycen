@@ -99,7 +99,7 @@ export function summarizeProjectGear(
     day.lines.forEach((line) => {
       if (line.qty <= 0) return
       const item = byId.get(line.itemId) ?? null
-      const value = item ? line.qty * item.rentalDayRate : 0
+      const value = item ? line.qty * (line.dayRate ?? item.rentalDayRate) : 0
       dayValue += value
       const use = uses.get(line.itemId) ?? {
         itemId: line.itemId,
