@@ -346,6 +346,19 @@ export interface ReportGearLine {
   firstMonth: string
   lastMonth: string
   retiredMonth: string | null
+  soldMonth: string | null
+}
+
+/** Sprzedaż sprzętu w okresie jako osobny wiersz („Sprzedaż sprzętu: <nazwa>"). */
+export interface ReportGearSale {
+  itemId: string
+  name: string
+  date: string
+  soldPrice: number
+  /** Nierozłożona reszta zakupu zdjęta przy sprzedaży. */
+  unspread: number
+  /** Kwota w kosztach (ujemna = zysk). */
+  amount: number
 }
 
 export interface ReportGearPurchase {
@@ -380,6 +393,9 @@ export interface ReportGear {
   carried: number
   manual: number
   lines: ReportGearLine[]
+  /** Sprzedaże sprzętu w okresie (już wliczone w `catalogue` i `total`). */
+  sales: ReportGearSale[]
+  salesTotal: number
   purchases: ReportGearPurchase[]
   /** Ręczne „Sprzęt spoza katalogu" w okresie (po odjęciu pozycji z katalogu). */
   manualEntries: { label: string; month: string; amount: number; counted: number }[]
@@ -874,7 +890,17 @@ function buildGear(
       firstMonth: line.firstMonth,
       lastMonth: line.lastMonth,
       retiredMonth: line.retiredMonth,
+      soldMonth: line.soldMonth,
     })),
+    sales: gear.sales.map(({ sale, amount }) => ({
+      itemId: sale.itemId,
+      name: sale.name,
+      date: sale.date,
+      soldPrice: r2(sale.soldPrice),
+      unspread: r2(sale.unspread),
+      amount: r2(amount),
+    })),
+    salesTotal: r2(gear.salesTotal),
     purchases: gearPurchases(input.equipment)
       .filter((p) => p.date !== null && isInPeriod(p.date, periodDef) && p.price > 0)
       .map((p) => ({ itemId: p.itemId, name: p.name, onSet: p.onSet, date: p.date as string, price: r2(p.price) })),

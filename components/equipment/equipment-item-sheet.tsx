@@ -21,6 +21,7 @@ import {
   type EquipmentItem,
 } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
+import { fundedBySale, fundedBySaleText, fundingCandidates } from '@/lib/gear-capital'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -60,6 +61,7 @@ interface Draft {
   rentalDayRate: string
   soldDate: string
   soldPrice: string
+  fundedBySale: string[]
   notes: string
 }
 
@@ -75,7 +77,8 @@ function toDraft(item: EquipmentItem | null, knownCategories: string[]): Draft {
     purchaseDate: item?.purchaseDate ?? '',
     rentalDayRate: item?.rentalDayRate ? String(item.rentalDayRate) : '',
     soldDate: item?.soldDate ?? '',
-    soldPrice: item?.soldDate && item.soldPrice ? String(item.soldPrice) : '',
+    soldPrice: item?.soldDate && typeof item.soldPrice === 'number' ? String(item.soldPrice) : '',
+    fundedBySale: item?.fundedBySale ?? [],
     notes: item?.notes ?? '',
   }
 }
@@ -96,7 +99,7 @@ export function EquipmentItemSheet({
   onClose: () => void
   onOpenProject?: (id: string) => void
 }) {
-  const { items, addItem, updateItem, removeItem } = useEquipment()
+  const { items, allItems, addItem, updateItem, removeItem } = useEquipment()
   const { projects } = useProjectHub()
 
   // Kategorie do wyboru: znane + własne, już użyte w katalogu.
@@ -130,6 +133,15 @@ export function EquipmentItemSheet({
   const category = (draft.category === CUSTOM ? draft.customCategory.trim() : draft.category) || 'inne'
   const quantity = Math.max(1, Math.floor(amount(draft.quantity)) || 1)
   const canSave = draft.name.trim().length > 0
+  const funding = useMemo(() => fundingCandidates(allItems, item?.id ?? null), [allItems, item?.id])
+  const fundedInfo = useMemo(
+    () =>
+      fundedBySale(
+        { ...(item ?? { id: '', name: '', category: 'inne', rentalDayRate: 0, purchaseDate: '', notes: '' }), purchasePrice: amount(draft.purchasePrice), quantity, fundedBySale: draft.fundedBySale } as EquipmentItem,
+        allItems
+      ),
+    [item, draft.purchasePrice, draft.fundedBySale, quantity, allItems]
+  )
 
   const save = async () => {
     if (!canSave) return
@@ -142,17 +154,21 @@ export function EquipmentItemSheet({
       notes: draft.notes,
     }
     if (!item) {
-      await addItem({ ...fields, quantity })
+      await addItem({ ...fields, quantity, ...(draft.fundedBySale.length > 0 ? { fundedBySale: draft.fundedBySale } : {}) })
       onClose()
       return
     }
     const next: EquipmentItem = { ...item, ...fields }
     if (quantity > 1) next.quantity = quantity
     else delete next.quantity
+    if (draft.fundedBySale.length > 0) next.fundedBySale = draft.fundedBySale
+    else delete next.fundedBySale
     // Sprzedaż: puste pola = nie sprzedany. Cena bez daty nie znaczy nic.
     if (DATE_KEY.test(draft.soldDate)) {
       next.soldDate = draft.soldDate
-      next.soldPrice = amount(draft.soldPrice)
+      // Pusta cena = „sprzedany bez ceny" (wycofanie); wpisane 0 = sprzedany za 0 zł.
+      if (draft.soldPrice.trim() === '') delete next.soldPrice
+      else next.soldPrice = amount(draft.soldPrice)
     } else {
       delete next.soldDate
       delete next.soldPrice
@@ -292,6 +308,45 @@ export function EquipmentItemSheet({
             />
           </label>
         </div>
+        {!backstage && funding.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-white/5 p-3">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Sfinansowano sprzedażą</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {funding.map((source) => {
+                const on = draft.fundedBySale.includes(source.id)
+                return (
+                  <button
+                    key={source.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      set({
+                        fundedBySale: on
+                          ? draft.fundedBySale.filter((id) => id !== source.id)
+                          : [...draft.fundedBySale, source.id],
+                      })
+                    }
+                    className={`rounded-md border px-2 py-1 text-xs ${
+                      on
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                        : 'border-white/10 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {source.name} · {pln(source.soldPrice ?? 0)}
+                  </button>
+                )
+              })}
+            </div>
+            {fundedInfo ? (
+              <p className="text-xs text-emerald-300/90">{fundedBySaleText(fundedInfo, pln)}</p>
+            ) : (
+              <p className="text-[11px] text-zinc-600">Wskaż sprzedany sprzęt, z którego pieniędzy kupiono tę pozycję.</p>
+            )}
+            <p className="text-[11px] text-zinc-600">
+              Tylko informacja: ROI, „Na plusie” i spłata nadal liczą pełną cenę zakupu.
+            </p>
+          </div>
+        )}
         {item && !backstage && (
           <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/5 p-3">
             <h3 className="col-span-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Sprzedaż</h3>

@@ -231,6 +231,11 @@ export const equipmentItemSchema = z
     soldDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
     /** Cena sprzedaży (PLN, ≥ 0). Liczy się tylko razem z `soldDate`. */
     soldPrice: z.number().finite().nonnegative().optional().catch(undefined),
+    /**
+     * Id sprzedanych pozycji, których sprzedaż sfinansowała ten zakup. Tylko
+     * informacja („realny koszt"); ROI, „Na plusie" i spłata liczą pełną cenę.
+     */
+    fundedBySale: z.array(z.string()).optional().catch(undefined),
   })
   .passthrough()
 export type EquipmentItem = z.infer<typeof equipmentItemSchema>

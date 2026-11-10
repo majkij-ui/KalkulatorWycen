@@ -19,6 +19,7 @@ import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { investedSplit } from '@/lib/gear-backstage'
+import { gearCapital } from '@/lib/gear-capital'
 import { computeGearReport, formatGearBalance, gearBalance, ownVsRent, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
@@ -341,6 +342,8 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
   // Kafelek „Zainwestowane" liczy cały katalog i rozbija go na plan / zaplecze;
   // statystyki (report, `items`) obejmują tylko sprzęt na plan.
   const invested = useMemo(() => investedSplit(allItems), [allItems])
+  const capitalYear = new Date().getFullYear()
+  const capital = useMemo(() => gearCapital(allItems, capitalYear), [allItems, capitalYear])
 
   const active = items.filter((i) => !i.retiredAt)
   const missingRate = active.filter((i) => i.rentalDayRate <= 0).length
@@ -475,6 +478,20 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           <Tile label="Nieużywane" value={String(totals.unusedCount)} lines={['aktywne pozycje bez dnia na planie']} />
           </>
           )}
+        </div>
+      )}
+
+      {allItems.length > 0 && (
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-4">
+          <Tile
+            label="Kapitał w sprzęcie"
+            value={pln(capital.netTotal)}
+            lines={[
+              `od początku: zakupy ${pln(capital.purchasesTotal)} − sprzedaże ${pln(capital.salesTotal)}`,
+              `${capital.year}: ${capital.netInYear >= 0 ? '+' : '−'}${pln(Math.abs(capital.netInYear))} (zakupy ${pln(capital.purchasesInYear)} − sprzedaże ${pln(capital.salesInYear)})`,
+            ]}
+            warn={capital.undatedCount > 0 ? `${capital.undatedCount} bez daty zakupu — tylko w sumie od początku` : undefined}
+          />
         </div>
       )}
 

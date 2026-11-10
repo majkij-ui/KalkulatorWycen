@@ -172,3 +172,23 @@ Decyzje M.J. Trzy zmiany w sekcji Sprzęt; Finanse bez zmian (sprzedaż to nie p
 | RED: zarobił 6 733, sprzedany za 30 000, zainwestowane 57 000 | końcowy −20 267 |
 | sprzedaż wyczyszczona | wraca „Na plusie" |
 | 2 szt. | zainwestowane = 2 × cena |
+
+## Sprzedaż sprzętu w Finansach (10.11.2026)
+
+Decyzja M.J. „wariant C": sprzedaż sprzętu liczy się w kosztach sprzętu w Finansach — netto, bez podatku, nie jest przychodem zleceń. W miesiącu sprzedaży osobny wiersz „Sprzedaż sprzętu: <nazwa>" (w panelu kosztów sprzętu i w raporcie okresu), ujemny = zysk, zmniejsza koszt sprzętu i „Zysk po wszystkich kosztach" przez istniejącą sumę sprzętu. Miesiąc z ujemną sumą jest dozwolony. Kod: `lib/gear-costs.ts` (`sales`, `soldMonth`).
+
+| Przypadek | Zachowanie |
+|---|---|
+| Sprzedany, widok rozłożony | rozkładanie kończy się w miesiącu sprzedaży (włącznie, jak wycofanie); w tym miesiącu wiersz = nierozłożona reszta − cena sprzedaży |
+| Sprzedany, „w miesiącu zakupu" albo poniżej progu | wiersz −cena sprzedaży w miesiącu sprzedaży |
+| Całe życie | widok rozłożony = widok jednorazowy = cena zakupu − cena sprzedaży |
+| Miesiąc sprzedaży po `through` (trwający okres) | jeszcze się nie liczy, jak przyszłe koszty |
+| Samo `retiredAt` | bez zmian (reszta pokazana, nie liczona) |
+| `soldDate` bez `soldPrice` | jak wycofanie, bez wiersza sprzedaży |
+| Sprzedaż za 0 zł (wpisane 0) | reszta zakupu zdjęta w miesiącu sprzedaży |
+
+Przykład (test): RED 57 000 kupiony 2024-04-01, 36 mies. (1 583,33 / mies.), sprzedany 2027-01-15 za 30 000. Rozłożony: kwiecień 2024–styczeń 2027 = 34 raty; styczeń 2027 ma też sprzedaż 3 166,67 − 30 000 = −26 833,33, razem −25 250. Jednorazowy: 57 000 w 2024-04, −30 000 w 2027-01. Oba widoki w sumie 27 000.
+
+**Sprzęt.** Kafelek „Kapitał w sprzęcie" (pod kafelkami podsumowania, bieżący rok): zakupy (cena × sztuki wg daty zakupu) − sprzedaże (`soldPrice` wg `soldDate`) od początku i w roku (`lib/gear-capital.ts`). Opcjonalne `fundedBySale` (id sprzedanych pozycji) w arkuszu pozycji: „Sfinansowano sprzedażą: RED 30 000 zł → realny koszt 10 000 zł" (nadwyżka: „realny koszt 0 zł, nadwyżka X zł"). Tylko informacja — ROI, „Na plusie" i spłata liczą pełną cenę. Arkusz zapisuje `soldPrice` tylko przy wpisanej cenie (puste = wycofanie).
+
+Dane rzeczywiste nie mają sprzedanych pozycji: liczby Finansów identyczne (real-data-check, `CHECK_TODAY=2026-11-10`, różni się tylko ścieżka drzewa).
