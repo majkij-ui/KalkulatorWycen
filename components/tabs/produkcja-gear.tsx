@@ -16,6 +16,7 @@ import { usePriceDisplay } from '@/lib/price-display'
 import { currencyUnit, priceFromPln } from '@/lib/quote-currency'
 import { useEquipment } from '@/lib/equipment-context'
 import { useCrew } from '@/lib/crew-context'
+import { soldBeforeDay } from '@/lib/gear-usage'
 import { addKitCrewToQuote, kitCrewFromLines } from '@/lib/quote-crew'
 import {
   addKitToQuoteGear,
@@ -393,7 +394,8 @@ function GearPicker({
   const groups = useMemo(() => {
     const map = new Map<string, EquipmentItem[]>()
     items
-      .filter((item) => !item.retiredAt && (!needle || normalize(item.name).includes(needle)))
+      // Sprzedany przed dniem wyceny (brak daty = dziś) nie jest oferowany.
+      .filter((item) => !item.retiredAt && !soldBeforeDay(item, undefined) && (!needle || normalize(item.name).includes(needle)))
       .forEach((item) => {
         const bucket = map.get(item.category) ?? []
         bucket.push(item)

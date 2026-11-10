@@ -19,7 +19,7 @@ import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { investedSplit } from '@/lib/gear-backstage'
-import { computeGearReport, ownVsRent, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
+import { computeGearReport, formatGearBalance, gearBalance, ownVsRent, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
@@ -110,6 +110,7 @@ function PayoffBar({ roi }: { roi: EquipmentRoi }) {
 function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
   const { item } = roi
   const units = unitsOwned(item)
+  const balance = gearBalance(roi, item)
   return (
     <button
       type="button"
@@ -124,6 +125,11 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
           {units > 1 && <span className="ml-1.5 text-xs font-normal text-zinc-500">×{units}</span>}
           {item.retiredAt && (
             <span className="ml-2 rounded bg-zinc-800 px-1.5 py-px text-[10px] font-normal text-zinc-400">wycofany</span>
+          )}
+          {item.soldDate && (
+            <span className="ml-2 rounded bg-zinc-800 px-1.5 py-px text-[10px] font-normal text-zinc-400">
+              Sprzedany {formatDate(item.soldDate)}
+            </span>
           )}
         </div>
         <div className="mt-0.5 text-xs text-zinc-500">
@@ -155,6 +161,19 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
         <div className={`text-xs ${roi.clientPaid < 0 ? 'text-red-300/80' : 'text-zinc-500'}`}>{pln(roi.clientPaid)}</div>
       </div>
 
+      <div className="w-36 shrink-0 whitespace-nowrap text-right tabular-nums" title={balance?.final ? 'Wynik końcowy' : 'Na plusie'}>
+        {balance ? (
+          <>
+            <div className={`text-sm font-semibold ${balance.balance >= 0 ? 'text-emerald-400' : 'text-red-300/80'}`}>
+              {formatGearBalance(balance)}
+            </div>
+            <div className="text-[11px] text-zinc-600">{balance.final ? 'wynik końcowy' : 'na plusie'}</div>
+          </>
+        ) : (
+          <div className="text-[11px] text-zinc-600">—</div>
+        )}
+      </div>
+
       <div className="w-32 shrink-0">
         <PayoffBar roi={roi} />
       </div>
@@ -164,13 +183,68 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
 
 function MissingGearBanner({
   missing,
+  reviewed,
   onOpenProject,
 }: {
   missing: MissingGearProject[]
+  reviewed: MissingGearProject[]
   onOpenProject?: (id: string) => void
 }) {
+  const { updateProjects } = useProjectHub()
   const [open, setOpen] = useState(false)
-  if (missing.length === 0) return null
+  const [showReviewed, setShowReviewed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (missing.length === 0 && reviewed.length === 0) return null
+
+  /** Jeden zapis dla całej listy; `false` zdejmuje flagę (pole znika z projektu). */
+  const flag = async (list: Pick<MissingGearProject, "project">[], noGear: boolean) => {
+    if (busy || list.length === 0) return
+    setBusy(true)
+    try {
+      await updateProjects(list.map(({ project }) => ({ id: project.id, patch: { noGear: noGear || undefined } })))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reviewedList = reviewed.length > 0 && (
+    <div className="mt-2 border-t border-amber-500/10 pt-2">
+      <button
+        type="button"
+        onClick={() => setShowReviewed((v) => !v)}
+        aria-expanded={showReviewed}
+        className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+      >
+        <ChevronDown className={`size-3.5 transition-transform ${showReviewed ? 'rotate-180' : ''}`} />
+        Przejrzane bez sprzętu ({reviewed.length})
+      </button>
+      {showReviewed && (
+        <ul className="mt-1 flex flex-col gap-1">
+          {reviewed.map(({ project }) => (
+            <li key={project.id} className="flex items-center gap-3 rounded-lg px-2 py-1">
+              <span className="w-24 shrink-0 text-xs tabular-nums text-zinc-500">{formatDate(project.date)}</span>
+              <span className="min-w-0 flex-1 truncate text-sm text-zinc-400">
+                {project.name || 'Bez nazwy'}
+                {project.client && <span className="text-zinc-600"> · {project.client}</span>}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void flag([{ project }], false)}
+                className="shrink-0 rounded-md border border-white/10 px-2 py-0.5 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+              >
+                Cofnij
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+
+  if (missing.length === 0) {
+    return <section className="mb-6 rounded-xl border border-white/5 bg-zinc-900/30 px-4 py-3">{reviewedList}</section>
+  }
   return (
     <section className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/5">
       <button
@@ -194,14 +268,22 @@ function MissingGearBanner({
             PDF − wynajem), który czeka na pozycje ze stawką. „Brak wyceny" znaczy, że Zarobił policzy się dopiero po odbudowie
             wyceny.
           </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void flag(missing, true)}
+            className="mb-2 rounded-md border border-amber-500/30 px-2.5 py-1 text-xs font-medium text-amber-100/90 hover:bg-amber-500/10 disabled:opacity-50"
+          >
+            Wszystkie przejrzane — bez sprzętu
+          </button>
           <ul className="flex flex-col gap-1">
             {missing.map(({ project, earnings }) => (
-              <li key={project.id}>
+              <li key={project.id} className="flex items-center gap-1">
                 <button
                   type="button"
                   disabled={!onOpenProject}
                   onClick={() => onOpenProject?.(project.id)}
-                  className="group flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors enabled:hover:bg-white/5"
+                  className="group flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors enabled:hover:bg-white/5"
                 >
                   <span className="w-24 shrink-0 text-xs tabular-nums text-zinc-500">{formatDate(project.date)}</span>
                   <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">
@@ -221,9 +303,18 @@ function MissingGearBanner({
                     <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
                   )}
                 </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void flag([{ project }], true)}
+                  className="shrink-0 rounded-md border border-white/10 px-2 py-0.5 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+                >
+                  Bez sprzętu
+                </button>
               </li>
             ))}
           </ul>
+          {reviewedList}
         </div>
       )}
     </section>
@@ -401,7 +492,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         )
       ) : (
       <>
-      <MissingGearBanner missing={report.missingGear} onOpenProject={onOpenProject} />
+      <MissingGearBanner missing={report.missingGear} reviewed={report.reviewedNoGear} onOpenProject={onOpenProject} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1">

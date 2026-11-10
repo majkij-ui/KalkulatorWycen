@@ -219,12 +219,43 @@ export interface MissingGearProject {
   earnings: GearEarnings
 }
 
+export interface GearBalance {
+  /** Zarobił (+ cena sprzedaży, gdy sprzedany) − zainwestowane. */
+  balance: number
+  /** `true` = pozycja sprzedana, wynik jest końcowy. */
+  final: boolean
+}
+
+/**
+ * „Na plusie" = Zarobił − zainwestowane; po sprzedaży „wynik końcowy" =
+ * Zarobił + cena sprzedaży − zainwestowane. `null` bez ceny zakupu. Sprzedaż
+ * to nie przychód — liczy się tylko tu.
+ */
+export function gearBalance(
+  roi: Pick<EquipmentRoi, 'invested' | 'clientPaid'>,
+  item: Pick<EquipmentItem, 'purchasePrice' | 'soldDate' | 'soldPrice'>
+): GearBalance | null {
+  if (!(item.purchasePrice > 0)) return null
+  const final = !!item.soldDate
+  const sale = final ? (item.soldPrice ?? 0) : 0
+  return { balance: roi.clientPaid + sale - roi.invested, final }
+}
+
+/** Krótki zapis salda: „+1 764 zł", „Do spłaty 1 487 zł"; po sprzedaży „−20 267 zł". */
+export function formatGearBalance({ balance, final }: GearBalance): string {
+  const abs = `${Math.round(Math.abs(balance)).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
+  if (balance >= 0) return `+${abs}`
+  return final ? `−${abs}` : `Do spłaty ${abs}`
+}
+
 export interface GearReport {
   /** Malejąco po „odpracował". */
   items: EquipmentRoi[]
   totals: GearReportTotals
   /** Zrealizowane projekty bez wpisanego sprzętu, od najnowszego — lista do uzupełnienia. */
   missingGear: MissingGearProject[]
+  /** Projekty bez sprzętu oznaczone jako przejrzane („Bez sprzętu") — do cofnięcia. */
+  reviewedNoGear: MissingGearProject[]
 }
 
 const DAYS_PER_MONTH = 30.4375
@@ -269,11 +300,14 @@ export function computeGearReport(
   >()
   let unassignedClientPaid = 0
   const missingGear: MissingGearProject[] = []
+  const reviewedNoGear: MissingGearProject[] = []
 
   projects.forEach((project) => {
     if (!countsTowardRevenue(project.status)) return
     const summary = summarizeProjectGear(project, byId, { events: options.events })
-    if (!hasGearLogged(project)) missingGear.push({ project, earnings: summary.earnings })
+    if (!hasGearLogged(project)) {
+      ;(project.noGear === true ? reviewedNoGear : missingGear).push({ project, earnings: summary.earnings })
+    }
     unassignedClientPaid += summary.earnings.unassigned
     summary.items.forEach((use) => {
       if (!use.item) return
@@ -364,7 +398,8 @@ export function computeGearReport(
   totals.clientPaidPct = pct(totals.clientPaid, totals.invested)
 
   missingGear.sort((a, b) => b.project.date.localeCompare(a.project.date))
-  return { items: roi, totals, missingGear }
+  reviewedNoGear.sort((a, b) => b.project.date.localeCompare(a.project.date))
+  return { items: roi, totals, missingGear, reviewedNoGear }
 }
 
 function lastDate(use: ProjectGearItemUse): string {
