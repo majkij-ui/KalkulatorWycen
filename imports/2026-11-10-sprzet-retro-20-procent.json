@@ -1,0 +1,448 @@
+{
+  "note": "Sprzęt retro 2021–2025: „zarobił\" 25% → 20% przychodu netto (M.J. 10.11.2026, wg udziału sprzętu w jego wycenach dni solo).",
+  "update": {
+    "projects.json": [
+      {
+        "id": "p-retro2025-p07",
+        "set": {
+          "gearEarnedOverride": 300,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2025-p06",
+        "set": {
+          "gearEarnedOverride": 520,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2025-p04",
+        "set": {
+          "gearEarnedOverride": 560,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2025-p02",
+        "set": {
+          "gearEarnedOverride": 500,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2025-p01",
+        "set": {
+          "gearEarnedOverride": 1780,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p20",
+        "set": {
+          "gearEarnedOverride": 1000,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p19",
+        "set": {
+          "gearEarnedOverride": 400,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p18",
+        "set": {
+          "gearEarnedOverride": 1980,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p17",
+        "set": {
+          "gearEarnedOverride": 500,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p15",
+        "set": {
+          "gearEarnedOverride": 500,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p11",
+        "set": {
+          "gearEarnedOverride": 500,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p12",
+        "set": {
+          "gearEarnedOverride": 600,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p09",
+        "set": {
+          "gearEarnedOverride": 1400,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p08",
+        "set": {
+          "gearEarnedOverride": 724,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p07",
+        "set": {
+          "gearEarnedOverride": 500,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p06",
+        "set": {
+          "gearEarnedOverride": 480,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p05",
+        "set": {
+          "gearEarnedOverride": 300,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2024-p03",
+        "set": {
+          "gearEarnedOverride": 400,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p25",
+        "set": {
+          "gearEarnedOverride": 303.36,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p23",
+        "set": {
+          "gearEarnedOverride": 2642.81,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p22",
+        "set": {
+          "gearEarnedOverride": 2764.62,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p21",
+        "set": {
+          "gearEarnedOverride": 5751,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p20",
+        "set": {
+          "gearEarnedOverride": 884.96,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p19",
+        "set": {
+          "gearEarnedOverride": 1986.51,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p18",
+        "set": {
+          "gearEarnedOverride": 1097.67,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p16",
+        "set": {
+          "gearEarnedOverride": 2295.75,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p15",
+        "set": {
+          "gearEarnedOverride": 3191.54,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p12",
+        "set": {
+          "gearEarnedOverride": 1407.33,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p09",
+        "set": {
+          "gearEarnedOverride": 94.94,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p08",
+        "set": {
+          "gearEarnedOverride": 188.3,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p06",
+        "set": {
+          "gearEarnedOverride": 188.02,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p05",
+        "set": {
+          "gearEarnedOverride": 93.96,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p04",
+        "set": {
+          "gearEarnedOverride": 93.42,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p01",
+        "set": {
+          "gearEarnedOverride": 186.75,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p02",
+        "set": {
+          "gearEarnedOverride": 420.19,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2023-p03",
+        "set": {
+          "gearEarnedOverride": 140.06,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p33",
+        "set": {
+          "gearEarnedOverride": 2145.81,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p32",
+        "set": {
+          "gearEarnedOverride": 798.59,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p31",
+        "set": {
+          "gearEarnedOverride": 2970.2,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p30",
+        "set": {
+          "gearEarnedOverride": 3044.79,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p28",
+        "set": {
+          "gearEarnedOverride": 3343.06,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p27",
+        "set": {
+          "gearEarnedOverride": 2262.91,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p25",
+        "set": {
+          "gearEarnedOverride": 400,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p24",
+        "set": {
+          "gearEarnedOverride": 2941.87,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p21",
+        "set": {
+          "gearEarnedOverride": 140,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p18",
+        "set": {
+          "gearEarnedOverride": 120,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p19",
+        "set": {
+          "gearEarnedOverride": 60,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p20",
+        "set": {
+          "gearEarnedOverride": 120,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p17",
+        "set": {
+          "gearEarnedOverride": 140,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p10",
+        "set": {
+          "gearEarnedOverride": 140.73,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p07",
+        "set": {
+          "gearEarnedOverride": 186.43,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p08",
+        "set": {
+          "gearEarnedOverride": 93.22,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p04",
+        "set": {
+          "gearEarnedOverride": 852.73,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2022-p03",
+        "set": {
+          "gearEarnedOverride": 90.54,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p13",
+        "set": {
+          "gearEarnedOverride": 183.76,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p12",
+        "set": {
+          "gearEarnedOverride": 1373.51,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p08",
+        "set": {
+          "gearEarnedOverride": 2218.95,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p07",
+        "set": {
+          "gearEarnedOverride": 460.85,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p06",
+        "set": {
+          "gearEarnedOverride": 1569.24,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p05",
+        "set": {
+          "gearEarnedOverride": 135.4,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p04",
+        "set": {
+          "gearEarnedOverride": 81.33,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p03",
+        "set": {
+          "gearEarnedOverride": 1270.88,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      },
+      {
+        "id": "p-retro2021-p01",
+        "set": {
+          "gearEarnedOverride": 454.95,
+          "updatedAt": "2026-11-10T09:25:32.776Z"
+        }
+      }
+    ]
+  }
+}
