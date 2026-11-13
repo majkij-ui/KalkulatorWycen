@@ -177,6 +177,14 @@ entries → `gear`, Rode / Viltrox linked). The Q2 Morris variant patch was alre
 82,822 zł unchanged; result after company costs 31,131 zł in the cash view, 2,992 zł with gear spread (28,139 zł
 carried from 2023–2025 purchases). Not yet started on the desktop: the F1 first start (no `company.json` yet).
 
+**Merged and installed 2026-11-13 (KSeF):** `claude/ksef-api-integration-3c2f27` (read-only KSeF client,
+`npm run data -- ksef-sync` / `ksef-preview`, Finanse → „Zgodność z KSeF", client invoice names and NIP in Klienci;
+plan: docs/PLAN-KSEF.md). No conflicts; `client-details.json` and `ksef-decisions.json` added to the automatic
+backups. 1,098 tests, `tsc` clean. Real data, read-only: 36 quotes and every Finance year total identical before and
+after; data files unchanged (shasum). Waiting for M.J. on the desktop: run `ksef-sync` (writes `ksef/sprzedaz.json`),
+open Finanse → „Zgodność z KSeF", apply the confident rows, decide the rows with an amount difference, mark the barter
+project „Bez faktury"; check the invoice name and NIP on a client page.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
