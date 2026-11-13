@@ -14,10 +14,9 @@ import { BaseDirectory, exists, readTextFile } from '@tauri-apps/plugin-fs'
 import { isTauriRuntime } from './storage'
 import { createCollectionStore } from './v3-store'
 import { KSEF_DIR, KSEF_SALES_FILE, parseKsefCache, type KsefCache } from './ksef-cache'
-import { ksefDecisionSchema, type KsefDecision } from './ksef-reconcile'
+import { KSEF_DECISIONS_FILE, ksefDecisionSchema, type KsefDecision } from './ksef-reconcile'
 
 export const WEB_KSEF_KEY = 'nonoise-ksef-v1'
-export const KSEF_DECISIONS_FILE = 'ksef-decisions.json'
 export const WEB_KSEF_DECISIONS_KEY = 'nonoise-ksef-decisions-v1'
 
 /** `null` = jeszcze nie pobrano faktur (albo pliku nie da się odczytać — wtedy `error`). */

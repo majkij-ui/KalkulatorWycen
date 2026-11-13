@@ -38,6 +38,9 @@ const matchTolerance = (amount: number) => Math.max(1, Math.abs(amount) * 0.005)
 const SUGGEST_WITHIN_DAYS = 120
 const DAY_MS = 86_400_000
 
+/** Decyzje ekranu „Zgodność z KSeF" (plik danych huba). */
+export const KSEF_DECISIONS_FILE = 'ksef-decisions.json'
+
 export const ksefDecisionSchema = z
   .object({
     /** `assign:<numer KSeF>` albo `none:<id projektu>`. */
