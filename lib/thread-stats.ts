@@ -27,6 +27,11 @@ export interface InvoiceStats {
   /** `planned` = data wysyłki jeszcze nie nadeszła (faktura zaplanowana). */
   state: 'paid' | 'open' | 'planned'
   sent: string
+  /**
+   * Data wystawienia, gdy inna niż `sent` (faktura z KSeF: `sent` to nadanie
+   * numeru, `data.issueDate` to data z faktury). O miesiącu przychodu decyduje ona.
+   */
+  issued?: string
   paid: string | null
   number?: string
   /** Dni od wysłania do wpłaty; `null` = jeszcze nieopłacona. */
@@ -103,6 +108,11 @@ const numberField = (event: ThreadEventInput, key: string): number | null => {
   return typeof value === 'number' ? value : null
 }
 
+const issuedOf = (event: ThreadEventInput, sentDay: string): string | null => {
+  const value = eventData(event).issueDate
+  return typeof value === 'string' && isEventDate(value) && value !== sentDay ? value : null
+}
+
 const dueDateOf = (event: ThreadEventInput): string | null => {
   const value = eventData(event).dueDate
   return typeof value === 'string' ? value : null
@@ -139,6 +149,7 @@ function pairInvoices(
     return {
       state,
       sent: sentDay,
+      ...(issuedOf(invoice, sentDay) ? { issued: issuedOf(invoice, sentDay)! } : {}),
       paid: paidDay,
       number: numberOf(invoice),
       daysToPaid: paidDay ? daysBetween(sentDay, paidDay) : null,

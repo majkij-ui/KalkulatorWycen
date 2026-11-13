@@ -33,6 +33,8 @@ import {
   type ClientSummary,
 } from '@/lib/client-stats'
 import { mergePatches, undoMergePatches, type ClientMergePlan } from '@/lib/client-merge'
+import { renameDetails, type ClientDetails } from '@/lib/client-details'
+import { listClientDetails, mutateClientDetails } from '@/lib/client-details-store'
 import { moneyOf } from '@/lib/client-money'
 import {
   clientScope,
@@ -201,6 +203,8 @@ interface MergeNotice {
   fromKey: string
   /** Klient zapamiętany w filtrze listy projektów przed scaleniem. */
   listClient: string
+  /** Dane z faktur sprzed scalenia — „Cofnij" je przywraca. */
+  detailsBefore: ClientDetails[] | null
 }
 
 interface GroupNotice {
@@ -241,6 +245,10 @@ export function ClientsSection({
   const [query, setQuery] = useState('')
   const [sort, setSortState] = useState<ClientSort>(readSort)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [details, setDetails] = useState<ClientDetails[]>([])
+  useEffect(() => {
+    void listClientDetails().then(setDetails)
+  }, [])
 
   const setSort = (next: ClientSort) => {
     setSortState(next)
@@ -327,7 +335,12 @@ export function ClientsSection({
     await updateProjects(mergePatches(plan).map(({ id, client }) => ({ id, patch: { client } })))
     // Członkostwo w grupach idzie za nową nazwą (S2).
     const groupChanges = await followClientMerge(plan)
-    setNotice({ kind: 'merge', plan, groupChanges, fromKey, listClient: previousListClient })
+    // Dane z faktur (nazwa, NIP) idą za nową nazwą wyświetlaną.
+    const detailsBefore = await listClientDetails()
+    const renamed = renameDetails(detailsBefore, plan.keys, plan.target, new Date().toISOString())
+    const changed = renamed.some((d, i) => d !== detailsBefore[i])
+    if (changed) setDetails(await mutateClientDetails(() => renamed))
+    setNotice({ kind: 'merge', plan, groupChanges, fromKey, listClient: previousListClient, detailsBefore: changed ? detailsBefore : null })
   }
 
   const undo = async () => {
@@ -341,6 +354,8 @@ export function ClientsSection({
     setListClient(notice.listClient)
     await updateProjects(undoMergePatches(projects, notice.plan).map(({ id, client }) => ({ id, patch: { client } })))
     await undoClientMerge(notice.groupChanges)
+    const detailsBefore = notice.detailsBefore
+    if (detailsBefore) setDetails(await mutateClientDetails(() => detailsBefore))
   }
 
   const noticeBar = notice && (
@@ -393,6 +408,7 @@ export function ClientsSection({
           onOpenClient={(key) => open(key)}
           onOpenGroup={(group) => open(groupScopeValue(group.id))}
           onMerge={merge}
+          details={details}
         />
       </div>
     )

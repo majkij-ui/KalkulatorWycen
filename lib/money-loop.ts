@@ -21,7 +21,8 @@
  *    pozycję; inaczej plan (`financials.koszty`). W realizacji koszty niższe
  *    niż plan to wpisywanie w toku — liczy się plan, aż do Zrealizowanego.
  *  - MIESIĄC: każda faktura liczy się w miesiącu wystawienia (jak w ewidencji
- *    ryczałtu), także ta za dodatek wystawiona miesiące później. To, co nie
+ *    ryczałtu; faktura z KSeF: `data.issueDate`, a data wydarzenia to dzień
+ *    nadania numeru), także ta za dodatek wystawiona miesiące później. To, co nie
  *    jest jeszcze zafakturowane, i koszty projektu leżą w dacie KOTWICY:
  *    pierwsza faktura, a bez faktur — data księgowa projektu.
  *  - Podatek: ryczałt projektu (odtworzony z `financials`, domyślnie 8,5 %)
@@ -309,13 +310,13 @@ export function projectMoney(
   const producerMarginPct = producerMargin !== null && revenue !== null && revenue > 0 ? (producerMargin / revenue) * 100 : null
 
   // ── Daty ───────────────────────────────────────────────────────────────────
-  const factDays = [...invoices.map((i) => i.sent), ...pricedPayments.map((p) => p.day)].sort()
+  const factDays = [...invoices.map((i) => i.issued ?? i.sent), ...pricedPayments.map((p) => p.day)].sort()
   const anchor = factDays[0] ?? project.date
   const paid = paymentState(own, project.id, today).paid
   const pieces: RevenuePiece[] = []
   if (revenue !== null) {
     knownInvoices.forEach((i) =>
-      pieces.push({ day: i.sent, amount: invoiceAmount(i)!, source: 'invoice', paid: i.state === 'paid' })
+      pieces.push({ day: i.issued ?? i.sent, amount: invoiceAmount(i)!, source: 'invoice', paid: i.state === 'paid' })
     )
     pricedPayments.forEach((p) => pieces.push({ day: p.day, amount: p.amount!, source: 'payment', paid: true }))
     // Reszta (jeszcze niezafakturowana) najpierw w datach zaplanowanych

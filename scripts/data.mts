@@ -5,6 +5,8 @@
  *   npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]
  *   npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]
  *   npm run data -- inbox-status [--dir <folder>]
+ *   npm run data -- ksef-sync [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>] [--dry-run]
+ *   npm run data -- ksef-preview [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>]
  *
  * Patch:
  *   {
@@ -33,6 +35,16 @@
  *    zmiana nazwy — aplikacja nigdy nie zobaczy połowy pliku). Plików danych
  *    nie dotyka, więc działa także przy otwartej aplikacji: hub tylko czyta
  *    `inbox/`, a swoje decyzje trzyma w `inbox-decisions.json`.
+ *
+ * `ksef-sync` (docs/PLAN-KSEF.md) — kopia faktur sprzedaży z KSeF (od 01.02.2026)
+ * do `ksef/sprzedaz.json`; zestawia ją z projektami ekran Finanse → „Zgodność z
+ * KSeF". Danych huba nie dotyka, więc działa przy otwartej aplikacji. KSeF jest
+ * tylko CZYTANY: hub nie wystawia faktur. Token z samym `InvoiceRead` leży w pęku
+ * kluczy macOS (usługa `nonoise-hub-ksef`, konto = środowisko); zmienna `KSEF_TOKEN`
+ * działa wyłącznie poza produkcją, dla prób na danych testowych.
+ *
+ * `ksef-preview` — sama lista faktur sprzedaży i zakupu z KSeF (domyślnie od
+ * 01.02.2026). Nic nie zapisuje i nie czyta danych huba poza NIP-em z ustawień.
  *
  * Domyślny folder: dane „NonoiseMedia Hub" (`com.michal.nonoisehub`).
  */
@@ -64,7 +76,12 @@ import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
 import { clientGroupSchema } from '../lib/client-groups'
 import { rentalItemSchema } from '../lib/rental-types'
+import { createKsefClient, KSEF_BASE_URLS, type KsefEnvironment } from '../lib/ksef-client'
+import { parseInvoiceXml } from '../lib/ksef-invoices'
+import { KSEF_DIR, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache } from '../lib/ksef-cache'
+import { KSEF_FROM } from '../lib/ksef-reconcile'
 import { companySchema } from '../lib/company-settings-core'
+import { clientDetailsSchema } from '../lib/client-details'
 import {
   equipmentItemSchema,
   fixedCostSchema,
@@ -94,6 +111,8 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'rental-items.json': rentalItemSchema,
   // Ustawienia firmy (F1): jeden rekord `id: "company"` — zmiany przez `update`.
   'company.json': companySchema,
+  // Nazwa z faktury i NIP klienta (KSeF); nazwa wyświetlana to pole `client` projektów.
+  'client-details.json': clientDetailsSchema,
 }
 
 type Item = Record<string, unknown> & { id: string }
@@ -275,11 +294,8 @@ function readInboxDir(dir: string): ParsedInboxFile[] {
     })
 }
 
-function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | undefined) {
-  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
-  const raw = JSON.parse(readFileSync(draftPath, 'utf8')) as unknown
-
-  const inboxDir = join(dir, INBOX_DIR)
+/** Stan skrzynki i danych potrzebny do walidacji propozycji. */
+function inboxContext(dir: string) {
   const files = readInboxDir(dir)
   const pendingRefs = new Map<string, string>()
   const projectNewRefs = new Map<string, string>()
@@ -297,6 +313,20 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
   // Propozycja, którą już rozpatrzono w aplikacji, nie „czeka" — nawet jeśli jej plik leży w inbox/.
   const decided = new Set(decisions.map((d) => d.ref))
   ;[...pendingRefs.keys()].forEach((ref) => decided.has(ref) && pendingRefs.delete(ref))
+  const pending = files.flatMap((parsed) =>
+    parsed.status === 'ok' ? parsed.proposals.filter((p) => pendingRefs.has(p.ref)) : []
+  )
+  return { projects, events, decisions, pendingRefs, projectNewRefs, pending }
+}
+
+function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | undefined) {
+  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
+  writeInbox(JSON.parse(readFileSync(draftPath, 'utf8')) as unknown, draftPath, dir, dryRun, name ?? basename(draftPath, '.json'))
+}
+
+function writeInbox(raw: unknown, label: string, dir: string, dryRun: boolean, name: string) {
+  const inboxDir = join(dir, INBOX_DIR)
+  const { projects, events, decisions, pendingRefs, projectNewRefs } = inboxContext(dir)
   const result = validateInboxDraft(raw, {
     projects,
     events,
@@ -307,7 +337,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
     today: localStamp(new Date()).slice(0, 10),
   })
 
-  console.log(`${dryRun ? '[próba] ' : ''}${result.note || draftPath}`)
+  console.log(`${dryRun ? '[próba] ' : ''}${result.note || label}`)
   console.log(`folder: ${dir}\n`)
   if (result.errors.length) {
     result.errors.forEach((e) => console.error(`✗ ${e}`))
@@ -334,7 +364,7 @@ function inbox(draftPath: string, dir: string, dryRun: boolean, name: string | u
   }
 
   const now = new Date()
-  const fileName = `${localStamp(now)}-${slugify(name ?? basename(draftPath, '.json'))}.json`
+  const fileName = `${localStamp(now)}-${slugify(name)}.json`
   const payload = {
     format: INBOX_FORMAT,
     version: INBOX_VERSION,
@@ -402,7 +432,129 @@ const USAGE = [
   '  npm run data -- apply <patch.json> [--dir <folder>] [--dry-run]',
   '  npm run data -- inbox <propozycje.json> [--name <opis>] [--dir <folder>] [--dry-run]',
   '  npm run data -- inbox-status [--dir <folder>]',
+  '  npm run data -- ksef-sync [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>] [--dry-run]',
+  '  npm run data -- ksef-preview [--env prod|test|demo] [--nip <NIP>] [--from <RRRR-MM-DD>] [--dir <folder>]',
 ].join('\n')
+
+const KEYCHAIN_SERVICE = 'nonoise-hub-ksef'
+
+function ksefToken(environment: KsefEnvironment): string {
+  if (environment !== 'prod' && process.env.KSEF_TOKEN) return process.env.KSEF_TOKEN
+  try {
+    return execFileSync('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', environment, '-w'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return fail(
+      `brak tokenu KSeF w pęku kluczy. Zapisz token z samym uprawnieniem „Przeglądanie faktur” (polecenie zapyta o niego):\n` +
+        `  security add-generic-password -U -s ${KEYCHAIN_SERVICE} -a ${environment} -w`
+    )
+  }
+}
+
+/** Wspólne opcje poleceń KSeF: folder, środowisko, NIP i klient tylko do odczytu. */
+function ksefSetup(args: string[]) {
+  const option = (name: string) => {
+    const index = args.indexOf(name)
+    return index >= 0 ? args[index + 1] : undefined
+  }
+  const dir = option('--dir') ?? HUB_DIR
+  if (!existsSync(dir)) fail(`folder danych nie istnieje: ${dir}`)
+  const environment = (option('--env') ?? 'prod') as KsefEnvironment
+  if (!(environment in KSEF_BASE_URLS)) fail(`nieznane środowisko: ${environment}`)
+  const company = readParsed(dir, 'company.json', companySchema)[0]
+  const nip = (option('--nip') ?? company?.contact?.taxId ?? '').replace(/\D/g, '')
+  if (!/^\d{10}$/.test(nip)) fail('brak NIP-u firmy: podaj --nip albo uzupełnij go w ustawieniach firmy')
+  const client = { ...createKsefClient({ environment, nip, token: ksefToken(environment) }), nip }
+  return { option, dir, environment, client }
+}
+
+async function ksefSync(args: string[]) {
+  const { option, dir, environment, client } = ksefSetup(args)
+  const dryRun = args.includes('--dry-run')
+  const from = option('--from') ?? KSEF_FROM
+  const cachePath = join(dir, KSEF_DIR, KSEF_SALES_FILE)
+  const previous = existsSync(cachePath) ? parseKsefCache(JSON.parse(readFileSync(cachePath, 'utf8'))) : null
+  // Kopia z innego środowiska (np. próba na danych testowych) nie miesza się z prawdziwą.
+  const kept = previous && previous.environment === environment ? previous.invoices : []
+  const known = new Map(kept.map((sale) => [sale.ksefNumber, sale]))
+
+  const invoices = await client.listInvoices({
+    direction: 'sale',
+    from: `${from}T00:00:00+01:00`,
+    to: new Date().toISOString(),
+  })
+  const fresh = invoices.filter((invoice) => !known.has(invoice.ksefNumber))
+  console.log(`KSeF (${environment}): ${invoices.length} faktur sprzedaży od ${from}, nowych: ${fresh.length}.`)
+  // KSeF wydaje najwyżej 64 faktury na godzinę. Reszta przyjdzie przy kolejnym uruchomieniu,
+  // bo pobrane już faktury zostają w kopii.
+  const batch = fresh.slice(0, KSEF_DOWNLOADS_PER_RUN)
+  if (batch.length < fresh.length) {
+    console.log(`Pobieram ${batch.length}; pozostałe ${fresh.length - batch.length} przy następnym uruchomieniu (za godzinę).`)
+  }
+  if (batch.length > 1) console.log(`Pobieranie treści faktur potrwa ok. ${Math.ceil((batch.length * 4) / 60)} min (limit KSeF).`)
+  for (const invoice of batch) {
+    known.set(invoice.ksefNumber, { ...invoice, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+  }
+  // Metadane z tego przebiegu wygrywają (KSeF ich nie zmienia, ale nowsza kopia nie zaszkodzi).
+  invoices.forEach((invoice) => {
+    const saved = known.get(invoice.ksefNumber)
+    if (saved) known.set(invoice.ksefNumber, { ...saved, ...invoice, details: saved.details })
+  })
+  const cache = ksefCacheFile({
+    fetchedAt: new Date().toISOString(),
+    environment,
+    nip: client.nip,
+    from,
+    invoices: [...known.values()].sort((a, b) => a.ksefDate.localeCompare(b.ksefDate) || a.ksefNumber.localeCompare(b.ksefNumber)),
+  })
+  if (dryRun) {
+    console.log(`[próba] Kopia miałaby ${cache.invoices.length} faktur — nic nie zapisano.`)
+    return
+  }
+  // Nowy plik podmieniany w całości: aplikacja nigdy nie zobaczy połowy.
+  mkdirSync(join(dir, KSEF_DIR), { recursive: true })
+  const tmp = join(dir, KSEF_DIR, `.${KSEF_SALES_FILE}.tmp`)
+  writeFileSync(tmp, JSON.stringify(cache, null, 2))
+  renameSync(tmp, cachePath)
+  console.log(`✓ Zapisano ${KSEF_DIR}/${KSEF_SALES_FILE}: ${cache.invoices.length} faktur. Zestawienie: Finanse → Zgodność z KSeF.`)
+}
+
+/** Poniżej godzinowego limitu KSeF (64), z zapasem na ponowne próby. */
+const KSEF_DOWNLOADS_PER_RUN = 55
+
+
+async function ksefPreview(args: string[]) {
+  const { option, environment, client } = ksefSetup(args)
+  const from = option('--from') ?? KSEF_FROM
+  const range = { from: `${from}T00:00:00+01:00`, to: new Date().toISOString() }
+  // Logowanie sprawdza zakres tokenu: z prawem zapisu klient odmówi pracy, zanim cokolwiek pobierze.
+  await client.getAccessToken()
+  console.log(`KSeF (${environment}), od ${from}. Token: tylko „Przeglądanie faktur” ✓. Niczego nie zapisuję.\n`)
+  for (const direction of ['sale', 'purchase'] as const) {
+    const invoices = (await client.listInvoices({ direction, ...range })).sort((a, b) => a.ksefDate.localeCompare(b.ksefDate))
+    const net = invoices.filter((i) => i.currency === 'PLN').reduce((sum, i) => sum + i.netAmount, 0)
+    console.log(`${direction === 'sale' ? 'SPRZEDAŻ' : 'ZAKUPY'}: ${invoices.length} faktur, netto w zł ${net.toFixed(2)}`)
+    invoices.forEach((i) =>
+      console.log(
+        `  ${i.ksefDate}  ${i.invoiceNumber.padEnd(22)} ${(i.counterpartyName || '(bez nazwy)').slice(0, 38).padEnd(38)} ` +
+          `${i.netAmount.toFixed(2).padStart(11)} ${i.currency}${i.isCorrection ? '  korekta' : ''}`
+      )
+    )
+    console.log('')
+  }
+  console.log('Nic nie zapisano.')
+}
+
+if (process.argv[2] === 'ksef-sync' || process.argv[2] === 'ksef-preview') {
+  try {
+    await (process.argv[2] === 'ksef-sync' ? ksefSync : ksefPreview)(process.argv.slice(3))
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error))
+  }
+  process.exit(0)
+}
 
 if (process.argv[2] === 'inbox-status') {
   const args = process.argv.slice(3)
