@@ -122,12 +122,12 @@ function writePref(key: string, value: string): void {
 
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru']
 
-/** Zakładki Finansów; „Raport" (S5) to trzecia, „Zgodność z KSeF" czwarta. */
+/** Zakładki Finansów; „Raport" (S5) to trzecia, „KSeF" czwarta. */
 const FINANCE_TABS = [
   { value: 'projects', label: 'Projekty' },
   { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
   { value: 'report', label: 'Raport' },
-  { value: 'ksef', label: 'Zgodność z KSeF' },
+  { value: 'ksef', label: 'KSeF' },
 ] as const
 type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
@@ -1066,8 +1066,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             <p className="mt-1 text-sm text-zinc-500">
               {tab === 'ksef' ? (
                 <>
-                  Faktury z KSeF obok projektów. KSeF ma ostatnie słowo o numerze, kwocie i dacie faktury; „Zastosuj” zapisuje
-                  je w projekcie, a stare wartości zostają w historii wydarzenia.
+                  Faktury z KSeF obok projektów. KSeF ma ostatnie słowo o numerze, kwocie i dacie faktury; hub proponuje
+                  dopasowanie, a Ty je potwierdzasz albo zmieniasz. Stare wartości zostają w historii wydarzenia.
                 </>
               ) : tab === 'fixed' ? (
                 <>

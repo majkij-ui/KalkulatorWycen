@@ -69,8 +69,14 @@ export interface KsefInvoiceDetails {
   correctedNumber: string
 }
 
-/** Faktura z treścią z XML-a: tyle trzyma kopia KSeF w folderze danych huba. */
-export type KsefSale = KsefInvoice & { details: KsefInvoiceDetails }
+/**
+ * Faktura z treścią z XML-a: tyle trzyma kopia KSeF w folderze danych huba
+ * (sprzedaż i zakupy). `hasDetails: false` = treść jeszcze nie pobrana (limit
+ * KSeF: 64 faktury na godzinę) — `details` jest wtedy puste.
+ */
+export type KsefSale = KsefInvoice & { details: KsefInvoiceDetails; hasDetails?: boolean }
+
+export const EMPTY_DETAILS: KsefInvoiceDetails = { dueDate: '', lines: [], correctedKsefNumber: '', correctedNumber: '' }
 
 const CORRECTION_TYPES = new Set(['Kor', 'KorZal', 'KorRoz', 'KorPef', 'KorVatRr'])
 

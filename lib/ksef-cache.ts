@@ -1,5 +1,6 @@
 /**
- * Kopia faktur sprzedaży z KSeF w folderze danych huba (`ksef/sprzedaz.json`).
+ * Kopia faktur z KSeF w folderze danych huba: sprzedaż (`ksef/sprzedaz.json`)
+ * i zakupy (`ksef/zakupy.json`).
  *
  * Pisze ją WYŁĄCZNIE `npm run data -- ksef-sync` (nowy plik podmieniany w
  * całości, więc działa także przy otwartej aplikacji); aplikacja tylko czyta.
@@ -14,6 +15,7 @@ import type { KsefSale } from './ksef-invoices'
 
 export const KSEF_DIR = 'ksef'
 export const KSEF_SALES_FILE = 'sprzedaz.json'
+export const KSEF_PURCHASES_FILE = 'zakupy.json'
 export const KSEF_CACHE_FORMAT = 'nonoise-hub-ksef'
 export const KSEF_CACHE_VERSION = 1
 
@@ -49,6 +51,7 @@ export const ksefSaleSchema = z
     currency: z.string().catch('PLN'),
     invoiceType: text,
     isCorrection: z.boolean().catch(false),
+    hasDetails: z.boolean().optional().catch(undefined),
     details: z
       .object({
         dueDate: text,
@@ -65,6 +68,8 @@ export interface KsefCache {
   environment: string
   nip: string
   from: string
+  /** Do tej chwili KSeF jest przejrzany; kolejna synchronizacja pyta tylko o nowsze faktury. */
+  syncedTo?: string
   invoices: KsefSale[]
 }
 
@@ -80,7 +85,14 @@ export function parseKsefCache(raw: unknown): KsefCache | null {
       })
     : []
   const str = (value: unknown) => (typeof value === 'string' ? value : '')
-  return { fetchedAt: str(file.fetchedAt), environment: str(file.environment), nip: str(file.nip), from: str(file.from), invoices }
+  return {
+    fetchedAt: str(file.fetchedAt),
+    environment: str(file.environment),
+    nip: str(file.nip),
+    from: str(file.from),
+    ...(str(file.syncedTo) ? { syncedTo: str(file.syncedTo) } : {}),
+    invoices,
+  }
 }
 
 export function ksefCacheFile(cache: KsefCache) {

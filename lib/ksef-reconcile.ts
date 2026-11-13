@@ -18,6 +18,12 @@
  *     (Piotrek: inna nazwa w hubie, inna na fakturze).
  * Gdy pasuje więcej niż jeden projekt, faktura zostaje nieprzypisana: hub pyta.
  *
+ * Wszystko da się poprawić ręcznie (decyzje w `ksef-decisions.json`): fakturę
+ * przypisać do innego projektu albo odpiąć, wskazać, który wpis huba zastępuje
+ * (albo że to nowa, kolejna faktura projektu), a różnicę kwot rozwiązać jednym
+ * z podpowiedzianych sposobów. Projekt bez faktury i faktura bez projektu
+ * dostają ranking kandydatów z powodami (klient, kwota, data).
+ *
  * Moduł czysty — testy w `ksef-reconcile.test.ts`.
  */
 
@@ -43,11 +49,19 @@ export const KSEF_DECISIONS_FILE = 'ksef-decisions.json'
 
 export const ksefDecisionSchema = z
   .object({
-    /** `assign:<numer KSeF>` albo `none:<id projektu>`. */
+    /**
+     * Jedna decyzja na sprawę: `assign:<numer KSeF>` (przypisanie albo odpięcie),
+     * `pair:<numer KSeF>` (który wpis huba faktura zastępuje), `none:<id projektu>`
+     * (bez faktury), `amount:<id projektu>` (różnica kwot przyjęta / czeka na korektę).
+     */
     id: z.string().min(1),
-    kind: z.enum(['assign', 'no_invoice']),
+    kind: z.enum(['assign', 'unassign', 'pair', 'no_invoice', 'accept_amount', 'await_correction']),
     projectId: z.string().catch(''),
     ksefNumber: z.string().optional().catch(undefined),
+    /** `pair`: id wydarzenia faktury w hubie albo `new` = dopisz jako kolejną fakturę. */
+    eventId: z.string().optional().catch(undefined),
+    /** `accept_amount`: różnica, którą przyjęto — inna różnica wymaga nowej decyzji. */
+    amount: z.number().optional().catch(undefined),
     at: z.string().catch(''),
   })
   .passthrough()
@@ -66,6 +80,8 @@ export interface ReconcileInput {
   projects: ReconcileProject[]
   /** Cena + dosprzedaż z Finansów projektu (`projectMoney().expected`). */
   expected: Map<string, number | null>
+  /** Dosprzedaż projektu (`projectMoney().extras`) — do podpowiedzi przy różnicy kwot. */
+  extras?: Map<string, { id: string; amount: number | null; what: string }[]>
   events: TimelineEvent[]
   invoices: KsefSale[]
   details: ClientDetails[]
@@ -112,7 +128,23 @@ export type KsefChange =
   | { kind: 'details'; record: ClientDetails; before: ClientDetails | null }
   | { kind: 'client'; from: string; to: string }
 
-export type RowStatus = 'ok' | 'changes' | 'amount' | 'missing' | 'no_invoice' | 'waiting'
+export type RowStatus = 'ok' | 'changes' | 'amount' | 'accepted' | 'awaiting' | 'missing' | 'no_invoice' | 'waiting'
+
+/** Kandydat z powodami, po polsku — do pokazania przy przycisku „Przypisz". */
+export interface Candidate {
+  /** Id projektu (dla faktury) albo numer KSeF (dla projektu). */
+  id: string
+  score: number
+  reasons: string[]
+}
+
+/** Sposób na różnicę kwot między fakturami a ceną z dosprzedażą. */
+export type AmountOption =
+  | { kind: 'add_extra'; amount: number }
+  | { kind: 'adjust_extra'; eventId: string; from: number; to: number }
+  | { kind: 'remove_extras'; eventIds: string[]; amount: number }
+  | { kind: 'accept' }
+  | { kind: 'await_correction' }
 
 export interface ReconcileRow {
   project: ReconcileProject
@@ -126,13 +158,27 @@ export interface ReconcileRow {
   changes: KsefChange[]
   /** Faktury huba, których nie ma w KSeF (np. wpis ręczny z innym numerem). */
   extraHubInvoices: TimelineEvent[]
+  /** Który wpis huba zastąpi każda faktura (`null` = dopisze się jako nowa). */
+  pairs: { ksefNumber: string; eventId: string | null; saved: boolean }[]
+  /** Wpisy faktur w hubie, które faktura z KSeF może zastąpić (jeszcze bez numeru KSeF). */
+  replaceable: TimelineEvent[]
+  /** Faktury z KSeF bez projektu, które tu pasują (projekt bez faktury albo niedofakturowany). */
+  invoiceCandidates: Candidate[]
+  /** Podpowiedzi przy różnicy kwot; puste, gdy kwoty się zgadzają. */
+  amountOptions: AmountOption[]
+  /** Różnica kwot: do decyzji, przyjęta, czeka na korektę; `null` = kwoty zgodne. */
+  amountState: 'open' | 'accepted' | 'awaiting' | null
   status: RowStatus
 }
 
 export interface ReconcileResult {
   rows: ReconcileRow[]
-  /** Faktury bez projektu, z podpowiedziami (klient podobny, kwota zgodna). */
-  unassigned: { document: KsefDocument; hints: string[] }[]
+  /** Faktury bez projektu, z rankingiem projektów (klient, kwota, data). */
+  unassigned: { document: KsefDocument; detached: boolean; candidates: Candidate[] }[]
+  /** Wszystkie faktury z informacją, gdzie trafiły — do ręcznego wyboru i listy faktur. */
+  documents: { document: KsefDocument; projectId: string | null }[]
+  /** Faktury, których treść jeszcze się nie pobrała (limit KSeF) — poza zestawieniem. */
+  pendingDetails: number
 }
 
 // ── Klient ───────────────────────────────────────────────────────────────────
@@ -239,10 +285,63 @@ function settledBeforeKsef(events: TimelineEvent[], projectId: string): boolean 
   return liveInvoiceEvents(events, projectId).some((e) => e.start.slice(0, 10) < KSEF_FROM && !e.data?.ksefNumber)
 }
 
-function assign(input: ReconcileInput): { byProject: Map<string, KsefDocument[]>; unassigned: KsefDocument[] } {
+const AMOUNT_NEAR = 0.15
+const DATE_NEAR_DAYS = 60
+
+function dayDistance(a: string, b: string): number {
+  const distance = Math.abs(Date.parse(a) - Date.parse(b)) / DAY_MS
+  return Number.isNaN(distance) ? Infinity : distance
+}
+
+/** Na ile faktura pasuje do projektu, któremu zostało `rest` do zafakturowania. */
+function matchScore(project: ReconcileProject, document: KsefDocument, rest: number | null, details: ClientDetails[]) {
+  const reasons: string[] = []
+  let score = 0
+  if (sameClient(project, document.sale, details)) {
+    score += 3
+    reasons.push('ten sam klient')
+  }
+  if (isPln(document) && rest !== null && rest > 0) {
+    const gap = roundMoney(document.amount - rest)
+    if (Math.abs(gap) <= matchTolerance(document.amount)) {
+      score += 3
+      reasons.push('kwota zgodna')
+    } else if (Math.abs(gap) <= Math.abs(rest) * AMOUNT_NEAR) {
+      score += 1
+      reasons.push(`kwota zbliżona (${gap > 0 ? '+' : '−'}${Math.abs(gap).toLocaleString('pl-PL')} zł)`)
+    }
+  }
+  const days = dayDistance(project.date, document.sale.issueDate)
+  if (days <= DATE_NEAR_DAYS) {
+    score += 1
+    reasons.push(days < 1 ? 'ta sama data' : `${Math.round(days)} dni od daty projektu`)
+  }
+  return { score, reasons }
+}
+
+const MIN_CANDIDATE_SCORE = 2
+const MAX_CANDIDATES = 4
+
+function topCandidates(list: Candidate[]): Candidate[] {
+  return list
+    .filter((c) => c.score >= MIN_CANDIDATE_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_CANDIDATES)
+}
+
+interface Assignment {
+  byProject: Map<string, KsefDocument[]>
+  unassigned: { document: KsefDocument; detached: boolean }[]
+  open: ReconcileProject[]
+  remainder: (projectId: string) => number | null
+  documents: KsefDocument[]
+}
+
+function assign(input: ReconcileInput): Assignment {
   const live = input.projects.filter((p) => !p.deletedAt)
   const liveIds = new Set(live.map((p) => p.id))
-  const documents = ksefDocuments(input.invoices)
+  const documents = ksefDocuments(input.invoices.filter((invoice) => invoice.hasDetails !== false))
+  const detached = new Set(input.decisions.filter((d) => d.kind === 'unassign' && d.ksefNumber).map((d) => d.ksefNumber!))
   const byProject = new Map<string, KsefDocument[]>()
   const taken = new Set<string>()
   const put = (document: KsefDocument, projectId: string, reason: MatchReason) => {
@@ -258,6 +357,7 @@ function assign(input: ReconcileInput): { byProject: Map<string, KsefDocument[]>
 
   documents.forEach((document) => {
     const { sale } = document
+    if (detached.has(sale.ksefNumber)) return
     const manual = decided.get(sale.ksefNumber)
     if (manual && liveIds.has(manual)) return put(document, manual, 'decision')
     const saved = projectOfEvent((e) => e.data?.ksefNumber === sale.ksefNumber)
@@ -277,11 +377,13 @@ function assign(input: ReconcileInput): { byProject: Map<string, KsefDocument[]>
     return expected - invoiced
   }
   const open = live.filter((p) => (p.status === 'won' || p.status === 'done') && !settledBeforeKsef(input.events, p.id))
-  const unassigned: KsefDocument[] = []
+  const unassigned: Assignment['unassigned'] = []
   documents
     .filter((document) => !taken.has(document.sale.ksefNumber))
     .forEach((document) => {
       const { sale } = document
+      // Odpięta ręcznie: czeka na wskazanie projektu, bez zgadywania.
+      if (detached.has(sale.ksefNumber)) return unassigned.push({ document, detached: true })
       const fits = (p: ReconcileProject) => {
         const rest = remainder(p.id)
         return isPln(document) && rest !== null && Math.abs(rest - document.amount) <= matchTolerance(document.amount)
@@ -300,9 +402,9 @@ function assign(input: ReconcileInput): { byProject: Map<string, KsefDocument[]>
           Math.abs(Date.parse(p.date) - Date.parse(sale.issueDate)) <= SUGGEST_WITHIN_DAYS * DAY_MS,
       )
       if (byAmount.length === 0 && near.length === 1) return put(document, near[0].id, 'suggested')
-      unassigned.push(document)
+      unassigned.push({ document, detached: false })
     })
-  return { byProject, unassigned }
+  return { byProject, unassigned, open, remainder, documents }
 }
 
 // ── Zmiany ───────────────────────────────────────────────────────────────────
@@ -312,20 +414,28 @@ const INVOICE_FIELDS = ['number', 'amountNetto', 'amountOriginal', 'currency', '
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
 /** Wydarzenia faktur projektu ↔ faktury KSeF: numer KSeF, numer faktury, potem ręczne wpisy bez numeru po kolei. */
-function pairEvents(documents: KsefDocument[], events: TimelineEvent[]) {
+function pairEvents(documents: KsefDocument[], events: TimelineEvent[], forced: Map<string, string>) {
   const free = [...events]
+  const decided = (document: KsefDocument) => forced.get(document.sale.ksefNumber)
   const take = (match: (e: TimelineEvent) => boolean) => {
     const index = free.findIndex(match)
     return index === -1 ? null : free.splice(index, 1)[0]
   }
   const pairs = documents.map((document) => ({ document, event: take((e) => e.data?.ksefNumber === document.sale.ksefNumber) }))
+  // Wskazanie ręczne: ten wpis huba (albo `new` = żaden, faktura dopisze się jako kolejna).
   pairs.forEach((pair) => {
-    if (!pair.event) pair.event = take((e) => !e.data?.ksefNumber && normalizedNumber(e.data?.number) === normalizedNumber(pair.document.sale.invoiceNumber))
+    const eventId = decided(pair.document)
+    if (!pair.event && eventId && eventId !== 'new') pair.event = take((e) => e.id === eventId && !e.data?.ksefNumber)
+  })
+  pairs.forEach((pair) => {
+    if (pair.event || decided(pair.document)) return
+    pair.event = take((e) => !e.data?.ksefNumber && normalizedNumber(e.data?.number) === normalizedNumber(pair.document.sale.invoiceNumber))
   })
   const ksefNumbers = new Set(documents.map((d) => normalizedNumber(d.sale.invoiceNumber)))
   pairs.forEach((pair) => {
     // Ręczny wpis bez numeru KSeF i z numerem spoza KSeF (albo bez numeru) to ta sama faktura zapisana niechlujnie.
-    if (!pair.event) pair.event = take((e) => !e.data?.ksefNumber && !ksefNumbers.has(normalizedNumber(e.data?.number)) && !normalizedNumber(e.data?.number))
+    if (pair.event || decided(pair.document)) return
+    pair.event = take((e) => !e.data?.ksefNumber && !ksefNumbers.has(normalizedNumber(e.data?.number)) && !normalizedNumber(e.data?.number))
   })
   return { pairs, leftovers: free }
 }
@@ -386,11 +496,21 @@ function clientChanges(
 }
 
 function rowChanges(project: ReconcileProject, documents: KsefDocument[], input: ReconcileInput, preferred: Map<string, string>) {
-  const { pairs, leftovers } = pairEvents(documents, liveInvoiceEvents(input.events, project.id))
+  const forced = new Map(
+    input.decisions.filter((d) => d.kind === 'pair' && d.ksefNumber && d.eventId).map((d) => [d.ksefNumber!, d.eventId!]),
+  )
+  const projectEvents = liveInvoiceEvents(input.events, project.id)
+  const { pairs, leftovers } = pairEvents(documents, projectEvents, forced)
   const changes: KsefChange[] = []
-  pairs.forEach(({ document, event }) => {
+  pairs.forEach((pair) => {
+    const { document } = pair
     const facts = invoiceFacts(document)
     const start = document.sale.ksefDate
+    // Faktura zapisana wcześniej w innym projekcie i przypisana tutaj: wpis się przenosi, nie dubluje.
+    const elsewhere = pair.event
+      ? null
+      : input.events.find((e) => !e.deletedAt && e.kind === 'invoice_sent' && e.data?.ksefNumber === document.sale.ksefNumber && e.projectId !== project.id)
+    const event = pair.event ?? elsewhere ?? null
     if (!event) {
       changes.push({
         kind: 'create',
@@ -403,6 +523,7 @@ function rowChanges(project: ReconcileProject, documents: KsefDocument[], input:
       return
     }
     const fields: FieldChange[] = []
+    if (elsewhere) fields.push({ field: 'projectId', before: elsewhere.projectId, after: project.id })
     if (event.start.slice(0, 10) !== start) fields.push({ field: 'start', before: event.start, after: start })
     INVOICE_FIELDS.forEach((key) => {
       const after = facts[key]
@@ -414,51 +535,135 @@ function rowChanges(project: ReconcileProject, documents: KsefDocument[], input:
     if (fields.length) changes.push({ kind: 'update', eventId: event.id, ksefNumber: document.sale.ksefNumber, fields })
   })
   changes.push(...clientChanges(project, documents, input.details, preferred, input.now))
-  return { changes, leftovers }
+  return {
+    changes,
+    // Wpis z numerem KSeF, którego faktura trafiła gdzie indziej, przeniesie się stamtąd — to nie „faktura spoza KSeF".
+    leftovers: leftovers.filter((e) => !e.data?.ksefNumber),
+    pairs: pairs.map((pair) => ({
+      ksefNumber: pair.document.sale.ksefNumber,
+      eventId: pair.event?.id ?? null,
+      saved: pair.event?.data?.ksefNumber === pair.document.sale.ksefNumber,
+    })),
+    replaceable: projectEvents.filter((e) => !e.data?.ksefNumber),
+  }
+}
+
+/** Podpowiedzi przy różnicy kwot (KSeF − hub), od najbardziej konkretnej. */
+function amountOptionsFor(diff: number, extras: { id: string; amount: number | null; what: string }[]): AmountOption[] {
+  const options: AmountOption[] = []
+  const priced = extras.filter((e): e is { id: string; amount: number; what: string } => typeof e.amount === 'number' && e.amount > 0)
+  const gap = Math.abs(diff)
+  if (diff > 0) options.push({ kind: 'add_extra', amount: diff })
+  else {
+    const total = roundMoney(priced.reduce((sum, e) => sum + e.amount, 0))
+    const single = priced.find((e) => Math.abs(e.amount - gap) < SHOWN_DIFF)
+    // Dosprzedaż w hubie, której nie ma na fakturze (YoPro: 2 000 + 1 050 = różnica).
+    if (single) options.push({ kind: 'remove_extras', eventIds: [single.id], amount: single.amount })
+    else if (priced.length > 1 && Math.abs(total - gap) < SHOWN_DIFF) options.push({ kind: 'remove_extras', eventIds: priced.map((e) => e.id), amount: total })
+    else if (priced.length === 1 && priced[0].amount > gap) {
+      // Drobna różnica przy jednej dosprzedaży (JHJ: 4 090 → 4 060).
+      options.push({ kind: 'adjust_extra', eventId: priced[0].id, from: priced[0].amount, to: roundMoney(priced[0].amount + diff) })
+    }
+  }
+  options.push({ kind: 'accept' }, { kind: 'await_correction' })
+  return options
 }
 
 // ── Zestawienie ──────────────────────────────────────────────────────────────
 
 export function reconcileKsef(input: ReconcileInput): ReconcileResult {
-  const { byProject, unassigned } = assign(input)
+  const { byProject, unassigned, open, remainder, documents } = assign(input)
   const preferred = preferredClients(byProject, input.projects, input.details)
   const noInvoice = new Set(input.decisions.filter((d) => d.kind === 'no_invoice').map((d) => d.projectId))
+  const amountDecision = new Map(
+    input.decisions.filter((d) => d.kind === 'accept_amount' || d.kind === 'await_correction').map((d) => [d.projectId, d]),
+  )
   const rows: ReconcileRow[] = []
+  // Faktury bez projektu jako kandydaci dla projektu, któremu brakuje faktury albo jej części.
+  const candidatesFor = (project: ReconcileProject, rest: number | null): Candidate[] =>
+    topCandidates(
+      unassigned.map(({ document }) => ({ id: document.sale.ksefNumber, ...matchScore(project, document, rest, input.details) })),
+    )
 
   input.projects
     .filter((p) => !p.deletedAt)
     .forEach((project) => {
-      const documents = byProject.get(project.id) ?? []
+      const assigned = byProject.get(project.id) ?? []
       const hubValue = input.expected.get(project.id) ?? null
-      if (documents.length) {
-        if (!documents.some((d) => input.inPeriod(d.sale.issueDate))) return
-        const { changes, leftovers } = rowChanges(project, documents, input, preferred)
-        const ksefTotal = documents.every(isPln) ? roundMoney(documents.reduce((sum, d) => sum + d.amount, 0)) : null
+      if (assigned.length) {
+        if (!assigned.some((d) => input.inPeriod(d.sale.issueDate))) return
+        const { changes, leftovers, pairs, replaceable } = rowChanges(project, assigned, input, preferred)
+        const ksefTotal = assigned.every(isPln) ? roundMoney(assigned.reduce((sum, d) => sum + d.amount, 0)) : null
         const diff = ksefTotal !== null && hubValue !== null ? roundMoney(ksefTotal - hubValue) : null
+        const differs = diff !== null && Math.abs(diff) >= SHOWN_DIFF
+        const decision = differs ? amountDecision.get(project.id) : undefined
+        // Przyjęta różnica obowiązuje tylko dla tej samej kwoty: nowa faktura albo korekta otwiera sprawę na nowo.
+        const accepted = decision?.kind === 'accept_amount' && Math.abs((decision.amount ?? NaN) - diff!) < SHOWN_DIFF
+        const awaiting = decision?.kind === 'await_correction'
         // Sama propozycja zmiany klienta nie czyni faktury „do poprawy".
         const invoiceChanges = changes.filter((c) => c.kind !== 'client')
-        const status: RowStatus = diff !== null && Math.abs(diff) >= SHOWN_DIFF ? 'amount' : invoiceChanges.length ? 'changes' : 'ok'
-        rows.push({ project, documents, hubValue, ksefTotal, diff, changes, extraHubInvoices: leftovers, status })
+        const status: RowStatus =
+          differs && !accepted && !awaiting ? 'amount' : invoiceChanges.length ? 'changes' : awaiting ? 'awaiting' : accepted ? 'accepted' : 'ok'
+        rows.push({
+          project,
+          documents: assigned,
+          hubValue,
+          ksefTotal,
+          diff,
+          changes,
+          extraHubInvoices: leftovers,
+          pairs,
+          replaceable,
+          invoiceCandidates: differs && diff! < 0 ? candidatesFor(project, -diff!) : [],
+          amountOptions: differs ? amountOptionsFor(diff!, input.extras?.get(project.id) ?? []) : [],
+          amountState: !differs ? null : awaiting ? 'awaiting' : accepted ? 'accepted' : 'open',
+          status,
+        })
         return
       }
       // Projekt bez faktury w KSeF: liczy się tylko zlecenie z tego okresu, wystawione po starcie KSeF.
       if (project.status !== 'won' && project.status !== 'done') return
       if (!input.inPeriod(project.date) || project.date < KSEF_FROM || settledBeforeKsef(input.events, project.id)) return
       const status: RowStatus = noInvoice.has(project.id) ? 'no_invoice' : project.status === 'done' ? 'missing' : 'waiting'
-      rows.push({ project, documents, hubValue, ksefTotal: null, diff: null, changes: [], extraHubInvoices: [], status })
+      rows.push({
+        project,
+        documents: [],
+        hubValue,
+        ksefTotal: null,
+        diff: null,
+        changes: [],
+        extraHubInvoices: [],
+        pairs: [],
+        replaceable: [],
+        invoiceCandidates: status === 'no_invoice' ? [] : candidatesFor(project, hubValue),
+        amountOptions: [],
+        amountState: null,
+        status,
+      })
     })
 
-  const live = input.projects.filter((p) => !p.deletedAt)
+  const projectOf = new Map<string, string>()
+  byProject.forEach((list, projectId) => list.forEach((d) => projectOf.set(d.sale.ksefNumber, projectId)))
+  const candidatePool = input.projects.filter((p) => !p.deletedAt && p.status !== 'lost')
   return {
     rows: rows.sort((a, b) => (b.documents[0]?.sale.ksefDate ?? b.project.date).localeCompare(a.documents[0]?.sale.ksefDate ?? a.project.date)),
     unassigned: unassigned
-      .filter((document) => input.inPeriod(document.sale.issueDate))
-      .map((document) => ({
+      .filter(({ document }) => input.inPeriod(document.sale.issueDate))
+      .map(({ document, detached }) => ({
         document,
-        hints: live
-          .filter((p) => p.status !== 'lost' && similarCompany(p.client, document.sale.counterpartyName))
-          .map((p) => p.id),
+        detached,
+        candidates: topCandidates(
+          candidatePool.map((p) => ({
+            id: p.id,
+            ...matchScore(p, document, open.includes(p) ? remainder(p.id) : (input.expected.get(p.id) ?? null), input.details),
+          })),
+        ),
       })),
+    documents: documents.map((document) => ({
+      document: byProject.get(projectOf.get(document.sale.ksefNumber) ?? '')?.find((d) => d.sale.ksefNumber === document.sale.ksefNumber) ?? document,
+      projectId: projectOf.get(document.sale.ksefNumber) ?? null,
+    })),
+    pendingDetails: input.invoices.filter((invoice) => invoice.hasDetails === false).length,
   }
 }
 
@@ -468,8 +673,10 @@ export function reconcileKsef(input: ReconcileInput): ReconcileResult {
 export function applyEventUpdate(event: TimelineEvent, change: Extract<KsefChange, { kind: 'update' }>, now: string): TimelineEvent {
   const data: Record<string, unknown> = { ...event.data }
   let start = event.start
+  let projectId = event.projectId
   change.fields.forEach(({ field, after }) => {
-    if (field === 'start') start = after as string
+    if (field === 'projectId') projectId = after as string
+    else if (field === 'start') start = after as string
     else if (after === undefined) delete data[field.slice('data.'.length)]
     else data[field.slice('data.'.length)] = after
   })
@@ -481,7 +688,7 @@ export function applyEventUpdate(event: TimelineEvent, change: Extract<KsefChang
     before: Object.fromEntries(change.fields.map((f) => [f.field, f.before ?? null])),
   }
   const previous = Array.isArray(event.updatedFrom) ? event.updatedFrom : []
-  return { ...event, start, data, updatedFrom: [...previous, trace], updatedAt: now }
+  return { ...event, projectId, start, data, updatedFrom: [...previous, trace], updatedAt: now }
 }
 
 /** „Zastosuj wszystkie": tylko pewne dopasowania bez różnicy kwot. */

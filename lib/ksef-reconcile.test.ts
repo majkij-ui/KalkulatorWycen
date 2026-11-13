@@ -338,7 +338,125 @@ test('dwa projekty klienta o tej samej kwocie: faktura czeka na wybór, z podpow
     ]),
   })
   assert.ok(result.rows.every((row) => row.documents.length === 0 && row.status === 'missing'))
-  assert.deepEqual(result.unassigned[0].hints.sort(), ['a', 'b'])
+  assert.deepEqual(result.unassigned[0].candidates.map((c) => c.id).sort(), ['a', 'b'])
+  assert.ok(result.unassigned[0].candidates[0].reasons.includes('kwota zgodna'))
+})
+
+// ── Ręczne decyzje i podpowiedzi (M.J. 2026-11-13: „co właściwie mogę tam zmienić") ──
+
+const decision = (over: Partial<KsefDecision> & Pick<KsefDecision, 'id' | 'kind'>): KsefDecision => ({ projectId: '', at: '', ...over })
+
+test('odpięcie: faktura wraca do „bez projektu" i nie jest dopasowywana sama', () => {
+  const invoice = sale('1/03/2026', { netAmount: 918, counterpartyName: 'PHN' })
+  const base = { projects: [project('phn', 'PHN')], invoices: [invoice], events: [invoiceEvent('phn', '2026-03-03', { number: '1/03/2026' })], expected: new Map([['phn', 918]]) }
+  assert.equal(rowOf(run(base), 'phn')?.documents.length, 1)
+  const result = run({ ...base, decisions: [decision({ id: 'assign:K-1/03/2026', kind: 'unassign', ksefNumber: 'K-1/03/2026' })] })
+  assert.equal(rowOf(result, 'phn')?.documents.length, 0)
+  assert.equal(result.unassigned[0].detached, true)
+  assert.equal(result.unassigned[0].candidates[0].id, 'phn')
+})
+
+test('podmiana: wskazany wpis huba zostaje zastąpiony fakturą z KSeF, razem z datą i kwotą', () => {
+  const invoice = sale('7/09/2026', { netAmount: 5000, counterpartyName: 'Klient' })
+  const first = invoiceEvent('p', '2026-09-01', { number: 'A', amountNetto: 100 })
+  const second = invoiceEvent('p', '2026-09-10', { number: 'B', amountNetto: 4800 })
+  const base = { projects: [project('p', 'Klient')], invoices: [invoice], events: [first, second], expected: new Map([['p', 5000]]) }
+  // Bez decyzji: oba wpisy mają numery spoza KSeF, więc faktura dopisałaby się jako nowa.
+  assert.equal(changesOf(run(base), 'p', 'create').length, 1)
+  assert.equal(rowOf(run(base), 'p')?.replaceable.length, 2)
+  const result = run({ ...base, decisions: [decision({ id: 'pair:K-7/09/2026', kind: 'pair', ksefNumber: 'K-7/09/2026', eventId: second.id })] })
+  const update = changesOf(result, 'p', 'update')[0] as Extract<KsefChange, { kind: 'update' }>
+  assert.equal(update.eventId, second.id)
+  assert.equal(update.fields.find((f) => f.field === 'data.amountNetto')?.after, 5000)
+  assert.equal(update.fields.find((f) => f.field === 'start')?.after, '2026-09-16')
+  assert.deepEqual(rowOf(result, 'p')?.extraHubInvoices.map((e) => e.id), [first.id])
+})
+
+test('„dodaj jako nową": faktura nie zastępuje ręcznego wpisu, tylko dopisuje się obok', () => {
+  const invoice = sale('2/10/2026', { netAmount: 2160, counterpartyName: 'Klient' })
+  const manual = invoiceEvent('p', '2026-09-16', {})
+  const base = { projects: [project('p', 'Klient')], invoices: [invoice], events: [manual], expected: new Map([['p', 2160]]) }
+  assert.equal(changesOf(run(base), 'p', 'update').length, 1)
+  const result = run({ ...base, decisions: [decision({ id: 'pair:K-2/10/2026', kind: 'pair', ksefNumber: 'K-2/10/2026', eventId: 'new' })] })
+  assert.equal(changesOf(result, 'p', 'create').length, 1)
+  assert.equal(changesOf(result, 'p', 'update').length, 0)
+})
+
+test('przeniesienie zapisanej faktury do innego projektu: wpis się przenosi, nie dubluje', () => {
+  const invoice = sale('1/05/2026', { netAmount: 1500, counterpartyName: 'Klient' })
+  const saved = invoiceEvent('a', '2026-09-16', { number: '1/05/2026', amountNetto: 1500, ksefNumber: 'K-1/05/2026' })
+  const result = run({
+    projects: [project('a', 'Klient'), project('b', 'Klient')],
+    invoices: [invoice],
+    events: [saved],
+    decisions: [decision({ id: 'assign:K-1/05/2026', kind: 'assign', projectId: 'b', ksefNumber: 'K-1/05/2026' })],
+    expected: new Map([['a', 1500], ['b', 1500]]),
+  })
+  const update = changesOf(result, 'b', 'update')[0] as Extract<KsefChange, { kind: 'update' }>
+  assert.equal(update.eventId, saved.id)
+  assert.deepEqual(update.fields.find((f) => f.field === 'projectId'), { field: 'projectId', before: 'a', after: 'b' })
+  assert.equal(applyEventUpdate(saved, update, 'now').projectId, 'b')
+  assert.equal(rowOf(result, 'a')?.extraHubInvoices.length, 0)
+})
+
+test('projekt bez faktury dostaje kandydatów spośród faktur bez projektu, z powodami', () => {
+  const near = sale('5/10/2026', { issueDate: '2026-10-28', ksefDate: '2026-10-28', netAmount: 860, counterpartyName: 'POLECAM Piotr Serbin' })
+  const far = sale('6/10/2026', { issueDate: '2026-03-01', ksefDate: '2026-03-01', netAmount: 40000, counterpartyName: 'Ktoś Inny' })
+  const result = run({ projects: [project('piotrek', 'Hotshotz', { date: '2026-10-26' })], invoices: [near, far], expected: new Map([['piotrek', 900]]) })
+  const row = rowOf(result, 'piotrek')!
+  assert.equal(row.status, 'missing')
+  assert.deepEqual(row.invoiceCandidates.map((c) => c.id), ['K-5/10/2026'])
+  assert.ok(row.invoiceCandidates[0].reasons.some((reason) => reason.startsWith('kwota zbliżona')))
+})
+
+test('różnica kwot — YoPro: dosprzedaż równa różnicy → propozycja usunięcia jej', () => {
+  const invoice = sale('3/03/2026', { netAmount: 9180, counterpartyName: 'DANIEL KRĘŻOŁEK' })
+  const result = run({
+    projects: [project('yopro', 'Daniel Krężołek')],
+    invoices: [invoice],
+    events: [invoiceEvent('yopro', '2026-03-26', { number: '3/03/2026', amountNetto: 9180 })],
+    expected: new Map([['yopro', 12230]]),
+    extras: new Map([['yopro', [{ id: 'x1', amount: 2000, what: '' }, { id: 'x2', amount: 1050, what: '' }]]]),
+  })
+  assert.deepEqual(rowOf(result, 'yopro')?.amountOptions[0], { kind: 'remove_extras', eventIds: ['x1', 'x2'], amount: 3050 })
+})
+
+test('różnica kwot — JHJ: jedna dosprzedaż i 30 zł różnicy → propozycja 4 090 → 4 060', () => {
+  const invoice = sale('4/10/2026', { netAmount: 26310, counterpartyName: 'JHJ' })
+  const result = run({
+    projects: [project('jhj', 'JHJ')],
+    invoices: [invoice],
+    expected: new Map([['jhj', 26340]]),
+    extras: new Map([['jhj', [{ id: 'x', amount: 4090, what: '' }]]]),
+  })
+  assert.deepEqual(rowOf(result, 'jhj')?.amountOptions[0], { kind: 'adjust_extra', eventId: 'x', from: 4090, to: 4060 })
+})
+
+test('różnica kwot — faktura wyższa niż hub → propozycja dopisania dosprzedaży', () => {
+  const invoice = sale('9/09/2026', { netAmount: 1200, counterpartyName: 'Klient' })
+  const result = run({ projects: [project('p', 'Klient')], invoices: [invoice], events: [invoiceEvent('p', '2026-09-16', { number: '9/09/2026' })], expected: new Map([['p', 1000]]) })
+  assert.deepEqual(rowOf(result, 'p')?.amountOptions[0], { kind: 'add_extra', amount: 200 })
+})
+
+test('różnica przyjęta obowiązuje dla tej kwoty; korekta otwiera sprawę na nowo', () => {
+  const invoice = sale('4/09/2026', { netAmount: 2598, counterpartyName: 'CIONET' })
+  const event = invoiceEvent('w', '2026-09-16', { number: '4/09/2026', amountNetto: 2598, dueDate: '2026-09-30', issueDate: '2026-09-16', ksefNumber: 'K-4/09/2026', buyerId: 'Nip:1111111111' })
+  const details: ClientDetails[] = [{ id: 'Nip:1111111111', client: 'CIONET', legalName: 'CIONET', nip: '1111111111', updatedAt: '' }]
+  const base = { projects: [project('w', 'CIONET')], events: [event], details, expected: new Map([['w', 3260]]) }
+  const accepted = [decision({ id: 'amount:w', kind: 'accept_amount', projectId: 'w', amount: -662 })]
+  assert.equal(rowOf(run({ ...base, invoices: [invoice] }), 'w')?.status, 'amount')
+  assert.equal(rowOf(run({ ...base, invoices: [invoice], decisions: accepted }), 'w')?.status, 'accepted')
+  assert.equal(rowOf(run({ ...base, invoices: [invoice], decisions: [decision({ id: 'amount:w', kind: 'await_correction', projectId: 'w' })] }), 'w')?.status, 'awaiting')
+  const partial = sale('1/KOR/12/2026', { netAmount: 600, isCorrection: true, invoiceType: 'Kor', details: { dueDate: '', lines: [], correctedKsefNumber: 'K-4/09/2026', correctedNumber: '' } })
+  assert.equal(rowOf(run({ ...base, invoices: [invoice, partial], decisions: accepted }), 'w')?.diff, -62)
+  assert.equal(rowOf(run({ ...base, invoices: [invoice, partial], decisions: accepted }), 'w')?.status, 'amount')
+})
+
+test('faktura bez pobranej treści czeka poza zestawieniem', () => {
+  const waiting = { ...sale('8/11/2026', { counterpartyName: 'Klient' }), hasDetails: false }
+  const result = run({ projects: [project('p', 'Klient')], invoices: [waiting], expected: new Map([['p', 1000]]) })
+  assert.equal(result.pendingDetails, 1)
+  assert.equal(rowOf(result, 'p')?.documents.length, 0)
 })
 
 test('ręczny wpis z numerem, którego nie ma w KSeF, zostaje — i jest pokazany', () => {
