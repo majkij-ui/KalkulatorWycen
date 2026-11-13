@@ -15,7 +15,7 @@ environment only, because the read-only client needs something to read; nothing 
 | Stage | What | Status |
 |---|---|---|
 | K0 | Read-only client, proof on the Ministry's TEST environment | done 2026-10-30 |
-| K1 | M.J.'s own token in the macOS Keychain; preview from the real account, nothing written to the hub | waits for the final token rules (§3) |
+| K1 | M.J.'s own token in the macOS Keychain; preview from the real account, nothing written to the hub | can start now (decided 2026-11-13); `ksef-preview` built and proven on TEST |
 | K2 | Sales: `npm run data -- ksef-sync` writes proposals to Skrzynka, calendar events, overwrite rules (§5) | built and proven on TEST 2026-10-30; §5 approved; not run on the real account |
 | K3 | „Zakupy" tab in Sprzęt: new gear, small items (`onSet: false`), other cost | waits for K1 |
 
@@ -74,10 +74,16 @@ Limits: not in KSeF are receipts and, as a rule, invoices from foreign sellers (
 partly manual. K2 syncs on demand with the metadata query. KSeF refuses a date range over 100 days (code 21405),
 so the client splits longer ranges into 90-day windows. Each sync reads from 01.01.2027 and skips known refs.
 
-## 6. K1 checklist (when the token rules are final)
+## 6. K1 checklist
 
-1. M.J. generates a token with only „Przeglądanie faktur" in the Ministry's app and saves it (the command asks for it):
+A token generated in 2026 works under today's rules until 31.12.2026 (under the draft, until 30.11.2027), so
+testing does not have to wait for December. In 2027 the token may need regenerating; nothing else changes.
+
+1. M.J. generates a token with only „Przeglądanie faktur" in Aplikacja Podatnika KSeF 2.0 and saves it
+   (the command asks for it, the token never goes into chat):
    `security add-generic-password -U -s nonoise-hub-ksef -a prod -w`
-2. Dry run, nothing written: `npm run data -- ksef-sync --nip <NIP> --dry-run`
-3. Check that the `per` guard accepts the production token, then run without `--dry-run`.
+2. List what the account holds, nothing written: `npm run data -- ksef-preview --nip <NIP>`.
+   This also checks that the `per` guard accepts the production token.
+3. Matching on 2026 sales, nothing written: `npm run data -- ksef-sync --nip <NIP> --from 2026-02-01 --dry-run`.
+   On production `--from` works only with `--dry-run`; a real run always starts at 01.01.2027.
    The company settings have no NIP field in the UI yet, hence `--nip`.

@@ -255,11 +255,11 @@ function correctionXml(
 }
 
 /** `ksef-sync` jak z wiersza poleceń, na folderze tymczasowym; token tylko w zmiennej tego procesu. */
-function runSync(dir: string, nip: string, token: string): string {
+function runSync(dir: string, nip: string, token: string, command = 'ksef-sync'): string {
   return execFileSync(
     process.execPath,
     [
-      '--no-warnings', '--import', './scripts/register-ts.mjs', 'scripts/data.mts', 'ksef-sync',
+      '--no-warnings', '--import', './scripts/register-ts.mjs', 'scripts/data.mts', command,
       // Ponad 100 dni wstecz: sprawdza też podział zakresu na okna.
       '--env', 'test', '--nip', nip, '--from', new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10), '--dir', dir,
     ],
@@ -464,6 +464,11 @@ async function main() {
       `${first?.event?.start}, netto ${first?.event?.data?.amountNetto}`,
     )
     if (!firstRun.includes('✓ Zapisano')) console.log(firstRun)
+    const preview = runSync(dataDir, buyer.nip, buyerRead.token, 'ksef-preview')
+    check(
+      'ksef-preview: nabywca widzi zakup, a folder danych zostaje bez zmian',
+      preview.includes(number) && preview.includes('ZAKUPY: 1 faktur') && readdirSync(join(dataDir, 'inbox')).length === 1,
+    )
     const secondRun = runSync(dataDir, seller.nip, sellerRead.token)
     check('ksef-sync: ponowny przebieg niczego nie dubluje', inboxProposals(dataDir).length === proposals.length && secondRun.includes('nowych: 0'))
 
