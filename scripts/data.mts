@@ -486,14 +486,24 @@ async function ksefSync(args: string[]) {
   })
   const fresh = invoices.filter((invoice) => invoice.issueDate >= from && !known.has(ksefRef(invoice.ksefNumber)))
   console.log(`KSeF (${environment}): ${invoices.length} faktur sprzedaży, nowych: ${fresh.length}.`)
+  // KSeF wydaje najwyżej 64 faktury na godzinę. Reszta przyjdzie przy kolejnym uruchomieniu,
+  // bo zapisane już propozycje są pomijane.
+  const batch = fresh.slice(0, KSEF_DOWNLOADS_PER_RUN)
+  if (batch.length < fresh.length) {
+    console.log(`Pobieram ${batch.length}; pozostałe ${fresh.length - batch.length} przy następnym uruchomieniu (za godzinę).`)
+  }
+  if (batch.length > 1) console.log(`Pobieranie treści faktur potrwa ok. ${Math.ceil((batch.length * 4) / 60)} min (limit KSeF).`)
   const sales: KsefSale[] = []
-  for (const invoice of fresh) {
+  for (const invoice of batch) {
     sales.push({ ...invoice, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
   }
   const { draft, held } = buildKsefSalesDraft(sales, context)
   writeInbox(draft, 'KSeF', dir, dryRun, 'ksef-sprzedaz')
   held.forEach((note) => console.log(`… ${note}`))
 }
+
+/** Poniżej godzinowego limitu KSeF (64), z zapasem na ponowne próby. */
+const KSEF_DOWNLOADS_PER_RUN = 55
 
 /** Pierwszy miesiąc KSeF 2.0: wcześniej nie ma tam czego szukać. */
 const KSEF_PREVIEW_FROM = '2026-02-01'

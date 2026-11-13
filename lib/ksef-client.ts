@@ -97,6 +97,15 @@ const PAGE_SIZE = 100
 /** KSeF odrzuca zakres dłuższy niż 100 dni (kod 21405), więc dłuższy dzielimy na okna. */
 const MAX_WINDOW_DAYS = 90
 const DAY_MS = 86_400_000
+/**
+ * Limity KSeF (limity/limity-api.md): treść faktury 8/s, 16/min, 64/h; lista
+ * metadanych 8/s, 16/min, 20/h. Limit sekundowy i minutowy przeczekujemy sami,
+ * godzinowy zgłaszamy.
+ */
+const MAX_AUTO_WAIT_SECONDS = 65
+const RATE_LIMIT_RETRIES = 3
+/** Odstęp między pobraniami treści faktur: 15 na minutę, poniżej limitu 16. */
+const DOWNLOAD_SPACING_MS = 4000
 
 /** Sąsiadujące okna pokrywające cały zakres; przedział odwraca się tylko przy złych danych. */
 export function queryWindows(from: string, to: string): Array<{ from: string; to: string }> {
@@ -124,6 +133,7 @@ export function createKsefClient(options: KsefClientOptions) {
     method: 'GET' | 'POST',
     path: string,
     init: { bearer?: string; json?: unknown; accept?: string } = {},
+    retriesLeft = RATE_LIMIT_RETRIES,
   ): Promise<Response> {
     if (!isReadOnlyEndpoint(method, path)) {
       throw new Error(`KSeF: ${method} ${path} nie jest na liście operacji tylko do odczytu`)
@@ -139,6 +149,10 @@ export function createKsefClient(options: KsefClientOptions) {
     if (response.ok) return response
     const detail = (await response.text()).slice(0, 500)
     const retryAfter = Number(response.headers.get('Retry-After')) || undefined
+    if (response.status === 429 && retriesLeft > 0 && (retryAfter ?? 1) <= MAX_AUTO_WAIT_SECONDS) {
+      await sleep((retryAfter ?? 1) * 1000)
+      return request(method, path, init, retriesLeft - 1)
+    }
     throw new KsefApiError(`KSeF: ${method} ${path} → ${response.status} ${detail}`, response.status, retryAfter)
   }
 
@@ -236,6 +250,7 @@ export function createKsefClient(options: KsefClientOptions) {
   }
 
   async function getInvoiceXml(ksefNumber: string): Promise<string> {
+    await sleep(DOWNLOAD_SPACING_MS)
     const response = await request('GET', `/invoices/ksef/${encodeURIComponent(ksefNumber)}`, {
       bearer: await getAccessToken(),
       accept: 'application/xml',

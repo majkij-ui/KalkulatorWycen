@@ -166,20 +166,39 @@ test('długi zakres: sąsiadujące okna nie dłuższe niż 100 dni, bez dziur', 
   assert.equal(queryWindows('2027-01-01T00:00:00Z', '2027-01-10T00:00:00Z').length, 1)
 })
 
-test('limit zapytań: błąd z czasem oczekiwania i bez tokenu w treści', async () => {
+test('krótki limit zapytań: klient czeka i ponawia', async () => {
+  const waits: number[] = []
+  const client = createKsefClient({
+    environment: 'test',
+    nip: '5265877635',
+    token: 'tajny',
+    sleep: async (ms) => {
+      waits.push(ms)
+    },
+    fetchImpl: fakeFetch([
+      new Response('limit', { status: 429, headers: { 'Retry-After': '1' } }),
+      { hasMore: false, isTruncated: false, invoices: [metadata] },
+    ]),
+  })
+  const invoices = await client.listInvoices({ direction: 'sale', from: '2027-01-01T00:00:00Z', to: '2027-01-02T00:00:00Z' })
+  assert.equal(invoices.length, 1)
+  assert.ok(waits.includes(1000))
+})
+
+test('limit godzinowy: błąd z czasem oczekiwania i bez tokenu w treści', async () => {
   const client = createKsefClient({
     environment: 'test',
     nip: '5265877635',
     token: 'tajny',
     sleep: async () => {},
-    fetchImpl: fakeFetch([new Response('limit', { status: 429, headers: { 'Retry-After': '60' } })]),
+    fetchImpl: fakeFetch([new Response('limit', { status: 429, headers: { 'Retry-After': '3600' } })]),
   })
   await assert.rejects(
     () => client.listInvoices({ direction: 'purchase', from: 'a', to: 'b' }),
     (error: unknown) => {
       assert.ok(error instanceof KsefApiError)
       assert.equal(error.status, 429)
-      assert.equal(error.retryAfter, 60)
+      assert.equal(error.retryAfter, 3600)
       assert.equal(error.message.includes('tajny'), false)
       return true
     },

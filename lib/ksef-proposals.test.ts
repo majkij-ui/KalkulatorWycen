@@ -221,6 +221,13 @@ test('druga korekta dopisuje się do pierwszej i liczy od aktualnej kwoty', () =
   assert.equal((proposal.set.data?.corrections as unknown[]).length, 2)
 })
 
+test('korekta faktury sprzed granicy nie zmienia wpisu z 2026', () => {
+  const old = invoiceEvent({ start: '2026-07-30', data: { number: 'FV/1/2027', amountNetto: 7810, ksefNumber: 'ORYG' } })
+  const { draft, held } = buildKsefSalesDraft([correction()], { projects: [project()], events: [old], pending: [] })
+  assert.equal(draft.proposals.length, 0)
+  assert.match(held[0], /sprzed 2027-01-01/)
+})
+
 test('korekta bez oryginału w hubie czeka, nie tworzy przychodu', () => {
   const { draft, held } = buildKsefSalesDraft([correction()], { projects: [project()], events: [], pending: [] })
   assert.equal(draft.proposals.length, 0)

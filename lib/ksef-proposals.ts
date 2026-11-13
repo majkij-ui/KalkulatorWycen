@@ -151,6 +151,9 @@ function correctionProposal(
   if (!original) {
     return { held: `${label}: nie ma jeszcze faktury ${correctedNumber || correctedKsefNumber} w projekcie (najpierw ją przyjmij)` }
   }
+  if (original.start.slice(0, 10) < KSEF_SALES_FROM) {
+    return { held: `${label}: koryguje fakturę sprzed ${KSEF_SALES_FROM}, a tych wpisów KSeF nie zmienia (popraw ręcznie, jeśli trzeba)` }
+  }
   const waiting = ctx.pending.some((p) => p.type === 'event_update' && p.eventId === original.id)
   if (waiting || claimed.has(original.id)) {
     return { held: `${label}: na fakturze ${correctedNumber || correctedKsefNumber} czeka już inna zmiana (najpierw ją rozpatrz)` }
