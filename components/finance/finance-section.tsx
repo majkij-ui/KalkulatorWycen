@@ -80,6 +80,7 @@ import {
 import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
+import { KsefPanel } from './ksef-panel'
 import { ExtraSalesPanel } from './extra-sales-panel'
 import { GearCostsPanel } from './gear-costs-panel'
 import { RentalsPanel } from './rentals-panel'
@@ -122,11 +123,12 @@ function writePref(key: string, value: string): void {
 
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru']
 
-/** Zakładki Finansów; „Raport" (S5) to trzecia. */
+/** Zakładki Finansów; „Raport" (S5) to trzecia, „Zgodność z KSeF" czwarta. */
 const FINANCE_TABS = [
   { value: 'projects', label: 'Projekty' },
   { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
   { value: 'report', label: 'Raport' },
+  { value: 'ksef', label: 'Zgodność z KSeF' },
 ] as const
 type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
@@ -1032,7 +1034,12 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
           {/* Zakładka Projekty: objaśnienia siedzą w (i) przy kaflach, nie w akapicie. */}
           {tab !== 'projects' && (
             <p className="mt-1 text-sm text-zinc-500">
-              {tab === 'fixed' ? (
+              {tab === 'ksef' ? (
+                <>
+                  Faktury z KSeF obok projektów. KSeF ma ostatnie słowo o numerze, kwocie i dacie faktury; „Zastosuj” zapisuje
+                  je w projekcie, a stare wartości zostają w historii wydarzenia.
+                </>
+              ) : tab === 'fixed' ? (
                 <>
                   Subskrypcje liczą się same w każdym miesiącu cyklu; miesiąc, który był inny, poprawiasz na liście
                   miesięcy. Wszystko tutaj wchodzi do wyniku firmy w zakładce Projekty.
@@ -1104,6 +1111,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
           <RentalsPanel summary={margin} projectsById={projectsById} periodLabel={periodLabel(period)} onOpenProject={onOpenProject} />
           <GearCostsPanel gear={margin.gear} periodLabel={periodLabel(period)} />
         </>
+      ) : tab === 'ksef' ? (
+        <KsefPanel period={period} periodLabel={periodLabel(period)} moneyById={ledgerById} onOpenProject={onOpenProject} />
       ) : tab === 'report' ? (
         <ReportTab
           period={period}

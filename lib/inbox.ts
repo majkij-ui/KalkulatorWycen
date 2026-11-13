@@ -60,8 +60,6 @@ export interface EventUpdateTrace {
   at: string
   /** Zmienione pola: `projectId`, `start`, `data.<klucz>`. */
   fields: string[]
-  /** Tylko KSeF: poprzednie wartości nadpisanych pól. */
-  before?: Record<string, unknown>
 }
 
 /** Refy zmian zapisanych w `updatedFrom` wydarzenia (czytane ostrożnie — to pole spoza schematu). */
@@ -151,12 +149,11 @@ const FIELD_LABELS: Record<string, string> = { contact: 'kontakt', leadSource: '
 
 /** Co zmienia `event_update`, po polsku: „przypięcie do projektu, godzina, dane". */
 export function eventUpdateSummary(proposal: EventUpdateProposal): string {
-  const { linkProject, time, date, data } = proposal.set
+  const { linkProject, time, data } = proposal.set
   return (
     [
       linkProject ? 'przypięcie do projektu' : '',
       time ? 'godzina' : '',
-      date ? 'dzień' : '',
       data && Object.keys(data).length ? 'dane' : '',
     ]
       .filter(Boolean)
@@ -705,7 +702,7 @@ function isEmptyValue(value: unknown): boolean {
  * Co zmieni `event_update` w tym wydarzeniu. `projectId` = projekt wybrany
  * dla grupy (dla `linkProject`). `ifMissing` (domyślnie): projekt tylko gdy
  * wydarzenie go nie ma, godzina tylko gdy jej nie ma, pola `data` tylko puste.
- * Typ, tytuł i status nigdy się nie zmieniają, dzień tylko z KSeF. Pusta lista = nic do zmiany.
+ * Dzień, typ, tytuł i status nigdy się nie zmieniają. Pusta lista = nic do zmiany.
  */
 export function planEventUpdate(
   event: Pick<TimelineEvent, 'kind' | 'projectId' | 'start' | 'data'>,
@@ -713,7 +710,7 @@ export function planEventUpdate(
   projectId: string | null
 ): EventFieldChange[] {
   const changes: EventFieldChange[] = []
-  const { linkProject, time, date, data } = proposal.set
+  const { linkProject, time, data } = proposal.set
   const kind = eventKind(event.kind)
   if (linkProject && projectId && kind.scope !== 'business' && event.projectId !== projectId) {
     if (!proposal.ifMissing || !event.projectId) changes.push({ field: 'projectId', before: event.projectId, after: projectId })
@@ -722,9 +719,6 @@ export function planEventUpdate(
     const hasTime = event.start.length > 10
     const next = `${event.start.slice(0, 10)}T${time}`
     if (next !== event.start && (!proposal.ifMissing || !hasTime)) changes.push({ field: 'start', before: event.start, after: next })
-  }
-  if (date && proposal.ref.startsWith('ksef:') && date !== event.start && !proposal.ifMissing) {
-    changes.push({ field: 'start', before: event.start, after: date })
   }
   Object.entries(data ?? {}).forEach(([key, value]) => {
     if (isEmptyValue(value)) return
@@ -765,8 +759,6 @@ export function applyEventUpdate(
     inboxFile: file,
     at: nowIso,
     fields: changes.map((c) => c.field),
-    // KSeF nadpisuje dane: stare wartości zostają w śladzie, żeby dało się je odtworzyć.
-    ...(proposal.ref.startsWith('ksef:') ? { before: Object.fromEntries(changes.map((c) => [c.field, c.before ?? null])) } : {}),
   }
   const previous = Array.isArray(event.updatedFrom) ? event.updatedFrom : []
   return { ...next, data, updatedFrom: [...previous, trace], updatedAt: nowIso }

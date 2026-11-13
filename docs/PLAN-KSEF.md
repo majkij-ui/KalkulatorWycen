@@ -1,7 +1,7 @@
 # Plan: KSeF as the source of invoices (K-track)
 
-> Source: M.J., 2026-10-30. Sales invoices from KSeF become the truth about invoices in the hub from
-> 01.01.2027; purchase invoices become a source of gear and cost information. 2026 data stays as it is.
+> Source: M.J., 2026-10-30 and 2026-11-13. Sales invoices from KSeF are the truth about invoices in the hub from
+> 01.02.2026 (when M.J. started issuing in KSeF); purchase invoices become a source of gear and cost information.
 
 ## 0. The hub never adds invoices to KSeF
 
@@ -16,7 +16,7 @@ environment only, because the read-only client needs something to read; nothing 
 |---|---|---|
 | K0 | Read-only client, proof on the Ministry's TEST environment | done 2026-10-30 |
 | K1 | M.J.'s own token in the macOS Keychain; preview from the real account, nothing written to the hub | can start now (decided 2026-11-13); `ksef-preview` built and proven on TEST |
-| K2 | Sales: `npm run data -- ksef-sync` writes proposals to Skrzynka, calendar events, overwrite rules (§5) | built and proven on TEST 2026-10-30; §5 approved; not run on the real account |
+| K2 | Sales: `npm run data -- ksef-sync` keeps a copy of sales invoices; Finanse → „Zgodność z KSeF" sets them against projects (§7) | rebuilt 2026-11-13: the screen replaces the Skrzynka proposals |
 | K3 | „Zakupy" tab in Sprzęt: new gear, small items (`onSet: false`), other cost | waits for K1 |
 
 ## 2. Safety model
@@ -53,26 +53,21 @@ environment only, because the read-only client needs something to read; nothing 
 The last row matters after a leak: revoking the one known token may not be enough. List all tokens in the
 Ministry's app and revoke every unknown one. Whether revoking a token also revokes those it created was not tested.
 
-## 5. Rules for K2 and K3 (approved by M.J. 2026-10-30)
+## 5. Rules (approved by M.J. 2026-10-30, revised 2026-11-13)
 
 | Case | Behaviour |
 |---|---|
-| Invoice matches one open project of the client | Proposal to overwrite number, amount, due date and day; the old values stay in the event's `updatedFrom[].before` |
-| Client has several open projects | M.J. picks the project, nothing automatic |
-| No matching project | „Nieprzypisane"; revenue does not change by itself |
-| Issued 31.12, KSeF number 02.01 | Calendar 02.01 (reaches the client); revenue in the year of issue |
-| Correction invoice | Changes the original's amount by the correction's net (seen on TEST: −100 for a −100 correction), keeps it in `data.corrections`; no new revenue |
-| Invoice in EUR | No amount in the zł field; `amountOriginal` + `currency` kept and shown. The plan stands until a payment brings the amount in zł, like any invoice without an amount |
-| Entry dated before 2027 | Never overwritten, even with the same number. A finished project with a 2026 invoice is not a candidate; a project still in progress is (final invoice after an advance) |
-| Two manual entries in the project | No guessing: a new invoice event, with the usual „similar event" warning |
-| Correction before its invoice is accepted, or a second one while another waits | Held and reported; the next sync returns to it, so amounts never count from a stale base |
-| Payment | Unchanged, `invoice_paid` stays in the hub; KSeF does not know about payments |
-| Purchase with several lines | Each line categorised separately; gear gets the net amount |
-| Correction or return of gear | Warning and a proposal to change the price |
-
-Limits: not in KSeF are receipts and, as a rule, invoices from foreign sellers (Adobe, Google), so costs stay
-partly manual. K2 syncs on demand with the metadata query. KSeF refuses a date range over 100 days (code 21405),
-so the client splits longer ranges into 90-day windows. Each sync reads from 01.01.2027 and skips known refs.
+| Value of a project in the hub | Price from Finanse projektu (PDF → frozen at acceptance → typed by hand) + extra sales. Realizacja never changes it. Invoices win once they cover it or the project is done |
+| Invoice and project | Matched by number, then by client and the amount still uninvoiced, then by the only project of that client; amount alone is only a suggestion to confirm |
+| One project, two invoices (main job + extra sale) | One project with two invoices; their sum is set against price + extra sales |
+| Invoice amount differs from the hub | Shown as „Różnica kwoty"; applying writes the invoice, the price stays for M.J. to correct |
+| Invoice in EUR | No amount in the zł field; the EUR amount is kept beside it |
+| Correction | Attached to its invoice; the amount after corrections is the invoice amount |
+| Project without an invoice in KSeF | „Brak faktury", or „Bez faktury (celowo)" for a barter; a project still in progress is just waiting |
+| Project settled before KSeF (January 2026) | Left out |
+| Dates | Calendar = the day KSeF gave the number; revenue month = issue date |
+| Client names | Project field `client` = display name. `client-details.json` keeps the name on the invoice and the NIP; one NIP = one display name, so later invoices of that firm land on the same client |
+| Overwriting | Only on „Zastosuj"; the old values stay in the event's `updatedFrom[].before` |
 
 ## 6. K1 checklist
 
@@ -84,6 +79,17 @@ testing does not have to wait for December. In 2027 the token may need regenerat
    `security add-generic-password -U -s nonoise-hub-ksef -a prod -w`
 2. List what the account holds, nothing written: `npm run data -- ksef-preview --nip <NIP>`.
    This also checks that the `per` guard accepts the production token.
-3. Matching on 2026 sales, nothing written: `npm run data -- ksef-sync --nip <NIP> --from 2026-02-01 --dry-run`.
-   On production `--from` works only with `--dry-run`; a real run always starts at 01.01.2027.
+3. Copy of sales invoices: `npm run data -- ksef-sync --nip <NIP>`, then Finanse → „Zgodność z KSeF".
    The company settings have no NIP field in the UI yet, hence `--nip`.
+
+## 7. „Zgodność z KSeF" (built 2026-11-13)
+
+- `npm run data -- ksef-sync` writes `ksef/sprzedaz.json` in the hub data folder (a new file swapped in whole, so
+  it runs with the hub open). Already downloaded invoices are kept, so a run downloads only new ones.
+- The app reads it in Finanse → „Zgodność z KSeF" (`lib/ksef-reconcile.ts`, `components/finance/ksef-panel.tsx`):
+  one card per project with the hub value, the KSeF invoices, the difference, the changes and „Zastosuj z KSeF";
+  „Zastosuj wszystkie pewne" applies confident rows without an amount difference; invoices without a project get a
+  project picker; a project without an invoice can be marked „Bez faktury". Decisions: `ksef-decisions.json`.
+- Klienci shows the invoice name and NIP under the display name; „Scal nazwy" carries them to the new name.
+- KSeF limits met on the real account: metadata 20 an hour, downloads 16 a minute and 64 an hour.
+- Later: bank CSV as a fourth column („Wpłynęło"), purchases tab in Sprzęt, VAT tracking.

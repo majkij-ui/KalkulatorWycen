@@ -12,8 +12,8 @@
  *  1. logowanie klienta tokenem z samym `InvoiceRead`,
  *  2. sprzedaż u sprzedawcy i zakup u nabywcy, razem z XML-em faktury,
  *  3. że ten token NIE wystawi faktury i NIE utworzy tokenu z prawem zapisu,
- *  4. `npm run data -- ksef-sync` na tymczasowym folderze: propozycja, ponowny
- *     przebieg bez duplikatów, korekta.
+ *  4. `npm run data -- ksef-sync` na tymczasowym folderze: kopia faktur, ponowny
+ *     przebieg bez pobierania drugi raz, korekta dołączona w zestawieniu.
  *
  * Nie dotyka danych huba ani pęku kluczy.
  */
@@ -29,11 +29,13 @@ import {
   randomInt,
   X509Certificate,
 } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createKsefClient, KSEF_BASE_URLS } from '../lib/ksef-client'
 import { parseInvoiceXml } from '../lib/ksef-invoices'
+import { KSEF_DIR, KSEF_SALES_FILE, parseKsefCache } from '../lib/ksef-cache'
+import { reconcileKsef } from '../lib/ksef-reconcile'
 
 const BASE_URL = KSEF_BASE_URLS.test
 const DS = 'http://www.w3.org/2000/09/xmldsig#'
@@ -267,11 +269,6 @@ function runSync(dir: string, nip: string, token: string, command = 'ksef-sync')
   )
 }
 
-function inboxProposals(dir: string): Array<Record<string, any>> {
-  const inbox = join(dir, 'inbox')
-  return readdirSync(inbox).flatMap((name) => JSON.parse(readFileSync(join(inbox, name), 'utf8')).proposals)
-}
-
 async function symmetricKeyEncryption() {
   const certificates = await apiJson<Array<{ certificate: string; usage: string[] }>>(
     'GET',
@@ -450,42 +447,25 @@ async function main() {
     )
     check('klient odmawia pracy z tokenem, który może zapisywać', wideRefused)
 
-    // ── ksef-sync na tymczasowym folderze: projekt klienta „Nabywca Testowy” ────
+    // ── ksef-sync na tymczasowym folderze, potem zestawienie z projektem klienta „Nabywca Testowy” ────
     const dataDir = join(folder, 'dane')
     mkdirSync(dataDir)
-    const projectFile = [{ id: 'p-test', name: 'Film testowy', client: 'Nabywca Testowy sp. z o.o.', status: 'won', date: issueDate }]
-    writeFileSync(join(dataDir, 'projects.json'), JSON.stringify({ items: projectFile }))
+    const testProject = { id: 'p-test', name: 'Film testowy', client: 'Nabywca Testowy sp. z o.o.', status: 'won' as const, date: issueDate }
+    writeFileSync(join(dataDir, 'projects.json'), JSON.stringify({ items: [testProject] }))
     const firstRun = runSync(dataDir, seller.nip, sellerRead.token)
-    const proposals = inboxProposals(dataDir)
-    const first = proposals.find((p) => p.ref === `ksef:${ksefNumber}`)
+    const cached = () => parseKsefCache(JSON.parse(readFileSync(join(dataDir, KSEF_DIR, KSEF_SALES_FILE), 'utf8')))
+    const first = cached()?.invoices.find((sale) => sale.ksefNumber === ksefNumber)
     check(
-      'ksef-sync: faktura trafia do skrzynki z jedynym projektem klienta',
-      first?.type === 'event' && first.projectId === 'p-test' && first.event.data.amountNetto === 1100 && first.event.data.dueDate === dueDate,
-      `${first?.event?.start}, netto ${first?.event?.data?.amountNetto}`,
+      'ksef-sync: kopia ma fakturę z terminem płatności i pozycjami',
+      first?.netAmount === 1100 && first.details.dueDate === dueDate && first.details.lines.length === 2,
+      `${first?.invoiceNumber}, termin ${first?.details.dueDate}`,
     )
     if (!firstRun.includes('✓ Zapisano')) console.log(firstRun)
     const preview = runSync(dataDir, buyer.nip, buyerRead.token, 'ksef-preview')
-    check(
-      'ksef-preview: nabywca widzi zakup, a folder danych zostaje bez zmian',
-      preview.includes(number) && preview.includes('ZAKUPY: 1 faktur') && readdirSync(join(dataDir, 'inbox')).length === 1,
-    )
+    check('ksef-preview: nabywca widzi zakup', preview.includes(number) && preview.includes('ZAKUPY: 1 faktur'))
     const secondRun = runSync(dataDir, seller.nip, sellerRead.token)
-    check('ksef-sync: ponowny przebieg niczego nie dubluje', inboxProposals(dataDir).length === proposals.length && secondRun.includes('nowych: 0'))
+    check('ksef-sync: ponowny przebieg niczego nie pobiera drugi raz', secondRun.includes('nowych: 0'))
 
-    // Przyjęcie w aplikacji = wydarzenie z tym `ref`; potem przychodzi korekta.
-    const accepted = {
-      id: 'e-test',
-      kind: 'invoice_sent',
-      projectId: 'p-test',
-      start: first?.event.start,
-      title: first?.event.title,
-      notes: '',
-      data: first?.event.data,
-      source: { type: 'inbox', ref: first?.ref },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-    writeFileSync(join(dataDir, 'events.json'), JSON.stringify({ items: [accepted] }))
     const correctionNumber = `HUB/KOR/${randomInt(100000, 999999)}`
     const correctionKsef = await issueInvoice(
       sellerOwner,
@@ -494,12 +474,23 @@ async function main() {
     const correctionMeta = await waitForInvoice(sellerClient, 'sale', correctionKsef, from)
     console.log(`INFO korekta w KSeF: netto ${correctionMeta.netAmount}, typ ${correctionMeta.invoiceType}`)
     runSync(dataDir, seller.nip, sellerRead.token)
-    const correction = inboxProposals(dataDir).find((p) => p.ref === `ksef:${correctionKsef}`)
+    const result = reconcileKsef({
+      projects: [testProject],
+      expected: new Map([['p-test', 1000]]),
+      events: [],
+      invoices: cached()?.invoices ?? [],
+      details: [],
+      decisions: [],
+      inPeriod: () => true,
+      now: new Date().toISOString(),
+    })
+    const row = result.rows.find((r) => r.project.id === 'p-test')
+    const create = row?.changes.find((c) => c.kind === 'create')
     check(
-      'ksef-sync: korekta zmienia kwotę oryginału i zapisuje oba dokumenty',
-      correction?.type === 'event_update' && correction.eventId === 'e-test' && correction.set.data.amountNetto === 1000 &&
-        correction.set.data.corrections[0].number === correctionNumber,
-      `1100 → ${correction?.set?.data?.amountNetto}`,
+      'zestawienie: faktura z korektą trafia do projektu klienta, 1100 − 100 = 1000',
+      row?.documents.length === 1 && row.documents[0].corrections[0]?.invoiceNumber === correctionNumber && row.diff === 0 &&
+        create?.kind === 'create' && create.data.amountNetto === 1000,
+      `${row?.documents[0]?.reason}, różnica ${row?.diff}`,
     )
 
     const toRevoke: Array<[string, string]> = [

@@ -11,6 +11,7 @@
 
 import { ArrowLeft, ArrowUpRight, BellRing, Repeat } from 'lucide-react'
 import { describeGap, describeSince, SIZE_TREND_LABELS, type ClientStats, type GroupStats } from '@/lib/client-stats'
+import { detailsOfClient, type ClientDetails } from '@/lib/client-details'
 import type { ClientMergePlan } from '@/lib/client-merge'
 import { moneyOf, type MoneyById } from '@/lib/client-money'
 import type { ClientGroup } from '@/lib/client-groups'
@@ -174,6 +175,7 @@ export function ClientPage({
   onOpenClient,
   onOpenGroup,
   onMerge,
+  details,
 }: {
   /** Klient albo grupa klientów (`groupStats`). */
   stats: ClientStats | GroupStats
@@ -191,12 +193,15 @@ export function ClientPage({
   onOpenClient: (key: string) => void
   onOpenGroup: (group: ClientGroup) => void
   onMerge: (plan: ClientMergePlan) => Promise<void>
+  /** Dane z faktur KSeF (nazwa, NIP) wszystkich klientów. */
+  details?: ClientDetails[]
 }) {
   const { rhythm, outcomes, payments, size } = stats
   const group = isGroupStats(stats) ? stats : null
   const jobs = outcomes.won
   const source = stats.firstSource
   const projectsById = new Map(projects.map((p) => [p.id, p]))
+  const invoiceNames = group ? [] : detailsOfClient(details ?? [], stats.name)
 
   return (
     <div className="flex flex-col gap-6">
@@ -221,6 +226,19 @@ export function ClientPage({
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white sm:text-4xl" style={archivo}>
           {stats.name}
         </h1>
+        {invoiceNames.length > 0 && (
+          <p className="mt-1 text-xs text-zinc-500">
+            Na fakturach:{' '}
+            {invoiceNames.map((d, i) => (
+              <span key={d.id}>
+                {i > 0 && '; '}
+                <span className="text-zinc-300">{d.legalName}</span>
+                {d.nip && <span style={mono}> · NIP {d.nip}</span>}
+              </span>
+            ))}
+            . Nagłówek to nazwa wyświetlana — zmienisz ją w „Scal nazwy”.
+          </p>
+        )}
         <p className="mt-1 text-sm text-zinc-500">
           {group && `${group.members.length} ${plural(group.members.length, 'klient', 'klientów', 'klientów')} · `}
           {outcomes.total} {plural(outcomes.total, 'projekt', 'projekty', 'projektów')}

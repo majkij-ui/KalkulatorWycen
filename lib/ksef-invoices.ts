@@ -1,8 +1,9 @@
 /**
  * Faktury z KSeF sprowadzone do tego, czego potrzebuje hub.
  *
- * Moduł czysty — testy w `ksef.test.ts`. Niczego nie zapisuje; propozycje dla
- * Skrzynki powstaną z tych rekordów w kolejnym etapie.
+ * Moduł czysty — testy w `ksef.test.ts`. Niczego nie zapisuje: `ksef-sync`
+ * składa z nich kopię faktur (`ksef-cache.ts`), a ekran „Zgodność z KSeF”
+ * zestawia ją z projektami (`ksef-reconcile.ts`).
  *
  * Metadane KSeF mają kwoty i daty, ale nie mają terminu płatności ani pozycji:
  * te są tylko w XML-u faktury, stąd `parseInvoiceXml`.
@@ -37,6 +38,8 @@ export interface KsefInvoice {
   counterpartyName: string
   /** Pusty, gdy druga strona nie ma NIP-u (konsument, firma z zagranicy). */
   counterpartyNip: string
+  /** Identyfikator drugiej strony: `Nip:…`, `VatUe:…`, `Other:…`; pusty, gdy go nie ma. */
+  counterpartyId: string
   netAmount: number
   grossAmount: number
   vatAmount: number
@@ -66,6 +69,9 @@ export interface KsefInvoiceDetails {
   correctedNumber: string
 }
 
+/** Faktura z treścią z XML-a: tyle trzyma kopia KSeF w folderze danych huba. */
+export type KsefSale = KsefInvoice & { details: KsefInvoiceDetails }
+
 const CORRECTION_TYPES = new Set(['Kor', 'KorZal', 'KorRoz', 'KorPef', 'KorVatRr'])
 
 const warsawDate = new Intl.DateTimeFormat('en-CA', {
@@ -86,6 +92,11 @@ export function normalizeKsefInvoice(meta: KsefInvoiceMetadata, direction: KsefD
     ksefDate: warsawDate.format(new Date(meta.acquisitionDate)),
     counterpartyName: (isSale ? meta.buyer.name : meta.seller.name) ?? '',
     counterpartyNip: isSale ? buyerNip : meta.seller.nip,
+    counterpartyId: isSale
+      ? meta.buyer.identifier.value
+        ? `${meta.buyer.identifier.type}:${meta.buyer.identifier.value}`
+        : ''
+      : `Nip:${meta.seller.nip}`,
     netAmount: meta.netAmount,
     grossAmount: meta.grossAmount,
     vatAmount: meta.vatAmount,
