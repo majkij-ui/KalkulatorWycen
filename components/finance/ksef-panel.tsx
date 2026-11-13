@@ -67,6 +67,9 @@ const FIELD_LABELS: Record<string, string> = {
   'data.corrections': 'Korekty',
 }
 
+/** Projekty do ręcznego wyboru: od pół roku przed startem KSeF (faktura bywa późniejsza niż projekt). */
+const PROJECTS_SINCE = '2025-08-01'
+
 const selectClass = 'max-w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-xs text-zinc-200'
 
 function documentAmount(document: KsefDocument): string {
@@ -534,7 +537,8 @@ export function KsefPanel({
   const projectOptions = useMemo(
     () =>
       projects
-        .filter((p) => !p.deletedAt && p.status !== 'lost')
+        // Faktury w KSeF są od lutego 2026: starsze projekty tylko zaśmiecałyby listę.
+        .filter((p) => !p.deletedAt && p.status !== 'lost' && (p.date ?? '') >= PROJECTS_SINCE)
         .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
         .map((p) => ({ id: p.id, label: `${p.name} (${p.client || 'bez klienta'})` })),
     [projects],

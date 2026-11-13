@@ -21,7 +21,8 @@ export function day(value: string): string {
 }
 
 export function money(value: number, currency = 'PLN'): string {
-  const text = value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  // `always`: polska norma grupuje dopiero od 10 000, a w tabeli kwot „1460,00” obok „26 310,00” myli.
+  const text = value.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' } as Intl.NumberFormatOptions)
   return currency === 'PLN' ? `${text} zł` : `${text} ${currency}`
 }
 

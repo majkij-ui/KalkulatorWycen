@@ -77,7 +77,7 @@ import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
 import { clientGroupSchema } from '../lib/client-groups'
 import { rentalItemSchema } from '../lib/rental-types'
-import { createKsefClient, KSEF_BASE_URLS, type KsefEnvironment } from '../lib/ksef-client'
+import { createKsefClient, KSEF_BASE_URLS, KsefApiError, type KsefEnvironment } from '../lib/ksef-client'
 import { EMPTY_DETAILS, parseInvoiceXml, type KsefSale } from '../lib/ksef-invoices'
 import { KSEF_DIR, KSEF_PURCHASES_FILE, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache } from '../lib/ksef-cache'
 import { KSEF_FROM } from '../lib/ksef-reconcile'
@@ -484,6 +484,13 @@ async function ksefSync(args: string[]) {
   const directions = ['sale', 'purchase'] as const
 
   const known = { sale: new Map<string, KsefSale>(), purchase: new Map<string, KsefSale>() }
+  /** Do kiedy lista jest przejrzana; zostaje stara data, gdy KSeF odmówił listy (limit). */
+  const syncedTo: Record<(typeof directions)[number], string | undefined> = { sale: undefined, purchase: undefined }
+  const limited = (error: unknown, what: string): void => {
+    if (!(error instanceof KsefApiError) || error.status !== 429) throw error
+    const minutes = error.retryAfter ? Math.ceil(error.retryAfter / 60) : 60
+    console.log(`! KSeF wstrzymał ${what} (limit na godzinę); uruchom ponownie za ok. ${minutes} min. Zapisuję to, co już jest.`)
+  }
   for (const direction of directions) {
     const path = join(dir, KSEF_DIR, KSEF_FILES[direction])
     const previous = existsSync(path) ? parseKsefCache(JSON.parse(readFileSync(path, 'utf8'))) : null
@@ -495,7 +502,15 @@ async function ksefSync(args: string[]) {
       usable?.syncedTo && !option('--from')
         ? new Date(Date.parse(usable.syncedTo) - KSEF_SYNC_OVERLAP_MS).toISOString()
         : `${from}T00:00:00+01:00`
-    const invoices = await client.listInvoices({ direction, from: since, to: now })
+    syncedTo[direction] = usable?.syncedTo
+    let invoices: Awaited<ReturnType<typeof client.listInvoices>>
+    try {
+      invoices = await client.listInvoices({ direction, from: since, to: now })
+      syncedTo[direction] = now
+    } catch (error) {
+      limited(error, `listę faktur (${KSEF_LABELS[direction]})`)
+      continue
+    }
     let fresh = 0
     invoices.forEach((invoice) => {
       const saved = known[direction].get(invoice.ksefNumber)
@@ -516,9 +531,16 @@ async function ksefSync(args: string[]) {
   }
   if (batch.length > 1) console.log(`Pobieranie treści faktur potrwa ok. ${Math.ceil((batch.length * 4) / 60)} min (limit KSeF).`)
   if (!dryRun) {
-    for (const { direction, invoice } of batch) {
-      const { hasDetails: _waiting, ...rest } = invoice
-      known[direction].set(invoice.ksefNumber, { ...rest, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+    let done = 0
+    try {
+      for (const { direction, invoice } of batch) {
+        const { hasDetails: _waiting, ...rest } = invoice
+        known[direction].set(invoice.ksefNumber, { ...rest, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+        done += 1
+      }
+    } catch (error) {
+      // Limit godzinowy w połowie pobierania: to, co już jest, zostaje zapisane; reszta przy następnym uruchomieniu.
+      limited(error, `pobieranie treści faktur (pobrano ${done} z ${batch.length})`)
     }
   }
 
@@ -528,13 +550,15 @@ async function ksefSync(args: string[]) {
       environment,
       nip: client.nip,
       from,
-      syncedTo: now,
+      ...(syncedTo[direction] ? { syncedTo: syncedTo[direction] } : {}),
       invoices: [...known[direction].values()].sort((a, b) => a.ksefDate.localeCompare(b.ksefDate) || a.ksefNumber.localeCompare(b.ksefNumber)),
     })
     if (dryRun) {
       console.log(`[próba] ${KSEF_LABELS[direction]}: kopia miałaby ${cache.invoices.length} faktur — nic nie zapisano.`)
       continue
     }
+    // Lista niepobrana i brak wcześniejszej kopii: nie ma czego zapisywać (pusty plik udawałby „brak faktur").
+    if (!syncedTo[direction] && cache.invoices.length === 0) continue
     // Nowy plik podmieniany w całości: aplikacja nigdy nie zobaczy połowy.
     mkdirSync(join(dir, KSEF_DIR), { recursive: true })
     const tmp = join(dir, KSEF_DIR, `.${KSEF_FILES[direction]}.tmp`)
