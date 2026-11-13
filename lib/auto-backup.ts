@@ -38,6 +38,8 @@ export const AUTO_BACKUP_FILES = [
   'call-sheets.json',
   'inbox-decisions.json',
   'company.json',
+  'client-details.json',
+  'ksef-decisions.json',
 ] as const
 
 export const BACKUPS_DIR = 'backups'

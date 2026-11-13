@@ -23,6 +23,8 @@ import { RENTAL_ITEMS_FILE } from './rental-items-store'
 import { CALL_SHEETS_FILE } from './call-sheets-store'
 import { INBOX_DECISIONS_FILE } from './inbox-types'
 import { COMPANY_FILE } from './company-settings-core'
+import { CLIENT_DETAILS_FILE } from './client-details-store'
+import { KSEF_DECISIONS_FILE } from './ksef-reconcile'
 
 test('kopia obejmuje każdy plik danych huba', () => {
   const all = [
@@ -41,6 +43,8 @@ test('kopia obejmuje każdy plik danych huba', () => {
     CALL_SHEETS_FILE,
     INBOX_DECISIONS_FILE,
     COMPANY_FILE,
+    CLIENT_DETAILS_FILE,
+    KSEF_DECISIONS_FILE,
   ]
   assert.deepEqual([...AUTO_BACKUP_FILES].sort(), [...all].sort())
 })
