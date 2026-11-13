@@ -327,22 +327,52 @@ function pairEvents(documents: KsefDocument[], events: TimelineEvent[]) {
   return { pairs, leftovers: free }
 }
 
-function clientChanges(project: ReconcileProject, documents: KsefDocument[], details: ClientDetails[], now: string): KsefChange[] {
+/**
+ * Nazwa wyświetlana firmy z faktur: ta z kartoteki, a bez niej — najczęstsza
+ * wśród projektów, do których trafiły jej faktury (DE Group: trzy projekty pod
+ * „DE Group", jeden pod „CIONET" → „DE Group"). Przy remisie wcześniejszy projekt.
+ */
+function preferredClients(byProject: Map<string, KsefDocument[]>, projects: ReconcileProject[], details: ClientDetails[]) {
+  const names = new Map<string, string[]>()
+  const ordered = [...byProject].sort(([, a], [, b]) => a[0].sale.ksefDate.localeCompare(b[0].sale.ksefDate))
+  ordered.forEach(([projectId, documents]) => {
+    const client = projects.find((p) => p.id === projectId)?.client
+    if (!client) return
+    new Set(documents.map((d) => d.sale.counterpartyId).filter(Boolean)).forEach((id) => names.set(id, [...(names.get(id) ?? []), client]))
+  })
+  const preferred = new Map<string, string>()
+  names.forEach((list, id) => {
+    const counts = new Map<string, number>()
+    list.forEach((name) => counts.set(clientKey(name), (counts.get(clientKey(name)) ?? 0) + 1))
+    const best = list.reduce((top, name) => ((counts.get(clientKey(name)) ?? 0) > (counts.get(clientKey(top)) ?? 0) ? name : top), list[0])
+    preferred.set(id, best)
+  })
+  details.forEach((d) => d.client && preferred.set(d.id, d.client))
+  return preferred
+}
+
+function clientChanges(
+  project: ReconcileProject,
+  documents: KsefDocument[],
+  details: ClientDetails[],
+  preferred: Map<string, string>,
+  now: string,
+): KsefChange[] {
   const changes: KsefChange[] = []
   const seen = new Set<string>()
   documents.forEach(({ sale }) => {
     if (!sale.counterpartyId || seen.has(sale.counterpartyId)) return
     seen.add(sale.counterpartyId)
     const record = details.find((d) => d.id === sale.counterpartyId) ?? null
-    if (record && clientKey(record.client) !== clientKey(project.client)) {
-      // Jeden NIP = jedna nazwa wyświetlana: projekt dostaje nazwę, pod którą ta firma już jest.
-      changes.push({ kind: 'client', from: project.client, to: record.client })
-      if (record.legalName === sale.counterpartyName) return
+    const display = preferred.get(sale.counterpartyId) ?? project.client
+    if (display && clientKey(display) !== clientKey(project.client)) {
+      // Jeden NIP = jedna nazwa wyświetlana. Osobna zmiana: zapis faktury jej nie wymusza.
+      changes.push({ kind: 'client', from: project.client, to: display })
     }
     if (record && record.legalName === sale.counterpartyName) return
     const next: ClientDetails = {
       id: sale.counterpartyId,
-      client: record?.client ?? project.client,
+      client: record?.client ?? display,
       legalName: sale.counterpartyName,
       nip: sale.counterpartyNip,
       updatedAt: now,
@@ -352,7 +382,7 @@ function clientChanges(project: ReconcileProject, documents: KsefDocument[], det
   return changes
 }
 
-function rowChanges(project: ReconcileProject, documents: KsefDocument[], input: ReconcileInput) {
+function rowChanges(project: ReconcileProject, documents: KsefDocument[], input: ReconcileInput, preferred: Map<string, string>) {
   const { pairs, leftovers } = pairEvents(documents, liveInvoiceEvents(input.events, project.id))
   const changes: KsefChange[] = []
   pairs.forEach(({ document, event }) => {
@@ -380,7 +410,7 @@ function rowChanges(project: ReconcileProject, documents: KsefDocument[], input:
     })
     if (fields.length) changes.push({ kind: 'update', eventId: event.id, ksefNumber: document.sale.ksefNumber, fields })
   })
-  changes.push(...clientChanges(project, documents, input.details, input.now))
+  changes.push(...clientChanges(project, documents, input.details, preferred, input.now))
   return { changes, leftovers }
 }
 
@@ -388,6 +418,7 @@ function rowChanges(project: ReconcileProject, documents: KsefDocument[], input:
 
 export function reconcileKsef(input: ReconcileInput): ReconcileResult {
   const { byProject, unassigned } = assign(input)
+  const preferred = preferredClients(byProject, input.projects, input.details)
   const noInvoice = new Set(input.decisions.filter((d) => d.kind === 'no_invoice').map((d) => d.projectId))
   const rows: ReconcileRow[] = []
 
@@ -398,10 +429,12 @@ export function reconcileKsef(input: ReconcileInput): ReconcileResult {
       const hubValue = input.expected.get(project.id) ?? null
       if (documents.length) {
         if (!documents.some((d) => input.inPeriod(d.sale.issueDate))) return
-        const { changes, leftovers } = rowChanges(project, documents, input)
+        const { changes, leftovers } = rowChanges(project, documents, input, preferred)
         const ksefTotal = documents.every(isPln) ? roundMoney(documents.reduce((sum, d) => sum + d.amount, 0)) : null
         const diff = ksefTotal !== null && hubValue !== null ? roundMoney(ksefTotal - hubValue) : null
-        const status: RowStatus = diff !== null && Math.abs(diff) >= SHOWN_DIFF ? 'amount' : changes.length ? 'changes' : 'ok'
+        // Sama propozycja zmiany klienta nie czyni faktury „do poprawy".
+        const invoiceChanges = changes.filter((c) => c.kind !== 'client')
+        const status: RowStatus = diff !== null && Math.abs(diff) >= SHOWN_DIFF ? 'amount' : invoiceChanges.length ? 'changes' : 'ok'
         rows.push({ project, documents, hubValue, ksefTotal, diff, changes, extraHubInvoices: leftovers, status })
         return
       }

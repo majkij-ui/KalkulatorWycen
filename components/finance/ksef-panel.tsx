@@ -65,6 +65,7 @@ function show(field: string, value: unknown): string {
   if (value === undefined || value === null || value === '') return '—'
   if (field === 'start' || field === 'data.dueDate' || field === 'data.issueDate') return day(String(value))
   if (field === 'data.amountNetto') return pln(Number(value))
+  if (field === 'data.buyerId') return String(value).replace(/^Nip:/, 'NIP ').replace(/^VatUe:/, 'VAT UE ')
   if (field === 'data.corrections' && Array.isArray(value)) {
     return value.map((c: { number?: string; netChange?: number; currency?: string }) => `${c.number} (${c.netChange} ${c.currency})`).join(', ')
   }
@@ -90,8 +91,6 @@ function ChangeList({ changes }: { changes: KsefChange[] }) {
         label: change.before ? 'Nazwa z faktury' : 'Klient w kartotece',
         text: `${change.record.legalName}${change.record.nip ? ` · NIP ${change.record.nip}` : ''}`,
       })
-    } else {
-      rows.push({ key: `${index}`, label: 'Klient (nazwa wyświetlana)', field: { field: 'client', before: change.from, after: change.to } })
     }
   })
   return (
@@ -121,15 +120,19 @@ function RowCard({
   busy,
   onApply,
   onNoInvoice,
+  onClient,
   onOpenProject,
 }: {
   row: ReconcileRow
   busy: boolean
   onApply: (row: ReconcileRow) => void
   onNoInvoice: (row: ReconcileRow, on: boolean) => void
+  onClient: (row: ReconcileRow, to: string) => void
   onOpenProject: (id: string) => void
 }) {
   const status = STATUS[row.status]
+  const invoiceChanges = row.changes.filter((c) => c.kind !== 'client')
+  const clientChange = row.changes.find((c): c is Extract<KsefChange, { kind: 'client' }> => c.kind === 'client')
   const suggested = row.documents.some((d) => d.reason === 'suggested')
   return (
     <li className="rounded-xl border border-white/5 bg-zinc-900/40 p-3">
@@ -193,7 +196,13 @@ function RowCard({
           projekcie, jeśli to pomyłka.
         </p>
       )}
-      {row.changes.length > 0 && <ChangeList changes={row.changes} />}
+      {invoiceChanges.length > 0 && <ChangeList changes={invoiceChanges} />}
+      {clientChange && (
+        <p className="mt-2 text-xs text-zinc-400">
+          Faktury tej firmy są w hubie pod nazwą <span className="text-zinc-200">„{clientChange.to}”</span>, a ten projekt ma
+          klienta „{clientChange.from}”. Jedna firma = jedna nazwa wyświetlana; zmienisz ją potem w Klientach („Scal nazwy”).
+        </p>
+      )}
 
       <div className="mt-2 flex flex-wrap justify-end gap-2">
         {row.status === 'missing' && (
@@ -207,7 +216,12 @@ function RowCard({
             Cofnij „bez faktury”
           </Button>
         )}
-        {row.changes.length > 0 && (
+        {clientChange && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onClient(row, clientChange.to)}>
+            Ustaw klienta „{clientChange.to}”
+          </Button>
+        )}
+        {invoiceChanges.length > 0 && (
           <Button size="sm" disabled={busy} onClick={() => onApply(row)}>
             <Check className="size-3.5" />
             {suggested ? 'To ten projekt — zastosuj z KSeF' : 'Zastosuj z KSeF'}
@@ -290,9 +304,8 @@ export function KsefPanel({
       } else if (change.kind === 'details') {
         const record = change.record
         await mutateClientDetails((items) => [...items.filter((d) => d.id !== record.id), record])
-      } else {
-        await updateProject(row.project.id, { client: change.to })
       }
+      // Zmiana klienta ma własny przycisk (`onClient`): zapis faktury jej nie wymusza.
     }
   }
 
@@ -335,7 +348,7 @@ export function KsefPanel({
               {cache
                 ? `Pobrane ${day(cache.fetchedAt)} ${cache.fetchedAt.slice(11, 16)} UTC: ${cache.invoices.length} ${plural(cache.invoices.length, 'faktura', 'faktury', 'faktur')} od ${day(cache.from)}.`
                 : 'Faktur jeszcze nie pobrano.'}{' '}
-              Nowe faktury pobierasz poleceniem <code className="text-zinc-300">npm run data -- ksef-sync</code> (albo poproś
+              Nowe faktury pobierasz poleceniem <code className="text-zinc-300">npm run data -- ksef-sync</code>{' '}(albo poproś
               Claude&apos;a). KSeF jest tu tylko czytany — faktury wystawiasz w panelu biura rachunkowego.
             </p>
             {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
@@ -444,6 +457,9 @@ export function KsefPanel({
             busy={busy}
             onOpenProject={onOpenProject}
             onApply={(target) => void run(() => applyRow(target), `Zastosowano KSeF w „${target.project.name}”.`)}
+            onClient={(target, to) =>
+              void run(() => updateProject(target.project.id, { client: to }), `„${target.project.name}”: klient „${to}”.`)
+            }
             onNoInvoice={(target, on) =>
               void run(
                 () =>

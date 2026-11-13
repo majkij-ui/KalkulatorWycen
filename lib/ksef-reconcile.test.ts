@@ -226,6 +226,24 @@ test('jeden NIP = jedna nazwa wyświetlana: drugi projekt Piotrka dostaje nazwę
   assert.equal(changesOf(result, 'piotrek', 'details').length, 0)
 })
 
+test('nazwa wyświetlana firmy: większość jej projektów (DE Group ×2 wobec CIONET ×1), zmiana klienta osobno', () => {
+  const de = (number: string, issueDate: string) =>
+    sale(number, { issueDate, ksefDate: issueDate, netAmount: 1000, counterpartyName: 'DE GROUP SPÓŁKA Z O.O.', counterpartyId: 'Nip:7010645765' })
+  const result = run({
+    projects: [project('vitkac', 'DE Group Sp. z o.o.'), project('ambasada', 'DE Group Sp. z o.o.'), project('wywiady', 'CIONET')],
+    invoices: [de('1/05/2026', '2026-05-05'), de('2/03/2026', '2026-03-03'), de('4/09/2026', '2026-09-22')],
+    events: [
+      invoiceEvent('vitkac', '2026-05-05', { number: '1/05/2026' }),
+      invoiceEvent('ambasada', '2026-03-03', { number: '2/03/2026' }),
+      invoiceEvent('wywiady', '2026-09-21', { number: '4/09/2026' }),
+    ],
+  })
+  assert.deepEqual(changesOf(result, 'wywiady', 'client'), [{ kind: 'client', from: 'CIONET', to: 'DE Group Sp. z o.o.' }])
+  assert.equal(changesOf(result, 'vitkac', 'client').length, 0)
+  const record = (changesOf(result, 'vitkac', 'details')[0] as Extract<KsefChange, { kind: 'details' }>).record
+  assert.equal(record.client, 'DE Group Sp. z o.o.')
+})
+
 test('nowa firma: kartoteka dostaje nazwę z faktury i NIP, nazwa wyświetlana zostaje z projektu', () => {
   const invoice = sale('3/09/2026', { netAmount: 2000, counterpartyName: 'INTERFERIE SPÓŁKA AKCYJNA' })
   const result = run({ projects: [project('natura', 'Interferie S.A.')], invoices: [invoice], expected: new Map([['natura', 2000]]) })
