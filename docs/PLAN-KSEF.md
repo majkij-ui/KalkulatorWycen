@@ -93,3 +93,28 @@ testing does not have to wait for December. In 2027 the token may need regenerat
 - Klienci shows the invoice name and NIP under the display name; „Scal nazwy" carries them to the new name.
 - KSeF limits met on the real account: metadata 20 an hour, downloads 16 a minute and 64 an hour.
 - Later: bank CSV as a fourth column („Wpłynęło"), purchases tab in Sprzęt, VAT tracking.
+
+## 8. Second pass after M.J.'s first look (2026-11-13)
+
+M.J.'s brief: the hub's data should be verified by KSeF, and when the two drift apart the app should help him
+through it with sensible suggestions; a close invoice always exists somewhere, and when it doesn't, that is his
+signal that something needs attention.
+
+- Tab renamed „KSeF", with two views: „Zgodność z projektami" and „Faktury".
+- **Everything is correctable by hand** (decisions in `ksef-decisions.json`): move an invoice to another project or
+  detach it; say which hub entry it replaces, or that it is a further invoice of the project (`pair`); an invoice
+  already saved in one project moves with its entry instead of being duplicated; a hub invoice that is not in KSeF
+  can be removed from the card.
+- **Suggestions with reasons**: a project without an invoice (or under-invoiced) lists unassigned invoices that fit
+  (same client, amount equal or within 15 %, date within 60 days); an unassigned invoice lists the best projects
+  the same way. A finished project with no candidate says so plainly.
+- **Amount difference** offers, most specific first: remove the extra sale that is not on the invoice (sum or single
+  item equals the difference), adjust the only extra sale by the difference, add the difference as an extra sale
+  (invoice higher), accept the KSeF amount, or „waits for a correction". An accepted difference holds only for that
+  amount; a new invoice or correction reopens it.
+- **„Faktury"**: sales and purchases with period totals (count, net, VAT, gross; other currencies beside), search,
+  and a detail dialog with the lines. KSeF stores invoices as XML, not PDF, so there is no PDF to open.
+- `ksef-sync` now also copies purchases (`ksef/zakupy.json`) and is incremental: after the first run it asks only
+  for invoices stored since the previous one. Invoice content downloads sales first, 55 a run; invoices still
+  waiting are listed with amounts and dates and stay out of the reconciliation.
+- With no copy yet, the screen shows only how to fetch it (before: every project looked like „Brak faktury").

@@ -94,8 +94,11 @@ const AUTH_IN_PROGRESS = 100
 const AUTH_SUCCESS = 200
 const AUTH_POLL_ATTEMPTS = 30
 const PAGE_SIZE = 100
-/** KSeF odrzuca zakres dłuższy niż 100 dni (kod 21405), więc dłuższy dzielimy na okna. */
-const MAX_WINDOW_DAYS = 90
+/**
+ * KSeF odrzuca zakres dłuższy niż 100 dni (kod 21405), więc dłuższy dzielimy na okna.
+ * Okna możliwie długie: lista ma limit 20 zapytań na godzinę.
+ */
+const MAX_WINDOW_DAYS = 99
 const DAY_MS = 86_400_000
 /**
  * Limity KSeF (limity/limity-api.md): treść faktury 8/s, 16/min, 64/h; lista

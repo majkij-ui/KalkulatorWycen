@@ -36,9 +36,10 @@
  *    nie dotyka, więc działa także przy otwartej aplikacji: hub tylko czyta
  *    `inbox/`, a swoje decyzje trzyma w `inbox-decisions.json`.
  *
- * `ksef-sync` (docs/PLAN-KSEF.md) — kopia faktur sprzedaży z KSeF (od 01.02.2026)
- * do `ksef/sprzedaz.json`; zestawia ją z projektami ekran Finanse → „Zgodność z
- * KSeF". Danych huba nie dotyka, więc działa przy otwartej aplikacji. KSeF jest
+ * `ksef-sync` (docs/PLAN-KSEF.md) — kopia faktur sprzedaży i zakupu z KSeF (od
+ * 01.02.2026) do `ksef/sprzedaz.json` i `ksef/zakupy.json`; pokazuje je i zestawia
+ * z projektami ekran Finanse → „KSeF". Kolejne uruchomienie pyta tylko o nowe
+ * faktury. Danych huba nie dotyka, więc działa przy otwartej aplikacji. KSeF jest
  * tylko CZYTANY: hub nie wystawia faktur. Token z samym `InvoiceRead` leży w pęku
  * kluczy macOS (usługa `nonoise-hub-ksef`, konto = środowisko); zmienna `KSEF_TOKEN`
  * działa wyłącznie poza produkcją, dla prób na danych testowych.
@@ -76,9 +77,9 @@ import { callSheetSchema } from '../lib/call-sheet-types'
 import { subscriptionSchema } from '../lib/subscription-types'
 import { clientGroupSchema } from '../lib/client-groups'
 import { rentalItemSchema } from '../lib/rental-types'
-import { createKsefClient, KSEF_BASE_URLS, type KsefEnvironment } from '../lib/ksef-client'
-import { parseInvoiceXml } from '../lib/ksef-invoices'
-import { KSEF_DIR, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache } from '../lib/ksef-cache'
+import { createKsefClient, KSEF_BASE_URLS, KsefApiError, type KsefEnvironment } from '../lib/ksef-client'
+import { EMPTY_DETAILS, parseInvoiceXml, type KsefSale } from '../lib/ksef-invoices'
+import { KSEF_DIR, KSEF_PURCHASES_FILE, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache } from '../lib/ksef-cache'
 import { KSEF_FROM } from '../lib/ksef-reconcile'
 import { companySchema } from '../lib/company-settings-core'
 import { clientDetailsSchema } from '../lib/client-details'
@@ -470,55 +471,102 @@ function ksefSetup(args: string[]) {
   return { option, dir, environment, client }
 }
 
+const KSEF_FILES = { sale: KSEF_SALES_FILE, purchase: KSEF_PURCHASES_FILE } as const
+const KSEF_LABELS = { sale: 'sprzedaż', purchase: 'zakupy' } as const
+/** Zakładka: kolejna synchronizacja cofa się o tyle, żeby nie zgubić faktury zapisanej z opóźnieniem. */
+const KSEF_SYNC_OVERLAP_MS = 2 * 86_400_000
+
 async function ksefSync(args: string[]) {
   const { option, dir, environment, client } = ksefSetup(args)
   const dryRun = args.includes('--dry-run')
   const from = option('--from') ?? KSEF_FROM
-  const cachePath = join(dir, KSEF_DIR, KSEF_SALES_FILE)
-  const previous = existsSync(cachePath) ? parseKsefCache(JSON.parse(readFileSync(cachePath, 'utf8'))) : null
-  // Kopia z innego środowiska (np. próba na danych testowych) nie miesza się z prawdziwą.
-  const kept = previous && previous.environment === environment ? previous.invoices : []
-  const known = new Map(kept.map((sale) => [sale.ksefNumber, sale]))
+  const now = new Date().toISOString()
+  const directions = ['sale', 'purchase'] as const
 
-  const invoices = await client.listInvoices({
-    direction: 'sale',
-    from: `${from}T00:00:00+01:00`,
-    to: new Date().toISOString(),
-  })
-  const fresh = invoices.filter((invoice) => !known.has(invoice.ksefNumber))
-  console.log(`KSeF (${environment}): ${invoices.length} faktur sprzedaży od ${from}, nowych: ${fresh.length}.`)
-  // KSeF wydaje najwyżej 64 faktury na godzinę. Reszta przyjdzie przy kolejnym uruchomieniu,
-  // bo pobrane już faktury zostają w kopii.
-  const batch = fresh.slice(0, KSEF_DOWNLOADS_PER_RUN)
-  if (batch.length < fresh.length) {
-    console.log(`Pobieram ${batch.length}; pozostałe ${fresh.length - batch.length} przy następnym uruchomieniu (za godzinę).`)
+  const known = { sale: new Map<string, KsefSale>(), purchase: new Map<string, KsefSale>() }
+  /** Do kiedy lista jest przejrzana; zostaje stara data, gdy KSeF odmówił listy (limit). */
+  const syncedTo: Record<(typeof directions)[number], string | undefined> = { sale: undefined, purchase: undefined }
+  const limited = (error: unknown, what: string): void => {
+    if (!(error instanceof KsefApiError) || error.status !== 429) throw error
+    const minutes = error.retryAfter ? Math.ceil(error.retryAfter / 60) : 60
+    console.log(`! KSeF wstrzymał ${what} (limit na godzinę); uruchom ponownie za ok. ${minutes} min. Zapisuję to, co już jest.`)
+  }
+  for (const direction of directions) {
+    const path = join(dir, KSEF_DIR, KSEF_FILES[direction])
+    const previous = existsSync(path) ? parseKsefCache(JSON.parse(readFileSync(path, 'utf8'))) : null
+    // Kopia z innego środowiska (np. próba na danych testowych) nie miesza się z prawdziwą.
+    const usable = previous && previous.environment === environment && previous.nip === client.nip ? previous : null
+    usable?.invoices.forEach((invoice) => known[direction].set(invoice.ksefNumber, invoice))
+    // Przyrostowo: tylko to, co KSeF zapisał od poprzedniego przebiegu (limit: 20 zapytań o listę na godzinę).
+    const since =
+      usable?.syncedTo && !option('--from')
+        ? new Date(Date.parse(usable.syncedTo) - KSEF_SYNC_OVERLAP_MS).toISOString()
+        : `${from}T00:00:00+01:00`
+    syncedTo[direction] = usable?.syncedTo
+    let invoices: Awaited<ReturnType<typeof client.listInvoices>>
+    try {
+      invoices = await client.listInvoices({ direction, from: since, to: now })
+      syncedTo[direction] = now
+    } catch (error) {
+      limited(error, `listę faktur (${KSEF_LABELS[direction]})`)
+      continue
+    }
+    let fresh = 0
+    invoices.forEach((invoice) => {
+      const saved = known[direction].get(invoice.ksefNumber)
+      if (!saved) fresh += 1
+      known[direction].set(invoice.ksefNumber, saved ? { ...saved, ...invoice } : { ...invoice, details: EMPTY_DETAILS, hasDetails: false })
+    })
+    console.log(`KSeF (${environment}) ${KSEF_LABELS[direction]}: ${known[direction].size} faktur w kopii, nowych: ${fresh}.`)
+  }
+
+  // Treść faktur (termin płatności, pozycje, korygowana faktura): najpierw sprzedaż. KSeF wydaje
+  // najwyżej 64 faktury na godzinę, więc reszta przyjdzie przy kolejnym uruchomieniu.
+  const waiting = directions.flatMap((direction) =>
+    [...known[direction].values()].filter((invoice) => invoice.hasDetails === false).map((invoice) => ({ direction, invoice })),
+  )
+  const batch = waiting.slice(0, KSEF_DOWNLOADS_PER_RUN)
+  if (batch.length < waiting.length) {
+    console.log(`Pobieram treść ${batch.length} faktur; pozostałe ${waiting.length - batch.length} przy następnym uruchomieniu (za godzinę).`)
   }
   if (batch.length > 1) console.log(`Pobieranie treści faktur potrwa ok. ${Math.ceil((batch.length * 4) / 60)} min (limit KSeF).`)
-  for (const invoice of batch) {
-    known.set(invoice.ksefNumber, { ...invoice, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+  if (!dryRun) {
+    let done = 0
+    try {
+      for (const { direction, invoice } of batch) {
+        const { hasDetails: _waiting, ...rest } = invoice
+        known[direction].set(invoice.ksefNumber, { ...rest, details: parseInvoiceXml(await client.getInvoiceXml(invoice.ksefNumber)) })
+        done += 1
+      }
+    } catch (error) {
+      // Limit godzinowy w połowie pobierania: to, co już jest, zostaje zapisane; reszta przy następnym uruchomieniu.
+      limited(error, `pobieranie treści faktur (pobrano ${done} z ${batch.length})`)
+    }
   }
-  // Metadane z tego przebiegu wygrywają (KSeF ich nie zmienia, ale nowsza kopia nie zaszkodzi).
-  invoices.forEach((invoice) => {
-    const saved = known.get(invoice.ksefNumber)
-    if (saved) known.set(invoice.ksefNumber, { ...saved, ...invoice, details: saved.details })
-  })
-  const cache = ksefCacheFile({
-    fetchedAt: new Date().toISOString(),
-    environment,
-    nip: client.nip,
-    from,
-    invoices: [...known.values()].sort((a, b) => a.ksefDate.localeCompare(b.ksefDate) || a.ksefNumber.localeCompare(b.ksefNumber)),
-  })
-  if (dryRun) {
-    console.log(`[próba] Kopia miałaby ${cache.invoices.length} faktur — nic nie zapisano.`)
-    return
+
+  for (const direction of directions) {
+    const cache = ksefCacheFile({
+      fetchedAt: now,
+      environment,
+      nip: client.nip,
+      from,
+      ...(syncedTo[direction] ? { syncedTo: syncedTo[direction] } : {}),
+      invoices: [...known[direction].values()].sort((a, b) => a.ksefDate.localeCompare(b.ksefDate) || a.ksefNumber.localeCompare(b.ksefNumber)),
+    })
+    if (dryRun) {
+      console.log(`[próba] ${KSEF_LABELS[direction]}: kopia miałaby ${cache.invoices.length} faktur — nic nie zapisano.`)
+      continue
+    }
+    // Lista niepobrana i brak wcześniejszej kopii: nie ma czego zapisywać (pusty plik udawałby „brak faktur").
+    if (!syncedTo[direction] && cache.invoices.length === 0) continue
+    // Nowy plik podmieniany w całości: aplikacja nigdy nie zobaczy połowy.
+    mkdirSync(join(dir, KSEF_DIR), { recursive: true })
+    const tmp = join(dir, KSEF_DIR, `.${KSEF_FILES[direction]}.tmp`)
+    writeFileSync(tmp, JSON.stringify(cache, null, 2))
+    renameSync(tmp, join(dir, KSEF_DIR, KSEF_FILES[direction]))
+    console.log(`✓ Zapisano ${KSEF_DIR}/${KSEF_FILES[direction]}: ${cache.invoices.length} faktur.`)
   }
-  // Nowy plik podmieniany w całości: aplikacja nigdy nie zobaczy połowy.
-  mkdirSync(join(dir, KSEF_DIR), { recursive: true })
-  const tmp = join(dir, KSEF_DIR, `.${KSEF_SALES_FILE}.tmp`)
-  writeFileSync(tmp, JSON.stringify(cache, null, 2))
-  renameSync(tmp, cachePath)
-  console.log(`✓ Zapisano ${KSEF_DIR}/${KSEF_SALES_FILE}: ${cache.invoices.length} faktur. Zestawienie: Finanse → Zgodność z KSeF.`)
+  if (!dryRun) console.log('Zestawienie: Finanse → KSeF.')
 }
 
 /** Poniżej godzinowego limitu KSeF (64), z zapasem na ponowne próby. */
