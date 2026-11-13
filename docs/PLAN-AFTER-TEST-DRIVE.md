@@ -185,6 +185,14 @@ after; data files unchanged (shasum). Waiting for M.J. on the desktop: run `ksef
 open Finanse → „Zgodność z KSeF", apply the confident rows, decide the rows with an amount difference, mark the barter
 project „Bez faktury"; check the invoice name and NIP on a client page.
 
+**Merged and installed 2026-11-13, second KSeF pass:** the tab is „KSeF" with „Zgodność z projektami" (manual
+assign / detach / replace-or-add, amount options, ranked candidates) and „Faktury" (sales and purchases, period
+totals, detail dialog); `ksef-sync` copies purchases too, is incremental and keeps partial results when KSeF's hourly
+limits cut a run (docs/PLAN-KSEF.md §8). No conflicts. 1,108 tests, `tsc` clean. Real data, read-only: 36 quotes and
+every Finance year total identical; data files unchanged. Checked in the browser preview on a copy of the projects
+with the invoice list rebuilt from the morning's read-only preview, because KSeF's hourly limits were used up.
+Waiting for M.J.: the first `ksef-sync` into the real data folder, then the desktop check of both views.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
