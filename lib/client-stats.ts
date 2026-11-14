@@ -20,10 +20,12 @@
 
 import { daysBetween } from './calendar-layout'
 import { moneyOf, revenueInYear, revenueYears, type MoneyById } from './client-money'
+import { hasRevenueInPeriod, profitInPeriod, revenueInPeriod } from './client-period'
+import type { Period } from './finance-calc'
 import { groupMemberKeys, groupOfClient, groupScopeValue, liveGroups, type ClientGroup } from './client-groups'
 import { clientDirectory, clientKey, newestWithContact, scopeRevenue } from './clients'
 import { plural } from './pl-plural'
-import { countsTowardRevenue, type Project, type ProjectContact } from './project-types'
+import { countsTowardRevenue, toYear, type Project, type ProjectContact } from './project-types'
 import { threadStats, type ThreadEventInput } from './thread-stats'
 
 /** Pola projektu, z których liczymy statystyki klienta. */
@@ -235,6 +237,35 @@ export function totalRevenue(
   )
 }
 
+/** Przychód wszystkich projektów firmy w okresie (kawałki z datą w okresie); `null` = cały. */
+export function totalRevenueInPeriod(
+  projects: Pick<Project, 'id' | 'status' | 'date' | 'financials'>[],
+  period: Period | null,
+  money?: MoneyById | null
+): number {
+  return projects.reduce(
+    (sum, p) => (countsTowardRevenue(p.status) ? sum + revenueInPeriod(moneyOf(p, money), period) : sum),
+    0
+  )
+}
+
+/** Lata filtra okresu: lata z jakimkolwiek kawałkiem przychodu plus bieżący rok, malejąco. */
+export function clientPeriodYears(
+  projects: Pick<Project, 'id' | 'status' | 'date' | 'financials'>[],
+  currentYear: number,
+  money?: MoneyById | null
+): number[] {
+  const years = new Set<number>([currentYear])
+  projects.forEach((p) => {
+    if (!countsTowardRevenue(p.status)) return
+    moneyOf(p, money).pieces.forEach((piece) => {
+      const year = toYear(piece.day)
+      if (year !== null) years.add(year)
+    })
+  })
+  return [...years].sort((a, b) => b - a)
+}
+
 const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : null)
 
 export interface ClientYear {
@@ -385,6 +416,8 @@ export interface GroupMemberSummary {
   projectCount: number
   jobCount: number
   revenue: number
+  /** Zysk wg reguły Finansów (przychód − podatek − koszty × udział w okresie). */
+  profit: number
   lastDate: string
   /** Członek bez żadnego projektu (pisownia zmieniona, projekty usunięte). */
   empty: boolean
@@ -400,14 +433,28 @@ export function groupMembers(
   projects: ClientProject[],
   group: ClientGroup,
   today: string,
-  money?: MoneyById | null
+  money?: MoneyById | null,
+  period: Period | null = null
 ): GroupMemberSummary[] {
-  const summaries = new Map(clientSummaries(projects, today, money).map((c) => [c.key, c]))
-  return groupMemberKeys(group).map((key) => {
+  const summaries = new Map(clientSummaries(projects, today, money, period).map((c) => [c.key, c]))
+  return groupMemberKeys(group).flatMap((key): GroupMemberSummary[] => {
     const c = summaries.get(key)
-    return c
-      ? { key, name: c.name, projectCount: c.projectCount, jobCount: c.jobCount, revenue: c.revenue, lastDate: c.lastDate, empty: false }
-      : { key, name: key, projectCount: 0, jobCount: 0, revenue: 0, lastDate: '', empty: true }
+    if (c) {
+      return [
+        {
+          key,
+          name: c.name,
+          projectCount: c.projectCount,
+          jobCount: c.jobCount,
+          revenue: c.revenue,
+          profit: c.profit,
+          lastDate: c.lastDate,
+          empty: false,
+        },
+      ]
+    }
+    // W okresie członek bez przychodu w okresie znika (także ten bez projektów).
+    return period ? [] : [{ key, name: key, projectCount: 0, jobCount: 0, revenue: 0, profit: 0, lastDate: '', empty: true }]
   })
 }
 
@@ -460,46 +507,75 @@ export interface ClientSummary {
   name: string
   /** Wszystkie projekty (z wycenami i nieprzyjętymi). */
   projectCount: number
-  /** Zlecenia (won / done). */
+  /** Zlecenia (won / done); w okresie — tylko te z przychodem w okresie. */
   jobCount: number
   revenue: number
+  /** Zysk wg reguły Finansów (przychód − podatek − koszty × udział w okresie); „Moja praca" nie jest kosztem. */
+  profit: number
   /** Data najnowszego projektu (dowolny status). */
   lastDate: string
+  /** Wraca / dawno bez zlecenia: zawsze z całej historii, niezależnie od okresu. */
   repeat: boolean
   nudge: boolean
 }
 
-export const CLIENT_SORTS = ['przychod', 'ostatnio', 'liczba'] as const
+export const CLIENT_SORTS = ['przychod', 'zysk', 'ostatnio', 'liczba'] as const
 export type ClientSort = (typeof CLIENT_SORTS)[number]
 
 export const CLIENT_SORT_LABELS: Record<ClientSort, string> = {
   przychod: 'Największy przychód',
+  zysk: 'Największy zysk',
   ostatnio: 'Ostatnio',
   liczba: 'Najwięcej projektów',
 }
 
-function summaryOf(key: string, name: string, own: ClientProject[], today: string, money?: MoneyById | null): ClientSummary {
-  const jobCount = own.filter(isJob).length
+/**
+ * Podsumowanie wiersza. W okresie (`period`) przychód i zysk liczą się z kawałków
+ * w okresie, a liczba zleceń i projektów to zlecenia z przychodem w okresie;
+ * „wraca" i „dawno bez zlecenia" zostają z całej historii. `null` gdy w okresie
+ * nic nie ma — wiersz znika.
+ */
+function summaryOf(
+  key: string,
+  name: string,
+  own: ClientProject[],
+  today: string,
+  money?: MoneyById | null,
+  period: Period | null = null
+): ClientSummary | null {
+  const jobs = own.filter(isJob)
   const lastDate = own.reduce((last, p) => ((p.date ?? '') > last ? p.date : last), '')
+  const inPeriod = jobs.filter((p) => hasRevenueInPeriod(moneyOf(p, money), period))
+  if (period && inPeriod.length === 0) return null
+  const inMoney = inPeriod.map((p) => moneyOf(p, money))
   return {
     key,
     name,
-    projectCount: own.length,
-    jobCount,
-    revenue: own.reduce((sum, p) => (isJob(p) ? sum + (moneyOf(p, money).revenue ?? 0) : sum), 0),
+    projectCount: period ? inPeriod.length : own.length,
+    jobCount: period ? inPeriod.length : jobs.length,
+    revenue: inMoney.reduce((sum, m) => sum + revenueInPeriod(m, period), 0),
+    profit: inMoney.reduce((sum, m) => sum + profitInPeriod(m, period), 0),
     lastDate,
-    repeat: jobCount >= REPEAT_MIN_JOBS,
+    repeat: jobs.length >= REPEAT_MIN_JOBS,
     nudge: clientRhythm(own, today).nudge,
   }
 }
 
-export function clientSummaries(projects: ClientProject[], today: string, money?: MoneyById | null): ClientSummary[] {
+export function clientSummaries(
+  projects: ClientProject[],
+  today: string,
+  money?: MoneyById | null,
+  period: Period | null = null
+): ClientSummary[] {
   const groups = new Map<string, ClientProject[]>()
   projects.forEach((p) => {
     const key = clientKey(p.client ?? '')
     if (key) groups.set(key, [...(groups.get(key) ?? []), p])
   })
-  return clientDirectory(projects).map((info) => summaryOf(info.key, info.name, groups.get(info.key) ?? [], today, money))
+  return clientDirectory(projects).flatMap((info) => {
+    const summary = summaryOf(info.key, info.name, groups.get(info.key) ?? [], today, money, period)
+    return summary ? [summary] : []
+  })
 }
 
 /** Wiersz listy „Klienci": klient albo grupa z członkami w środku. */
@@ -515,16 +591,18 @@ export function clientListRows(
   projects: ClientProject[],
   groups: ClientGroup[],
   today: string,
-  money?: MoneyById | null
+  money?: MoneyById | null,
+  period: Period | null = null
 ): ClientListRow[] {
-  const summaries = clientSummaries(projects, today, money)
+  const summaries = clientSummaries(projects, today, money, period)
   const live = liveGroups(groups)
-  const rows: ClientListRow[] = live.map((group) => {
+  const rows: ClientListRow[] = live.flatMap((group): ClientListRow[] => {
     const keys = new Set(groupMemberKeys(group))
     const own = projects.filter(inKeys(keys))
-    const members = groupMembers(projects, group, today, money)
+    const members = groupMembers(projects, group, today, money, period)
     const name = group.name.trim() || members.map((m) => m.name).join(' + ') || 'Grupa bez nazwy'
-    return { kind: 'group', group, summary: summaryOf(groupScopeValue(group.id), name, own, today, money), members }
+    const summary = summaryOf(groupScopeValue(group.id), name, own, today, money, period)
+    return summary ? [{ kind: 'group', group, summary, members }] : []
   })
   summaries.forEach((summary) => {
     if (!groupOfClient(live, summary.key)) rows.push({ kind: 'client', summary })
@@ -536,6 +614,7 @@ const byName = (a: ClientSummary, b: ClientSummary) => a.name.localeCompare(b.na
 
 const COMPARE: Record<ClientSort, (a: ClientSummary, b: ClientSummary) => number> = {
   przychod: (a, b) => b.revenue - a.revenue || b.lastDate.localeCompare(a.lastDate) || byName(a, b),
+  zysk: (a, b) => b.profit - a.profit || b.revenue - a.revenue || b.lastDate.localeCompare(a.lastDate) || byName(a, b),
   ostatnio: (a, b) => b.lastDate.localeCompare(a.lastDate) || b.revenue - a.revenue || byName(a, b),
   liczba: (a, b) => b.projectCount - a.projectCount || b.jobCount - a.jobCount || b.revenue - a.revenue || byName(a, b),
 }

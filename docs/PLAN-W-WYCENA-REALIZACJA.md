@@ -192,3 +192,21 @@ Przykład (test): RED 57 000 kupiony 2024-04-01, 36 mies. (1 583,33 / mies.), sp
 **Sprzęt.** Kafelek „Kapitał w sprzęcie" (pod kafelkami podsumowania, bieżący rok): zakupy (cena × sztuki wg daty zakupu) − sprzedaże (`soldPrice` wg `soldDate`) od początku i w roku (`lib/gear-capital.ts`). Opcjonalne `fundedBySale` (id sprzedanych pozycji) w arkuszu pozycji: „Sfinansowano sprzedażą: RED 30 000 zł → realny koszt 10 000 zł" (nadwyżka: „realny koszt 0 zł, nadwyżka X zł"). Tylko informacja — ROI, „Na plusie" i spłata liczą pełną cenę. Arkusz zapisuje `soldPrice` tylko przy wpisanej cenie (puste = wycofanie).
 
 Dane rzeczywiste nie mają sprzedanych pozycji: liczby Finansów identyczne (real-data-check, `CHECK_TODAY=2026-11-10`, różni się tylko ścieżka drzewa).
+
+
+## Klienci: filtr okresu i zysk (14.11.2026)
+
+Lista „Klienci" ma filtr okresu jak Finanse (z opcją „Całość") i pokazuje zysk obok przychodu. Okres nie jest zapamiętywany — każda wizyta zaczyna od „Całości", która wygląda jak dotąd. Strona klienta bez zmian (cała historia).
+
+| Zasada | Jak działa |
+| --- | --- |
+| Przychód w okresie | Suma kawałków przychodu z datą w okresie; tylko zlecenia (W realizacji, Zrealizowane); faktury w dwóch okresach dzielą projekt; ujemna korekta odejmuje we własnym okresie |
+| Zysk | Przychód w okresie − podatek od niego − koszty × udział w okresie (`periodCostShare`); w Całości udział = 1; nieznany przychód = 0; „Moja praca" nie jest kosztem; koszty stałe i sprzęt nie idą do klientów |
+| Kto widać | W okresie klient lub grupa bez przychodu w okresie znika; szukanie działa w okresie |
+| Grupy | Wiersz grupy = suma członków w okresie; członkowie bez przychodu w okresie znikają z grupy |
+| Liczba zleceń | W okresie: zlecenia z przychodem w okresie (też dla sortu „Najwięcej projektów"); „wraca" i „dawno bez zlecenia" zostają z całej historii |
+| Kafle | „Klienci" = widoczni w okresie; „Wracają" = widoczni klienci stale wracający + ich udział w przychodzie okresu; „Przychód od klientów" = suma okresu + „zysk"; ostrzeżenie o zleceniach bez klienta tylko z przychodem w okresie |
+| Wiersz | Pod przychodem „zysk X zł · N%" (zielony, przy stracie czerwony, bez przychodu ukryty); nowe sortowanie „Największy zysk" |
+| Lata | Lata z jakimkolwiek kawałkiem przychodu plus bieżący rok, malejąco |
+
+Spójność z Finansami: dla roku, półrocza i kwartału suma przychodu i zysku klientów plus zleceń bez klienta równa się `summarizeMoney` (koszty stałe puste) — pilnuje tego `lib/client-period.test.ts`.

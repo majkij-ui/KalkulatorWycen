@@ -33,6 +33,7 @@
 
 import { addDays, dayKey, daysBetween } from './calendar-layout'
 import { median } from './client-stats'
+import { periodCostShare } from './client-period'
 import { eventData } from './event-kinds'
 import { isEventDate } from './event-types'
 import { isInPeriod, summarizeFixedCosts, type FixedCostBreakdown, type Period } from './finance-calc'
@@ -432,21 +433,8 @@ export interface MoneySummary {
   netMarginPct: number | null
 }
 
-/**
- * Koszty idą za fakturami (decyzja 2026-11-05): gdy przychód projektu jest znany
- * (> 0) i ma kawałki przychodu, okres dostaje koszty × (kawałki w okresie / suma
- * wszystkich kawałków) — to samo dla mojej pracy, a z nią marży producenckiej.
- * Inaczej (brak faktur i planu, przychód nieznany albo 0) całość leży w kotwicy.
- * Udziały jednego projektu dają razem dokładnie 1.
- */
-export function periodCostShare(money: ProjectMoney, period: Period): number {
-  const onAnchor = isInPeriod(money.anchor, period) ? 1 : 0
-  if (money.revenue === null || money.revenue <= EPSILON) return onAnchor
-  const total = sum(money.pieces.map((piece) => piece.amount))
-  if (total <= EPSILON) return onAnchor
-  const here = sum(money.pieces.filter((piece) => isInPeriod(piece.day, period)).map((piece) => piece.amount))
-  return Math.min(1, Math.max(0, here / total))
-}
+/** Udział kosztów projektu w okresie — definicja w `client-period.ts` (bez cyklu importów). */
+export { periodCostShare }
 
 const marginOf = (profit: number, revenue: number) => (revenue > 0 ? (profit / revenue) * 100 : null)
 

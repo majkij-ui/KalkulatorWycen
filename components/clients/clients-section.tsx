@@ -20,14 +20,18 @@ import { crewOnProjects } from '@/lib/crew-stats'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useClientGroups } from '@/lib/use-client-groups'
 import { useProjectMoney } from '@/lib/use-project-money'
+import { PeriodPicker } from '@/components/period-picker'
+import type { Period } from '@/lib/finance-calc'
+import { hasRevenueInPeriod, revenueInPeriod } from '@/lib/client-period'
 import {
   CLIENT_SORTS,
   CLIENT_SORT_LABELS,
   clientListRows,
+  clientPeriodYears,
   clientStats,
   groupStats,
   listClientRows,
-  totalRevenue,
+  totalRevenueInPeriod,
   type ClientListRow,
   type ClientSort,
   type ClientSummary,
@@ -64,7 +68,23 @@ function readSort(): ClientSort {
   }
 }
 
-function ClientRow({ client, onOpen }: { client: ClientSummary; onOpen: () => void }) {
+/** „zysk 14 925 zł · 53%" — zielony, a przy stracie czerwony; bez przychodu nic. */
+function ProfitLine({ revenue, profit, className = '' }: { revenue: number; profit: number; className?: string }) {
+  if (revenue <= 0) return null
+  return (
+    <div className={`text-[11px] ${profit < 0 ? 'text-rose-400' : 'text-emerald-400/80'} ${className}`} style={mono}>
+      zysk {pln(profit)} · {pct((profit / revenue) * 100)}
+    </div>
+  )
+}
+
+/** „3 projekty · 3 zlecenia"; w okresie same zlecenia z przychodem w okresie. */
+function countsLine(c: { projectCount: number; jobCount: number }, inPeriod: boolean): string {
+  const jobs = `${c.jobCount} ${plural(c.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`
+  return inPeriod ? jobs : `${c.projectCount} ${plural(c.projectCount, 'projekt', 'projekty', 'projektów')} · ${jobs}`
+}
+
+function ClientRow({ client, inPeriod, onOpen }: { client: ClientSummary; inPeriod: boolean; onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -91,20 +111,18 @@ function ClientRow({ client, onOpen }: { client: ClientSummary; onOpen: () => vo
           )}
         </div>
         <div className="mt-0.5 text-xs text-zinc-500">
-          {client.projectCount} {plural(client.projectCount, 'projekt', 'projekty', 'projektów')}
-          {' · '}
-          {client.jobCount} {plural(client.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}
+          {countsLine(client, inPeriod)}
         </div>
       </div>
       <div className="w-28 shrink-0 text-xs text-zinc-500">
         <div className="text-[10px] uppercase tracking-wide text-zinc-600">ostatni projekt</div>
         <div style={mono}>{formatDate(client.lastDate)}</div>
       </div>
-      <div
-        className={`w-28 shrink-0 text-right text-sm ${client.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`}
-        style={mono}
-      >
-        {pln(client.revenue)}
+      <div className="w-32 shrink-0 text-right">
+        <div className={`text-sm ${client.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`} style={mono}>
+          {pln(client.revenue)}
+        </div>
+        <ProfitLine revenue={client.revenue} profit={client.profit} />
       </div>
       <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
     </button>
@@ -114,10 +132,12 @@ function ClientRow({ client, onOpen }: { client: ClientSummary; onOpen: () => vo
 /** Grupa: jeden wiersz z liczbami wszystkich członków, a w środku członkowie (każdy ze swoją stroną). */
 function GroupRow({
   row,
+  inPeriod,
   onOpen,
   onOpenMember,
 }: {
   row: Extract<ClientListRow, { kind: 'group' }>
+  inPeriod: boolean
   onOpen: () => void
   onOpenMember: (key: string) => void
 }) {
@@ -153,20 +173,18 @@ function GroupRow({
             )}
           </div>
           <div className="mt-0.5 text-xs text-zinc-500">
-            {summary.projectCount} {plural(summary.projectCount, 'projekt', 'projekty', 'projektów')}
-            {' · '}
-            {summary.jobCount} {plural(summary.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}
+            {countsLine(summary, inPeriod)}
           </div>
         </div>
         <div className="w-28 shrink-0 text-xs text-zinc-500">
           <div className="text-[10px] uppercase tracking-wide text-zinc-600">ostatni projekt</div>
           <div style={mono}>{formatDate(summary.lastDate)}</div>
         </div>
-        <div
-          className={`w-28 shrink-0 text-right text-sm ${summary.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`}
-          style={mono}
-        >
-          {pln(summary.revenue)}
+        <div className="w-32 shrink-0 text-right">
+          <div className={`text-sm ${summary.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`} style={mono}>
+            {pln(summary.revenue)}
+          </div>
+          <ProfitLine revenue={summary.revenue} profit={summary.profit} />
         </div>
         <ArrowUpRight className="size-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
       </button>
@@ -181,10 +199,15 @@ function GroupRow({
             >
               <span className={`min-w-0 flex-1 truncate ${m.empty ? 'text-zinc-600' : 'text-zinc-300'}`}>{m.name}</span>
               <span className="shrink-0 text-zinc-500">
-                {m.empty ? 'brak projektów' : `${m.projectCount} proj. · ${m.jobCount} ${plural(m.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`}
+                {m.empty
+                  ? 'brak projektów'
+                  : inPeriod
+                    ? `${m.jobCount} ${plural(m.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`
+                    : `${m.projectCount} proj. · ${m.jobCount} ${plural(m.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`}
               </span>
-              <span className="w-24 shrink-0 text-right text-zinc-300" style={mono}>
-                {m.empty ? '' : pln(m.revenue)}
+              <span className="w-32 shrink-0 text-right" style={mono}>
+                <span className="text-zinc-300">{m.empty ? '' : pln(m.revenue)}</span>
+                {!m.empty && <ProfitLine revenue={m.revenue} profit={m.profit} />}
               </span>
             </button>
           </li>
@@ -244,6 +267,8 @@ export function ClientsSection({
   const [openKey, setOpenKey] = useState<string | null>(initialKey)
   const [query, setQuery] = useState('')
   const [sort, setSortState] = useState<ClientSort>(readSort)
+  // Okres NIE jest zapamiętywany: każda wizyta zaczyna od „Całości”.
+  const [period, setPeriod] = useState<Period | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [details, setDetails] = useState<ClientDetails[]>([])
   useEffect(() => {
@@ -259,7 +284,8 @@ export function ClientsSection({
     }
   }
 
-  const rows = useMemo(() => clientListRows(projects, groups, today, money), [projects, groups, today, money])
+  const rows = useMemo(() => clientListRows(projects, groups, today, money, period), [projects, groups, today, money, period])
+  const years = useMemo(() => clientPeriodYears(projects, new Date().getFullYear(), money), [projects, money])
   const visible = useMemo(() => listClientRows(rows, sort, query), [rows, sort, query])
   const directory = useMemo(() => clientDirectory(projects), [projects])
   const openGroup = useMemo(() => {
@@ -289,10 +315,14 @@ export function ClientsSection({
   }, [openKey, isLoading, groupsLoading, stats])
 
   const totals = useMemo(() => {
-    const all = totalRevenue(projects, null, money)
+    const all = totalRevenueInPeriod(projects, period, money)
     const summaries: ClientSummary[] = rows.map((r) => r.summary)
     const repeatRevenue = summaries.filter((c) => c.repeat).reduce((sum, c) => sum + c.revenue, 0)
-    const noClient = projects.filter((p) => countsTowardRevenue(p.status) && !clientKey(p.client ?? ''))
+    // Zlecenia bez klienta; w okresie tylko te z przychodem w okresie.
+    const noClient = projects.filter(
+      (p) =>
+        countsTowardRevenue(p.status) && !clientKey(p.client ?? '') && hasRevenueInPeriod(moneyOf(p, money), period)
+    )
     return {
       clients: summaries.length,
       groups: rows.filter((r) => r.kind === 'group').length,
@@ -300,11 +330,12 @@ export function ClientsSection({
       repeat: summaries.filter((c) => c.repeat).length,
       repeatSharePct: all > 0 ? (repeatRevenue / all) * 100 : null,
       clientRevenue: summaries.reduce((sum, c) => sum + c.revenue, 0),
+      clientProfit: summaries.reduce((sum, c) => sum + c.profit, 0),
       noClientJobs: noClient.length,
-      noClientRevenue: noClient.reduce((sum, p) => sum + (moneyOf(p, money).revenue ?? 0), 0),
+      noClientRevenue: noClient.reduce((sum, p) => sum + revenueInPeriod(moneyOf(p, money), period), 0),
       nudges: summaries.filter((c) => c.nudge).length,
     }
-  }, [projects, rows, money])
+  }, [projects, rows, money, period])
 
   const open = (key: string | null) => {
     setOpenKey(key)
@@ -423,8 +454,8 @@ export function ClientsSection({
         <p className="mt-1 max-w-2xl text-sm text-zinc-500">
           Klienci z Twoich projektów: ile przynieśli, jak często wracają i czy zlecenia rosną. Nazwy różniące się
           wielkością liter lub polskimi znakami to jeden klient, a grupa (np. spółki jednej firmy) liczy się jak
-          jeden. Przychód liczy się jak w Finansach — projekty w realizacji i zakończone, z faktur, a bez nich z
-          planu.
+          jeden. Przychód i zysk liczą się jak w Finansach — projekty w realizacji i zakończone, z faktur, a bez nich
+          z planu; okres zawęża je do faktur z tego okresu.
         </p>
       </header>
 
@@ -436,7 +467,7 @@ export function ClientsSection({
             label="Klienci"
             value={String(totals.clients)}
             lines={[
-              `${totals.withJobs} ze zleceniem`,
+              period ? '' : `${totals.withJobs} ze zleceniem`,
               totals.groups > 0 ? `w tym ${totals.groups} ${plural(totals.groups, 'grupa', 'grupy', 'grup')}` : '',
             ]}
           />
@@ -445,13 +476,13 @@ export function ClientsSection({
             value={String(totals.repeat)}
             good={totals.repeat > 0}
             lines={[
-              totals.repeatSharePct === null ? '2+ zlecenia' : `${pct(totals.repeatSharePct)} przychodu firmy`,
+              totals.repeatSharePct === null ? '2+ zlecenia' : `${pct(totals.repeatSharePct)} przychodu ${period ? "okresu" : "firmy"}`,
             ]}
           />
           <Tile
             label="Przychód od klientów"
             value={pln(totals.clientRevenue)}
-            lines={['w realizacji i zakończone']}
+            lines={['w realizacji i zakończone', `zysk ${pln(totals.clientProfit)}`]}
             warn={
               totals.noClientJobs > 0
                 ? `+${pln(totals.noClientRevenue)} w ${totals.noClientJobs} ${plural(totals.noClientJobs, 'zleceniu', 'zleceniach', 'zleceniach')} bez klienta`
@@ -465,6 +496,10 @@ export function ClientsSection({
           />
         </div>
       )}
+
+      <div className="mb-3">
+        <PeriodPicker allowAll period={period} years={years} onChange={setPeriod} />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1">
@@ -505,18 +540,21 @@ export function ClientsSection({
       ) : (
         <div className="flex flex-col gap-2">
           {visible.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-600">Nic nie pasuje do wyszukiwania.</p>
+            <p className="py-8 text-center text-sm text-zinc-600">
+              {period && !query ? 'Brak przychodu w tym okresie.' : 'Nic nie pasuje do wyszukiwania.'}
+            </p>
           )}
           {visible.map((row) =>
             row.kind === 'group' ? (
               <GroupRow
                 key={row.summary.key}
                 row={row}
+                inPeriod={period !== null}
                 onOpen={() => open(row.summary.key)}
                 onOpenMember={(key) => open(key)}
               />
             ) : (
-              <ClientRow key={row.summary.key} client={row.summary} onOpen={() => open(row.summary.key)} />
+              <ClientRow key={row.summary.key} client={row.summary} inPeriod={period !== null} onOpen={() => open(row.summary.key)} />
             )
           )}
         </div>
