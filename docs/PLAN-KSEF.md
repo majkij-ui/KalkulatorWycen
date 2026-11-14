@@ -139,3 +139,47 @@ M.J.: a button in the app should fetch new invoices, not a terminal command.
   `ksef-sync --dry-run` on the real account with the new encryption, unit tests of the sync, the bridge and the
   texts. The button itself needs a built app to try.
 
+## 10. Bank statement, payments and taxes (2026-11-14)
+
+M.J.: KSeF plus the bank CSV are the final truth (edge cases aside, like the one barter). He wants to load the
+bank file, see which invoices are paid, have projects show the same, and see ZUS, flat tax and VAT actually paid.
+
+Decided with M.J.:
+
+| Case | Behaviour |
+|---|---|
+| Transfers from private persons for „sesje" (another activity on the same NIP) | Outside the hub. They sit in „Wpłaty bez faktury", where a sender can be ignored for good |
+| Purchases | Not checked against the bank for now (they are paid from another account); from 2027 |
+| PIT-38, VAT-9M, transfers to own accounts, loan overpayment | Outside the hub (`outside`) |
+| VAT payer | From June 2026 (`VAT_PAYER_SINCE`) |
+| „What did VAT give me" | Two numbers side by side: sales VAT − paid to the tax office (real), and deductible VAT by KSeF purchase invoices |
+| Fuel | Half of the VAT is deductible; recognised by invoice lines, whatever the station |
+| Purchase invoice that is not the firm's | Marked by hand in KSeF → Faktury → Zakupy (0 %) |
+| Payment → project | As with KSeF: nothing changes by itself, „Zastosuj wszystkie pewne" writes confident matches |
+| Flat tax | Paid (bank) next to the hub's estimate; the profit calculation is untouched |
+| ZUS for September–November 2026 | Paid from ERSTE, no file: entries carry `paidFrom` and are not looked for in the statement |
+
+Built:
+
+- `lib/bank-statement.ts`: mBank „Lista operacji" CSV → operations with a kind (`income`, `internal`, `tax_vat`,
+  `tax_flat`, `zus`, `fee`, `outside`) and a stable id, so files with overlapping periods do not duplicate. Copy in
+  `bank/operacje.json` (not in the automatic backups: it can be rebuilt from the files).
+- `lib/bank-match.ts`: incoming transfers against KSeF sales invoices, gross, in the invoice currency: manual
+  decision → invoice number in the title → same payer and amount → one transfer for several invoices → amount
+  alone (a suggestion to confirm). `paymentChanges` turns confident, fully paid invoices into `invoice_paid`
+  entries (bank day, net amount, invoice number, operation ids); a manual entry is corrected and keeps its old
+  values in `updatedFrom` (type `bank`).
+- `lib/taxes.ts`: a transfer to the tax office in month M settles M−1; ZUS is compared within the transfer month,
+  as the hub stores it. A month without a statement is „unknown", never „unpaid".
+- Finanse → KSeF: „Wczytaj wyciąg z banku", a payment mark on every invoice (paid with the day, partial, waiting,
+  overdue, no statement), payments to write on the project card, „Wpłaty bez faktury w KSeF" grouped by sender.
+  Decisions live in `ksef-decisions.json` (`bank_assign`, `bank_ignore`, `bank_sender`, `purchase_vat`).
+- Finanse → „Podatki": monthly ZUS, flat tax and VAT, and the VAT comparison.
+- Koszty stałe: ZUS gets a „bank" mark when the statement has a transfer of that amount in that month; another
+  amount offers „popraw", a missing transfer can be marked as paid from another account, and a transfer without
+  a hub entry offers to add it.
+
+Checked read-only on M.J.'s real file for 2026: every sales invoice past its term is matched to a transfer, ZUS in
+the statement equals the hub's entries to the grosz, and several payment days in projects differ from the bank.
+The two VAT numbers differ; fuel and the invoices his accountant does not book explain part of it, VAT on sales
+outside KSeF most of the rest.

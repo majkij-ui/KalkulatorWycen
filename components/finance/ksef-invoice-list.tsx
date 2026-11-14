@@ -10,10 +10,14 @@ import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import type { PaymentView } from '@/lib/bank-match'
 import { clientKey } from '@/lib/clients'
 import type { KsefCache } from '@/lib/ksef-cache'
 import type { KsefDirection, KsefSale } from '@/lib/ksef-invoices'
+import type { KsefDecision } from '@/lib/ksef-reconcile'
 import { plural } from '@/lib/pl-plural'
+import { purchaseVatShare } from '@/lib/taxes'
+import { PaymentChip } from './payment-chip'
 
 export function day(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
@@ -72,11 +76,18 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 function InvoiceDialog({
   invoice,
   projectName,
+  payment,
+  vatShare,
+  onPurchaseVat,
   onClose,
   onOpenProject,
 }: {
   invoice: KsefSale
   projectName?: { id: string; name: string } | null
+  payment: PaymentView | null
+  /** Tylko zakup: procent VAT do odliczenia i skąd wiadomo. */
+  vatShare: { percent: number; source: 'decision' | 'fuel' | 'default' } | null
+  onPurchaseVat: (percent: number | null) => void
   onClose: () => void
   onOpenProject: (id: string) => void
 }) {
@@ -124,6 +135,45 @@ function InvoiceDialog({
             </div>
           )}
         </dl>
+        {payment && (
+          <p className="text-xs text-zinc-400">
+            Wpłata według wyciągu: <PaymentChip view={payment} />
+          </p>
+        )}
+        {vatShare && (
+          <div className="rounded-md border border-white/5 bg-black/20 px-2.5 py-2 text-xs">
+            <p className="text-zinc-400">
+              VAT do odliczenia:{' '}
+              <span className="text-zinc-100">
+                {vatShare.percent === 0 ? 'nic — faktura nie dotyczy firmy' : `${vatShare.percent}%`}
+                {vatShare.source === 'fuel' ? ' (paliwo: połowa)' : vatShare.source === 'decision' ? ' (ustawione ręcznie)' : ''}
+              </span>
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {(
+                [
+                  [100, 'Całość'],
+                  [50, 'Połowa (auto, paliwo)'],
+                  [0, 'Nie dotyczy firmy'],
+                ] as const
+              ).map(([percent, label]) => (
+                <button
+                  key={percent}
+                  type="button"
+                  onClick={() => onPurchaseVat(percent)}
+                  className={`rounded-md border px-2 py-1 ${vatShare.percent === percent ? 'border-white/30 bg-white/10 text-white' : 'border-white/10 text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  {label}
+                </button>
+              ))}
+              {vatShare.source === 'decision' && (
+                <button type="button" onClick={() => onPurchaseVat(null)} className="rounded-md px-2 py-1 text-zinc-500 hover:text-zinc-300">
+                  Wróć do zasad huba
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {invoice.hasDetails === false ? (
           <p className="text-xs text-zinc-500">Pozycje pobiorą się przy kolejnej synchronizacji (KSeF wydaje do 64 faktur na godzinę).</p>
         ) : invoice.details.lines.length === 0 ? (
@@ -170,6 +220,9 @@ export function KsefInvoiceList({
   periodLabel,
   projectOfInvoice,
   onOpenProject,
+  paymentOf,
+  decisions,
+  onPurchaseVat,
 }: {
   sales: KsefCache | null
   purchases: KsefCache | null
@@ -178,10 +231,15 @@ export function KsefInvoiceList({
   /** Numer KSeF faktury sprzedaży → projekt, do którego trafiła w zestawieniu. */
   projectOfInvoice: Map<string, { id: string; name: string }>
   onOpenProject: (id: string) => void
+  /** Wpłata faktury sprzedaży według wyciągu; `null` = brak wyciągu albo korekta. */
+  paymentOf: (ksefNumber: string) => PaymentView | null
+  decisions: KsefDecision[]
+  onPurchaseVat: (invoice: KsefSale, percent: number | null) => void
 }) {
   const [direction, setDirection] = useState<KsefDirection>('sale')
   const [query, setQuery] = useState('')
-  const [open, setOpen] = useState<KsefSale | null>(null)
+  const [openNumber, setOpenNumber] = useState<string | null>(null)
+  const setOpen = (invoice: KsefSale | null) => setOpenNumber(invoice?.ksefNumber ?? null)
   const cache = direction === 'sale' ? sales : purchases
   const inRange = useMemo(() => (cache?.invoices ?? []).filter((invoice) => inPeriod(invoice.issueDate)), [cache, inPeriod])
   const shown = useMemo(() => {
@@ -193,6 +251,7 @@ export function KsefInvoiceList({
   }, [inRange, query])
   const totals = totalsOf(shown)
   const foreign = [...totals.foreign].map(([currency, value]) => money(value, currency)).join(' + ')
+  const open = openNumber ? ((cache?.invoices ?? []).find((invoice) => invoice.ksefNumber === openNumber) ?? null) : null
   const waiting = inRange.filter((invoice) => invoice.hasDetails === false).length
   const counts = { sale: (sales?.invoices ?? []).filter((i) => inPeriod(i.issueDate)).length, purchase: (purchases?.invoices ?? []).filter((i) => inPeriod(i.issueDate)).length }
 
@@ -248,6 +307,7 @@ export function KsefInvoiceList({
                 <th className="px-3 py-2 text-right font-medium">VAT</th>
                 <th className="px-3 py-2 text-right font-medium">Brutto</th>
                 <th className="px-3 py-2 font-medium">Termin</th>
+                {direction === 'sale' ? <th className="px-3 py-2 font-medium">Wpłata</th> : <th className="px-3 py-2 font-medium">VAT do odliczenia</th>}
                 {direction === 'sale' && <th className="px-3 py-2 font-medium">Projekt</th>}
               </tr>
             </thead>
@@ -269,9 +329,20 @@ export function KsefInvoiceList({
                     {invoice.counterpartyName || '—'}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{money(invoice.netAmount, invoice.currency)}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-zinc-400">{money(invoice.vatAmount, invoice.currency)}</td>
+                  {/* VAT na fakturze w walucie i tak jest podany w złotych. */}
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-zinc-400">{money(invoice.vatAmount)}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{money(invoice.grossAmount, invoice.currency)}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-zinc-400">{invoice.details.dueDate ? day(invoice.details.dueDate) : '—'}</td>
+                  {direction === 'sale' ? (
+                    <td className="whitespace-nowrap px-3 py-1.5">{paymentOf(invoice.ksefNumber) ? <PaymentChip view={paymentOf(invoice.ksefNumber)!} /> : <span className="text-zinc-600">—</span>}</td>
+                  ) : (
+                    <td className="whitespace-nowrap px-3 py-1.5 text-zinc-400">
+                      {(() => {
+                        const share = purchaseVatShare(invoice, decisions)
+                        return share.percent === 0 ? <span className="text-zinc-500">nie dotyczy firmy</span> : share.percent === 100 ? '100%' : `${share.percent}%${share.source === 'fuel' ? ' · paliwo' : ''}`
+                      })()}
+                    </td>
+                  )}
                   {direction === 'sale' && (
                     <td className="max-w-48 truncate px-3 py-1.5 text-zinc-400" title={projectOfInvoice.get(invoice.ksefNumber)?.name}>
                       {projectOfInvoice.get(invoice.ksefNumber)?.name ?? (invoice.isCorrection ? '' : '— bez projektu')}
@@ -288,6 +359,9 @@ export function KsefInvoiceList({
         <InvoiceDialog
           invoice={open}
           projectName={projectOfInvoice.get(open.ksefNumber) ?? null}
+          payment={open.direction === 'sale' ? paymentOf(open.ksefNumber) : null}
+          vatShare={open.direction === 'purchase' ? purchaseVatShare(open, decisions) : null}
+          onPurchaseVat={(percent) => onPurchaseVat(open, percent)}
           onClose={() => setOpen(null)}
           onOpenProject={(id) => {
             setOpen(null)

@@ -16,6 +16,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, RotateCcw, X } from 'lucide-react'
+import { EMPTY_BANK, type BankCopy } from '@/lib/bank-statement'
+import { readBankCopy } from '@/lib/bank-store'
 import { parseAmount } from '@/lib/event-draft'
 import { periodMonths, summarizeFixedCosts, type Period } from '@/lib/finance-calc'
 import {
@@ -25,12 +27,15 @@ import {
   withCategory,
   type CostCategory,
 } from '@/lib/fixed-cost-categories'
+import { createFixedCost } from '@/lib/finances-store'
 import { pln } from '@/lib/money-loop-labels'
 import type { FixedCost } from '@/lib/project-types'
 import type { Subscription } from '@/lib/subscription-types'
 import { chargeInMonth, subscriptionCorrection, type EffectiveFixedCost } from '@/lib/subscriptions'
+import { zusCheck, zusOnlyInBank } from '@/lib/taxes'
 import { amountDraft, money, monthName, rateText } from './finance-format'
 import type { FinanceNotice } from './subscriptions-panel'
+import { ZusMark } from './taxes-panel'
 import type { FixedCostsState } from './use-fixed-costs'
 
 const inputClass =
@@ -182,6 +187,7 @@ function CostRow({
   sub,
   future,
   fixed,
+  bank,
   onNotice,
 }: {
   cost: EffectiveFixedCost
@@ -189,6 +195,8 @@ function CostRow({
   sub: Subscription | undefined
   future: boolean
   fixed: FixedCostsState
+  /** Wyciąg z banku: ZUS dostaje znaczek, gdy widać w nim przelew z tego miesiąca. */
+  bank: BankCopy
   onNotice: (notice: FinanceNotice) => void
 }) {
   const category = fixedCostCategory(cost)
@@ -267,6 +275,7 @@ function CostRow({
   }
 
   // Zwykły koszt (też odczyt z panelu reklam i poprawka usuniętej subskrypcji).
+  const zus = category === 'zus' && bank.operations.length > 0 ? zusCheck(cost, bank) : null
   const remove = async () => {
     const stamp = await fixed.removeCosts([cost.id])
     onNotice({
@@ -285,6 +294,26 @@ function CostRow({
         <InlineText value={cost.label} onCommit={(label) => fixed.updateCost({ ...stripDerived(cost), label })} />
         {cost.campaignId && <Tag>kampania</Tag>}
         {cost.subscriptionId && !sub && <Tag>usunięta subskrypcja</Tag>}
+        {zus && <ZusMark check={zus} />}
+        {zus?.state === 'differs' && (
+          <button
+            type="button"
+            onClick={() => fixed.updateCost({ ...stripDerived(cost), amount: zus.bankAmount })}
+            className="shrink-0 rounded px-1 text-xs text-sky-300 hover:underline"
+          >
+            popraw
+          </button>
+        )}
+        {zus?.state === 'missing' && (
+          <button
+            type="button"
+            title="Zapłacone z konta, którego wyciągu tu nie ma: hub przestanie szukać przelewu"
+            onClick={() => fixed.updateCost({ ...stripDerived(cost), paidFrom: 'inne konto' })}
+            className="shrink-0 rounded px-1 text-xs text-zinc-500 hover:text-zinc-200"
+          >
+            z innego konta
+          </button>
+        )}
       </span>
       <InlineAmount
         amount={cost.amount}
@@ -397,6 +426,14 @@ export function FixedCostsPanel({
 }) {
   const [adding, setAdding] = useState<string | null>(null)
   const [lastCategory, setLastCategory] = useState<CostCategory>('other')
+  const [bank, setBank] = useState<BankCopy>(EMPTY_BANK)
+  useEffect(() => {
+    let live = true
+    void readBankCopy().then((copy) => live && setBank(copy))
+    return () => {
+      live = false
+    }
+  }, [])
   const months = useMemo(() => periodMonths(period), [period])
   const currentMonth = today.slice(0, 7)
   const subsById = useMemo(() => new Map(subscriptions.map((s) => [s.id, s])), [subscriptions])
@@ -449,6 +486,7 @@ export function FixedCostsPanel({
           const total = items.reduce((sum, c) => sum + c.amount, 0)
           const future = month > currentMonth
           const missingZus = !items.some((c) => fixedCostCategory(c) === 'zus')
+          const zusInBank = zusOnlyInBank(month, !missingZus, bank)
           return (
             <div key={month} className="py-2">
               <div className="flex items-center justify-between gap-2">
@@ -457,7 +495,16 @@ export function FixedCostsPanel({
                   {future && <span className="text-[11px] font-normal text-zinc-600">zaplanowane</span>}
                 </span>
                 <span className="flex items-center gap-2">
-                  {missingZus && <Tag>bez ZUS</Tag>}
+                  {missingZus && zusInBank === null && <Tag>bez ZUS</Tag>}
+                  {zusInBank !== null && (
+                    <button
+                      type="button"
+                      onClick={() => fixed.addCosts([createFixedCost({ month, type: 'zus', amount: zusInBank, label: 'ZUS' })])}
+                      className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-300 hover:bg-sky-500/20"
+                    >
+                      ZUS z banku {pln(zusInBank)} — dodaj
+                    </button>
+                  )}
                   <span className="tabular-nums text-sm font-semibold text-zinc-100">{pln(total)}</span>
                   {adding !== month && (
                     <IconButton label={`Dodaj koszt: ${monthName(month)}`} onClick={() => setAdding(month)}>
@@ -473,6 +520,7 @@ export function FixedCostsPanel({
                   sub={cost.subscriptionId ? subsById.get(cost.subscriptionId) : undefined}
                   future={future}
                   fixed={fixed}
+                  bank={bank}
                   onNotice={onNotice}
                 />
               ))}
