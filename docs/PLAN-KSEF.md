@@ -198,3 +198,9 @@ lists what needs attention: the sessions' totals, untaxed projects, every month 
 differ by 100 zł or more (with the revenue that difference stands for), the yearly difference, the VAT gap and
 bank transfers without an invoice. Open with M.J.: whether the sessions should also enter the hub's revenue.
 
+**Sessions stay out of the tiles (M.J., 2026-11-14, evening):** the Finanse tiles show video production only. The
+first Finanse tab is renamed „Podsumowanie" and carries one note under the tiles, for periods that have sessions:
+their total, the income tax and the VAT that came with them. ZUS paid from another account (`paidFrom`) is shown
+exactly like a transfer from the statement, with no extra wording; the ZUS tile shows what was paid and, beside
+it, what the hub has for the same months.
+

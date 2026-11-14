@@ -39,9 +39,10 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 export function ZusMark({ check }: { check: ZusCheck }) {
-  if (check.state === 'confirmed') {
+  // Zapłacone z innego konta (M.J. potwierdził przelew) wygląda tak samo jak przelew z wyciągu.
+  if (check.state === 'confirmed' || check.state === 'elsewhere') {
     return (
-      <span title={`Przelew do ZUS ${day(check.day)} (wyciąg z banku)`} className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-300">
+      <span title={check.state === 'confirmed' ? `Przelew do ZUS ${day(check.day)} (wyciąg z banku)` : 'Przelew potwierdzony'} className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-300">
         <Check className="size-3" />
         bank
       </span>
@@ -58,13 +59,6 @@ export function ZusMark({ check }: { check: ZusCheck }) {
     return (
       <span title="Wyciąg obejmuje cały miesiąc, a przelewu do ZUS w nim nie ma" className="rounded-full bg-rose-500/10 px-1.5 py-0.5 text-[11px] text-rose-300">
         brak przelewu
-      </span>
-    )
-  }
-  if (check.state === 'elsewhere') {
-    return (
-      <span title="Zapłacone z konta spoza wyciągów; hub tego nie sprawdza" className="rounded-full bg-zinc-500/10 px-1.5 py-0.5 text-[11px] text-zinc-300">
-        {check.account}
       </span>
     )
   }
@@ -138,11 +132,11 @@ export function TaxesPanel({
   const unmatchedIncomes = hasBank
     ? matchPayments({ invoices: payableInvoices(ksefDocuments(sales.filter((invoice) => invoice.hasDetails !== false))), operations: bank.operations, decisions }).unmatched.length
     : 0
-  // ZUS w hubie do miesiąca, do którego sięga wyciąg; osobno to, co poszło z kont spoza wyciągów.
+  // ZUS zapłacony = przelewy z wyciągu; miesiąc opłacony z innego konta (`paidFrom`) liczy się tak, jakby był w wyciągu.
+  const zusPaid = (month: { month: string; zus: number }) => month.zus || (zusByMonth.get(month.month)?.paidFrom ? (zusByMonth.get(month.month)?.amount ?? 0) : 0)
+  const zusPaidTotal = summary.months.reduce((sum, month) => sum + zusPaid(month), 0)
   const seenMonths = months.filter((month) => coveredTo && month <= coveredTo.slice(0, 7))
   const zusHub = seenMonths.reduce((sum, month) => sum + (zusByMonth.get(month)?.amount ?? 0), 0)
-  const zusElsewhere = seenMonths.reduce((sum, month) => sum + (zusByMonth.get(month)?.paidFrom ? (zusByMonth.get(month)?.amount ?? 0) : 0), 0)
-  const zusAgrees = Math.abs(zusHub - zusElsewhere - summary.zus) < 0.01
   const { vat, outside } = summary
   const gap = Math.round((vat.deductibleByInvoices - vat.deductedReal) * 100) / 100
   const cell = 'whitespace-nowrap px-3 py-1.5 text-right tabular-nums'
@@ -168,8 +162,7 @@ export function TaxesPanel({
             <span className="tabular-nums text-zinc-100">{money(outside.gross)}</span> ({outside.count}{' '}
             {outside.count === 1 ? 'wpłata' : 'wpłat'} od nadawców oznaczonych „Pomijaj tego nadawcę”). To{' '}
             <span className="tabular-nums text-zinc-200">{money(outside.net)}</span> netto i{' '}
-            <span className="tabular-nums text-zinc-200">{money(outside.vat)}</span> VAT (wpłata to 123% ceny; przed{' '}
-            {MONTHS_FROM[Number(VAT_PAYER_SINCE.slice(5)) - 1]} {VAT_PAYER_SINCE.slice(0, 4)} bez VAT).
+            <span className="tabular-nums text-zinc-200">{money(outside.vat)}</span> VAT.
           </p>
           <p className="mt-1 text-zinc-500">
             Hub nie liczy tych wpłat w przychodzie ani w projektach, ale urząd rozlicza je razem z resztą firmy: ich VAT jest doliczony poniżej, a ryczałt od
@@ -179,11 +172,7 @@ export function TaxesPanel({
       )}
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Tile
-          label="ZUS z banku"
-          value={money(summary.zus)}
-          hint={`${zusAgrees ? 'zgodne z hubem' : `w hubie za te miesiące: ${money(zusHub - zusElsewhere)}`}${zusElsewhere ? `; do tego ${money(zusElsewhere)} z kont spoza wyciągu` : ''}`}
-        />
+        <Tile label="ZUS zapłacony" value={money(zusPaidTotal)} hint={`w hubie za te miesiące: ${money(zusHub)}`} />
         <Tile
           label="Ryczałt zapłacony"
           value={money(summary.flatTaxPaid)}
@@ -198,7 +187,7 @@ export function TaxesPanel({
           <thead className="text-[11px] uppercase tracking-wide text-zinc-500">
             <tr>
               <th className="px-3 py-2 font-medium">Miesiąc</th>
-              <th className="px-3 py-2 text-right font-medium">ZUS (bank)</th>
+              <th className="px-3 py-2 text-right font-medium">ZUS zapłacony</th>
               <th className="px-3 py-2 font-medium">ZUS w hubie</th>
               <th className="px-3 py-2 text-right font-medium">Ryczałt zapłacony</th>
               <th className="px-3 py-2 text-right font-medium" title="Ryczałt od faktur zapisanych w hubie (miesiąc wystawienia, stawka projektu) plus od sesji. Praca w realizacji bez faktury tu nie wchodzi">
@@ -215,7 +204,7 @@ export function TaxesPanel({
               return (
                 <tr key={month.month} className="border-t border-white/5 text-zinc-200">
                   <td className="px-3 py-1.5 capitalize">{monthName(month.month)}</td>
-                  <td className={cell}>{month.zus ? money(month.zus) : dash}</td>
+                  <td className={cell}>{zusPaid(month) ? money(zusPaid(month)) : dash}</td>
                   <td className="whitespace-nowrap px-3 py-1.5">
                     {cost ? (
                       <span className="inline-flex items-center gap-1.5 tabular-nums text-zinc-400">
