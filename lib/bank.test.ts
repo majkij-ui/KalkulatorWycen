@@ -5,7 +5,7 @@ import { bankCopyFile, decodeBankFile, EMPTY_BANK, mergeBankFile, parseBankCopy,
 import type { TimelineEvent } from './event-types'
 import type { KsefSale } from './ksef-invoices'
 import { ksefDocuments, type KsefDecision } from './ksef-reconcile'
-import { isFuelInvoice, purchaseVatDecisionId, taxSummary, zusCheck, zusOnlyInBank } from './taxes'
+import { isFuelInvoice, outsideSales, purchaseVatDecisionId, taxSummary, vatInGross, zusCheck, zusOnlyInBank } from './taxes'
 
 // ── Plik z mBanku (układ jak w prawdziwym eksporcie; nazwy i rachunki zmyślone) ──
 
@@ -368,6 +368,7 @@ test('VAT: przelew z następnego miesiąca rozlicza poprzedni; paliwo w połowie
   assert.deepEqual(summary.vat, {
     months: ['2026-06', '2026-07', '2026-08'],
     sales: 12500,
+    salesOutside: 0,
     paid: 12100,
     deductedReal: 400,
     deductibleByInvoices: 1050,
@@ -382,4 +383,38 @@ test('VAT: miesiąc, którego rozliczenia wyciąg jeszcze nie obejmuje, nie wcho
   const summary = taxSummary({ months: ['2026-10', '2026-11'], bank: copy, sales: [ksefSale('4/10/2026', { issueDate: '2026-10-23', vatAmount: 7000.5 }), ksefSale('3/11/2026', { issueDate: '2026-11-13', vatAmount: 100 })], purchases: [], decisions: [] })
   assert.deepEqual([summary.months[1].vatPaid, summary.months[1].flatTaxPaid], [null, null])
   assert.deepEqual([summary.vat.months, summary.vat.deductedReal], [['2026-10'], 1000.5])
+})
+
+test('sesje: wpłaty od pomijanych nadawców to sprzedaż poza KSeF; VAT to 23/123 wpłaty i tylko od czerwca', () => {
+  assert.equal(vatInGross(246, '2026-06-11'), 46)
+  assert.equal(vatInGross(180, '2026-05-28'), 0)
+
+  const account = '10000000000000000000000007'
+  const sessions = [
+    income('2026-05-14', 'ANNA PRZYKŁADOWA, SESJA', 180, { counterAccount: account }),
+    income('2026-06-12', 'ANNA PRZYKŁADOWA, SESJA', 246, { counterAccount: account }),
+    income('2026-07-09', 'ANNA PRZYKŁADOWA, SESJA', 123, { counterAccount: account }),
+  ]
+  const invoicePayment = income('2026-07-10', 'ANNA PRZYKŁADOWA za fakturę', 615, { counterAccount: account })
+  const other = income('2026-07-11', 'KTOŚ INNY', 500, { counterAccount: '10000000000000000000000008' })
+  const decisions = [
+    decision({ id: `sender:${account}`, kind: 'bank_sender' }),
+    decision({ id: `bank:${invoicePayment.id}`, kind: 'bank_assign', ksefNumber: 'K-1/07/2026' }),
+    decision({ id: `bank:${other.id}`, kind: 'bank_ignore' }),
+  ]
+  const operations = [...sessions, invoicePayment, other, out('2026-07-17', 'tax_vat', 9000), out('2026-08-12', 'tax_vat', 2400)]
+  // Pojedynczo pominięta wpłata i wpłata wskazana jako zapłata faktury nie są sesjami.
+  assert.deepEqual(outsideSales(operations, decisions).map((operation) => operation.amount), [180, 246, 123])
+
+  const summary = taxSummary({
+    months: ['2026-05', '2026-06', '2026-07'],
+    bank: bank(operations),
+    sales: [ksefSale('2/06/2026', { issueDate: '2026-06-17', vatAmount: 9200 }), ksefSale('1/07/2026', { issueDate: '2026-07-03', vatAmount: 2500 })],
+    purchases: [],
+    decisions,
+  })
+  assert.deepEqual(summary.months.map((month) => [month.outsideGross, month.vatOutside]), [[180, 0], [246, 46], [123, 23]])
+  assert.deepEqual(summary.outside, { count: 3, gross: 549, net: 480, vat: 69 })
+  // Odliczone naprawdę: VAT z faktur 11 700 + z sesji 69 − wpłacone 11 400.
+  assert.deepEqual([summary.vat.salesOutside, summary.vat.deductedReal], [69, 369])
 })
