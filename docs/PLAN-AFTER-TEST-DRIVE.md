@@ -219,6 +219,17 @@ release: 36 quotes and every Finance year total identical; data files unchanged 
 installed app: „Podatki" shows the note and both VAT numbers, now within the rounding of a few declarations.
 Not checked here: the Marketing view.
 
+**Merged and installed 2026-11-14, Podatki fixes:** two mistakes from the same day's releases, found when M.J.
+asked why the hub and the bank differed. (1) The three ERSTE ZUS entries were added as plain costs although a ZUS
+subscription already produced a charge for those months, so Finanse counted ZUS twice (4,251.42 too much, for
+about an hour); they are now corrections of the subscription's charges. Missed because the preview copy had no
+subscriptions and the real-data check compares code, not data patches: a patch to real data needs its own
+before/after check of the affected totals. (2) „Ryczałt wg huba" used the legacy `summarizePeriod` (project date,
+planned tax) instead of the money register behind the Finanse tiles; it now uses `summarizeMoney`. ZUS in
+„Podatki" and the bank mark in fixed costs read effective costs, subscription charges included. 1,153 tests,
+`tsc` clean; real data read-only: 36 quotes and every Finance year total identical, 2026 fixed costs back to the
+morning's figure. Checked in the installed app: ZUS tile and „Podatki".
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
