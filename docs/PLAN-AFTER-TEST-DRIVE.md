@@ -211,6 +211,14 @@ M.J. picked the file (the open panel cannot be driven from the session), 139 ope
 appeared on the invoices. Not exercised on the desktop: a second, overlapping file; „popraw" and „z innego konta"
 on a ZUS row; a partial payment.
 
+**Merged and installed 2026-11-14, sessions VAT:** „Podatki" adds the VAT of sales outside KSeF (transfers from
+senders ignored for good: 23/123 of the transfer, from June 2026) and a note with their total (docs/PLAN-KSEF.md
+§10). The build also carries the Marketing „Wszystkie kampanie" merge made by another session, which had not been
+installed yet. No conflicts. 1,153 tests, `tsc` clean. Real data, read-only, against the previously installed
+release: 36 quotes and every Finance year total identical; data files unchanged by the checks. Checked in the
+installed app: „Podatki" shows the note and both VAT numbers, now within the rounding of a few declarations.
+Not checked here: the Marketing view.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
