@@ -201,6 +201,16 @@ files unchanged by the checks. Checked in the installed app: one click fetched t
 (23 sales, 62 purchases, all with content) and the screen showed the summary and a new „Do zapisania” row.
 Not exercised on the desktop: the no-token and no-NIP messages, and a run cut by the hourly limit.
 
+**Merged and installed 2026-11-14, bank statement and taxes:** Finanse → KSeF reads an mBank CSV and shows which
+invoices are paid; confident payments are written to projects on apply; new tab „Podatki" (ZUS, flat tax, VAT);
+ZUS in fixed costs gets a bank mark (docs/PLAN-KSEF.md §10). `apply` can now write `ksef-decisions.json`. No
+conflicts. 1,145 tests, `tsc` clean. Real data, read-only: 36 quotes and every Finance year total identical; data
+files unchanged by the checks. Applied with the hub closed (backup made): three ZUS entries for September–November
+2026 with `paidFrom: ERSTE`, and four purchase invoices marked as not the firm's. Checked in the installed app:
+M.J. picked the file (the open panel cannot be driven from the session), 139 operations were saved and payments
+appeared on the invoices. Not exercised on the desktop: a second, overlapping file; „popraw" and „z innego konta"
+on a ZUS row; a partial payment.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
