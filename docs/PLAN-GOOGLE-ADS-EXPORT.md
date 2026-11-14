@@ -1,6 +1,6 @@
 # Eksport leadów do Google Ads: plan wdrożenia w hubie
 
-Stan: **decyzje podjęte (sekcja 7), etap A gotowy (sekcja 9), etap B czeka.**
+Stan: **decyzje podjęte (sekcja 7), etapy A i B zbudowane (sekcje 9 i 10), etapy 0 i C czekają.** Bieżący stan i lista do zrobienia: [GOOGLE-ADS-EKSPORT-STAN.md](GOOGLE-ADS-EKSPORT-STAN.md).
 Wejście: `hub-lead-export-brief.md` z repo strony (część strony wdrożona 1.11.2026).
 Ten plan zastępuje brief tam, gdzie się różnią (sekcja 2).
 
