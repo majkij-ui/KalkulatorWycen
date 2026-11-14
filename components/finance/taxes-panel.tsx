@@ -7,14 +7,15 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, Loader2 } from 'lucide-react'
+import { matchPayments, payableInvoices } from '@/lib/bank-match'
 import { bankCoveredTo, EMPTY_BANK, type BankCopy } from '@/lib/bank-statement'
 import { readBankCopy } from '@/lib/bank-store'
 import { periodMonths, type Period } from '@/lib/finance-calc'
 import type { KsefSale } from '@/lib/ksef-invoices'
-import type { KsefDecision } from '@/lib/ksef-reconcile'
+import { ksefDocuments, type KsefDecision } from '@/lib/ksef-reconcile'
 import { listKsefDecisions, readKsefCache } from '@/lib/ksef-store'
-import { taxSummary, VAT_PAYER_SINCE, zusCheck, type ZusCheck } from '@/lib/taxes'
+import { OUTSIDE_FLAT_TAX_PERCENT, taxSummary, VAT_PAYER_SINCE, zusCheck, type ZusCheck } from '@/lib/taxes'
 import { day, money } from './ksef-invoice-list'
 
 const MONTHS = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień']
@@ -73,13 +74,16 @@ export function ZusMark({ check }: { check: ZusCheck }) {
 export function TaxesPanel({
   period,
   periodLabel,
-  taxEstimate,
+  invoicedTax,
+  untaxedProjects,
   zusCosts,
 }: {
   period: Period
   periodLabel: string
-  /** Ryczałt, który hub wylicza z przychodu miesiąca (`RRRR-MM` → zł). */
-  taxEstimate: Map<string, number>
+  /** Przychód zafakturowany w hubie i ryczałt od niego, po miesiącu wystawienia faktury (`RRRR-MM`). */
+  invoicedTax: Map<string, { revenue: number; tax: number }>
+  /** Projekty w przychodzie bez faktury i bez podatku (barter). */
+  untaxedProjects: { name: string; amount: number }[]
   /** ZUS wpisany w kosztach stałych, po miesiącu. */
   zusCosts: ZusCost[]
 }) {
@@ -122,8 +126,18 @@ export function TaxesPanel({
 
   const hasBank = bank.operations.length > 0
   const coveredTo = bankCoveredTo(bank)
+  // Ryczałt według huba = od faktur zapisanych w hubie + od sesji; praca w realizacji tu nie wchodzi.
+  const hubFlat = (month: { month: string; flatTaxOutside: number }) => (invoicedTax.get(month.month)?.tax ?? 0) + month.flatTaxOutside
   const settledFlat = summary.months.filter((month) => month.flatTaxPaid !== null)
-  const flatEstimate = settledFlat.reduce((sum, month) => sum + (taxEstimate.get(month.month) ?? 0), 0)
+  const flatEstimate = settledFlat.reduce((sum, month) => sum + hubFlat(month), 0)
+  const flatGaps = settledFlat
+    .map((month) => ({ month, gap: Math.round(((month.flatTaxPaid ?? 0) - hubFlat(month)) * 100) / 100 }))
+    // Sto złotych ryczałtu to ponad tysiąc złotych przychodu: tyle warto wyjaśnić.
+    .filter(({ gap }) => Math.abs(gap) >= 100)
+  const flatGapTotal = Math.round((summary.flatTaxPaid - flatEstimate) * 100) / 100
+  const unmatchedIncomes = hasBank
+    ? matchPayments({ invoices: payableInvoices(ksefDocuments(sales.filter((invoice) => invoice.hasDetails !== false))), operations: bank.operations, decisions }).unmatched.length
+    : 0
   // ZUS w hubie do miesiąca, do którego sięga wyciąg; osobno to, co poszło z kont spoza wyciągów.
   const seenMonths = months.filter((month) => coveredTo && month <= coveredTo.slice(0, 7))
   const zusHub = seenMonths.reduce((sum, month) => sum + (zusByMonth.get(month)?.amount ?? 0), 0)
@@ -173,7 +187,7 @@ export function TaxesPanel({
         <Tile
           label="Ryczałt zapłacony"
           value={money(summary.flatTaxPaid)}
-          hint={settledFlat.length ? `hub szacuje za te miesiące: ${money(flatEstimate)} (z pracą w realizacji, bez sesji)` : 'brak rozliczonych miesięcy w wyciągu'}
+          hint={settledFlat.length ? `z faktur w hubie i sesji za te miesiące: ${money(flatEstimate)}` : 'brak rozliczonych miesięcy w wyciągu'}
         />
         <Tile label="VAT wpłacony do urzędu" value={money(vat.paid)} hint={vat.months.length ? `za ${monthName(vat.months[0])}–${monthName(vat.months.at(-1)!)}` : 'brak rozliczonych miesięcy'} />
         <Tile label="Odliczony VAT (realnie)" value={money(vat.deductedReal)} hint={`według faktur zakupu: ${money(vat.deductibleByInvoices)}`} />
@@ -187,8 +201,8 @@ export function TaxesPanel({
               <th className="px-3 py-2 text-right font-medium">ZUS (bank)</th>
               <th className="px-3 py-2 font-medium">ZUS w hubie</th>
               <th className="px-3 py-2 text-right font-medium">Ryczałt zapłacony</th>
-              <th className="px-3 py-2 text-right font-medium" title="Stawka ryczałtu projektu × przychód huba w miesiącu wystawienia faktury. Hub liczy też pracę w realizacji bez faktury i nie zna sprzedaży poza KSeF, więc miesiące mogą się różnić">
-                Ryczałt wg huba
+              <th className="px-3 py-2 text-right font-medium" title="Ryczałt od faktur zapisanych w hubie (miesiąc wystawienia, stawka projektu) plus od sesji. Praca w realizacji bez faktury tu nie wchodzi">
+                Ryczałt z faktur i sesji
               </th>
               <th className="px-3 py-2 text-right font-medium">VAT sprzedaż</th>
               <th className="px-3 py-2 text-right font-medium">VAT zakupy do odliczenia</th>
@@ -214,7 +228,12 @@ export function TaxesPanel({
                     )}
                   </td>
                   <td className={cell}>{month.flatTaxPaid === null ? dash : money(month.flatTaxPaid)}</td>
-                  <td className={`${cell} text-zinc-400`}>{taxEstimate.get(month.month) ? money(taxEstimate.get(month.month)!) : dash}</td>
+                  <td
+                    className={`${cell} text-zinc-400`}
+                    title={`z faktur ${money(invoicedTax.get(month.month)?.tax ?? 0)} (przychód ${money(invoicedTax.get(month.month)?.revenue ?? 0)})${month.flatTaxOutside ? ` + z sesji ${money(month.flatTaxOutside)}` : ''}`}
+                  >
+                    {hubFlat(month) ? money(hubFlat(month)) : dash}
+                  </td>
                   <td className={cell} title={month.vatOutside ? `z faktur ${money(month.vatSales)} + z sesji ${money(month.vatOutside)}` : undefined}>
                     {month.vatApplies && (month.vatSales || month.vatOutside) ? money(month.vatSales + month.vatOutside) : dash}
                   </td>
@@ -257,13 +276,54 @@ export function TaxesPanel({
           </div>
         )}
         {vat.months.length > 0 && Math.abs(gap) < 1 && <p className="mt-3 text-xs text-emerald-300">Obie liczby się zgadzają.</p>}
-        {vat.months.length > 0 && Math.abs(gap) >= 1 && (
-          <p className="mt-3 rounded-md border border-amber-500/15 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-200/90">
-            Różnica między tymi liczbami: {money(Math.abs(gap))}. Możliwe powody: faktury zakupu, które nie dotyczą firmy albo są odliczane tylko w części
-            (oznacz je w KSeF → Faktury → Zakupy), wpłaty za sesje od nadawców jeszcze nieoznaczonych „Pomijaj tego nadawcę”, zakupy, których nie ma w KSeF (paragony z NIP-em, faktury z zagranicy),
-            zaokrąglenia deklaracji do pełnych złotych i przesunięcia między miesiącami.
-          </p>
-        )}
+      </section>
+
+      <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm">
+        <h2 className="flex items-center gap-2 font-semibold text-amber-200">
+          <AlertTriangle className="size-4" />
+          Notki podatkowe
+        </h2>
+        <ul className="mt-2 list-disc space-y-1.5 pl-5 text-xs text-amber-100/90">
+          {outside.count > 0 && (
+            <li>
+              Sesje (wpłaty bez faktur w KSeF): {money(outside.gross)}, czyli {money(outside.net)} netto. W rachunku jest od nich {money(outside.vat)} VAT i{' '}
+              {money(outside.flatTax)} ryczałtu ({String(OUTSIDE_FLAT_TAX_PERCENT).replace('.', ',')}%, jak usługi edukacyjne; przy doradztwie w zarządzaniu byłoby 15%).
+            </li>
+          )}
+          {untaxedProjects.map((project) => (
+            <li key={project.name}>
+              „{project.name}”: {money(project.amount)} w przychodzie huba bez faktury i bez podatku (barter). Nie wchodzi do porównań na tej stronie.
+            </li>
+          ))}
+          {flatGaps.map(({ month, gap }) => (
+            <li key={month.month}>
+              <span className="capitalize">{monthName(month.month)}</span>: ryczałt zapłacony {money(month.flatTaxPaid ?? 0)}, z faktur i sesji wychodzi{' '}
+              {money(hubFlat(month))}. To {money(Math.abs(gap))} {gap > 0 ? 'więcej' : 'mniej'}, czyli ok.{' '}
+              {money(Math.abs(gap) / (OUTSIDE_FLAT_TAX_PERCENT / 100))} przychodu, {gap > 0 ? 'którego hub nie zna' : 'który hub ma, a w podatku go nie widać'}.
+              {month.flatTaxTransfers.length > 1 ? ` Poszły ${month.flatTaxTransfers.length} przelewy: ${month.flatTaxTransfers.map((value) => money(value)).join(' i ')}.` : ''}
+            </li>
+          ))}
+          {settledFlat.length > 0 && Math.abs(flatGapTotal) >= 1 && (
+            <li>
+              Ryczałt razem: zapłacono {money(summary.flatTaxPaid)}, z faktur i sesji wychodzi {money(flatEstimate)}; różnica {money(Math.abs(flatGapTotal))}{' '}
+              {flatGapTotal > 0 ? 'ponad to, co wie hub' : 'poniżej tego, co liczy hub'}. Do wyjaśnienia z wyliczeniem księgowej.
+            </li>
+          )}
+          {vat.months.length > 0 && Math.abs(gap) >= 1 && (
+            <li>
+              VAT: odliczone naprawdę {money(vat.deductedReal)}, według faktur zakupu {money(vat.deductibleByInvoices)}; różnica {money(Math.abs(gap))}. Możliwe
+              powody: zakupy, których nie ma w KSeF (paragony z NIP-em, faktury z zagranicy), faktury zakupu niefirmowe albo odliczane w części (KSeF →
+              Faktury → Zakupy), zaokrąglenia deklaracji.
+            </li>
+          )}
+          {unmatchedIncomes > 0 && (
+            <li>
+              {unmatchedIncomes} {unmatchedIncomes === 1 ? 'wpłata w wyciągu nie ma' : 'wpłat w wyciągu nie ma'} faktury ani oznaczenia (KSeF → „Wpłaty bez faktury w KSeF”). Jeśli to
+              sesje, oznacz nadawcę: dopiero wtedy wejdą do VAT i ryczałtu.
+            </li>
+          )}
+          {!hasBank && <li>Bez wyciągu z banku ta strona pokazuje tylko to, co wynika z faktur.</li>}
+        </ul>
       </section>
     </div>
   )
