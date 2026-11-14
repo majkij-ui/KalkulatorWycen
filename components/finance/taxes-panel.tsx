@@ -125,7 +125,7 @@ export function TaxesPanel({
   const settledFlat = summary.months.filter((month) => month.flatTaxPaid !== null)
   const flatEstimate = settledFlat.reduce((sum, month) => sum + (taxEstimate.get(month.month) ?? 0), 0)
   const zusHub = months.reduce((sum, month) => sum + (zusByMonth.get(month)?.amount ?? 0), 0)
-  const { vat } = summary
+  const { vat, outside } = summary
   const gap = Math.round((vat.deductibleByInvoices - vat.deductedReal) * 100) / 100
   const cell = 'whitespace-nowrap px-3 py-1.5 text-right tabular-nums'
   const dash = <span className="text-zinc-600">—</span>
@@ -141,6 +141,24 @@ export function TaxesPanel({
           PIT-38, VAT-9M i przelewy prywatne są tu pomijane.
         </p>
       </section>
+
+      {outside.count > 0 && (
+        <section className="rounded-xl border border-white/5 bg-zinc-900/40 p-4 text-xs text-zinc-400">
+          <h2 className="text-sm font-semibold text-zinc-200">Poza hubem: sesje i inna sprzedaż bez faktur w KSeF</h2>
+          <p className="mt-1">
+            W tym okresie wpłynęło{' '}
+            <span className="tabular-nums text-zinc-100">{money(outside.gross)}</span> ({outside.count}{' '}
+            {outside.count === 1 ? 'wpłata' : 'wpłat'} od nadawców oznaczonych „Pomijaj tego nadawcę”). To{' '}
+            <span className="tabular-nums text-zinc-200">{money(outside.net)}</span> netto i{' '}
+            <span className="tabular-nums text-zinc-200">{money(outside.vat)}</span> VAT (wpłata to 123% ceny; przed{' '}
+            {MONTHS_FROM[Number(VAT_PAYER_SINCE.slice(5)) - 1]} {VAT_PAYER_SINCE.slice(0, 4)} bez VAT).
+          </p>
+          <p className="mt-1 text-zinc-500">
+            Hub nie liczy tych wpłat w przychodzie ani w projektach, ale urząd rozlicza je razem z resztą firmy: ich VAT jest doliczony poniżej, a ryczałt od
+            nich siedzi w kwocie „Ryczałt zapłacony”.
+          </p>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Tile label="ZUS z banku" value={money(summary.zus)} hint={`w kosztach stałych huba: ${money(zusHub)}`} />
@@ -189,7 +207,9 @@ export function TaxesPanel({
                   </td>
                   <td className={cell}>{month.flatTaxPaid === null ? dash : money(month.flatTaxPaid)}</td>
                   <td className={`${cell} text-zinc-400`}>{taxEstimate.get(month.month) ? money(taxEstimate.get(month.month)!) : dash}</td>
-                  <td className={cell}>{month.vatApplies && month.vatSales ? money(month.vatSales) : dash}</td>
+                  <td className={cell} title={month.vatOutside ? `z faktur ${money(month.vatSales)} + z sesji ${money(month.vatOutside)}` : undefined}>
+                    {month.vatApplies && (month.vatSales || month.vatOutside) ? money(month.vatSales + month.vatOutside) : dash}
+                  </td>
                   <td className={`${cell} text-zinc-400`}>{month.vatApplies && month.vatDeductible ? money(month.vatDeductible) : dash}</td>
                   <td className={cell}>{!month.vatApplies || month.vatPaid === null ? dash : money(month.vatPaid)}</td>
                 </tr>
@@ -213,6 +233,9 @@ export function TaxesPanel({
             <dl className="space-y-1 text-xs">
               <dt className="text-[11px] uppercase tracking-wide text-zinc-500">Realnie (wyciąg z banku)</dt>
               <div className="flex justify-between"><dd className="text-zinc-400">VAT na fakturach sprzedaży</dd><dd className="tabular-nums text-zinc-200">{money(vat.sales)}</dd></div>
+              {vat.salesOutside > 0 && (
+                <div className="flex justify-between"><dd className="text-zinc-400">+ VAT z sesji (sprzedaż poza KSeF)</dd><dd className="tabular-nums text-zinc-200">{money(vat.salesOutside)}</dd></div>
+              )}
               <div className="flex justify-between"><dd className="text-zinc-400">− wpłacone do urzędu</dd><dd className="tabular-nums text-zinc-200">{money(vat.paid)}</dd></div>
               <div className="flex justify-between border-t border-white/10 pt-1"><dd className="text-zinc-200">= odliczone naprawdę</dd><dd className="tabular-nums font-semibold text-emerald-300">{money(vat.deductedReal)}</dd></div>
             </dl>
@@ -225,10 +248,12 @@ export function TaxesPanel({
             </dl>
           </div>
         )}
+        {vat.months.length > 0 && Math.abs(gap) < 1 && <p className="mt-3 text-xs text-emerald-300">Obie liczby się zgadzają.</p>}
         {vat.months.length > 0 && Math.abs(gap) >= 1 && (
           <p className="mt-3 rounded-md border border-amber-500/15 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-200/90">
-            Różnica między tymi liczbami: {money(Math.abs(gap))}. Możliwe powody: faktury zakupu, które nie dotyczą firmy (oznacz je w KSeF → Faktury →
-            Zakupy), VAT od sprzedaży, której nie ma w KSeF (np. osobom prywatnym), VAT od usług z zagranicy, zaokrąglenia i przesunięcia między miesiącami.
+            Różnica między tymi liczbami: {money(Math.abs(gap))}. Możliwe powody: faktury zakupu, które nie dotyczą firmy albo są odliczane tylko w części
+            (oznacz je w KSeF → Faktury → Zakupy), wpłaty za sesje od nadawców jeszcze nieoznaczonych „Pomijaj tego nadawcę”, zakupy, których nie ma w KSeF (paragony z NIP-em, faktury z zagranicy),
+            zaokrąglenia deklaracji do pełnych złotych i przesunięcia między miesiącami.
           </p>
         )}
       </section>

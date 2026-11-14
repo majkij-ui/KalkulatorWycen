@@ -183,3 +183,10 @@ Checked read-only on M.J.'s real file for 2026: every sales invoice past its ter
 the statement equals the hub's entries to the grosz, and several payment days in projects differ from the bank.
 The two VAT numbers differ; fuel and the invoices his accountant does not book explain part of it, VAT on sales
 outside KSeF most of the rest.
+
+**Sessions and VAT (M.J., 2026-11-14, later the same day):** the sessions were sold with VAT, and the transfer is
+123 % of the price. Transfers from senders marked „Pomijaj tego nadawcę" are therefore treated as sales outside
+KSeF: still not revenue of the hub, but their VAT (transfer × 23/123, only from June 2026) is added to the sales
+VAT in „Podatki", and a note there says how much came in. With it the two VAT numbers agree to within the
+rounding of a few declarations and purchases that never reach KSeF.
+
