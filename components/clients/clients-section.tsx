@@ -72,7 +72,7 @@ function readSort(): ClientSort {
 function ProfitLine({ revenue, profit, className = '' }: { revenue: number; profit: number; className?: string }) {
   if (revenue <= 0) return null
   return (
-    <div className={`text-[11px] ${profit < 0 ? 'text-rose-400' : 'text-emerald-400/80'} ${className}`} style={mono}>
+    <div className={`whitespace-nowrap text-[11px] ${profit < 0 ? 'text-rose-400' : 'text-emerald-400/80'} ${className}`} style={mono}>
       zysk {pln(profit)} · {pct((profit / revenue) * 100)}
     </div>
   )
@@ -118,7 +118,7 @@ function ClientRow({ client, inPeriod, onOpen }: { client: ClientSummary; inPeri
         <div className="text-[10px] uppercase tracking-wide text-zinc-600">ostatni projekt</div>
         <div style={mono}>{formatDate(client.lastDate)}</div>
       </div>
-      <div className="w-32 shrink-0 text-right">
+      <div className="w-40 shrink-0 text-right">
         <div className={`text-sm ${client.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`} style={mono}>
           {pln(client.revenue)}
         </div>
@@ -180,7 +180,7 @@ function GroupRow({
           <div className="text-[10px] uppercase tracking-wide text-zinc-600">ostatni projekt</div>
           <div style={mono}>{formatDate(summary.lastDate)}</div>
         </div>
-        <div className="w-32 shrink-0 text-right">
+        <div className="w-40 shrink-0 text-right">
           <div className={`text-sm ${summary.revenue > 0 ? 'font-semibold text-zinc-100' : 'text-zinc-600'}`} style={mono}>
             {pln(summary.revenue)}
           </div>
@@ -205,7 +205,7 @@ function GroupRow({
                     ? `${m.jobCount} ${plural(m.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`
                     : `${m.projectCount} proj. · ${m.jobCount} ${plural(m.jobCount, 'zlecenie', 'zlecenia', 'zleceń')}`}
               </span>
-              <span className="w-32 shrink-0 text-right" style={mono}>
+              <span className="w-40 shrink-0 text-right" style={mono}>
                 <span className="text-zinc-300">{m.empty ? '' : pln(m.revenue)}</span>
                 {!m.empty && <ProfitLine revenue={m.revenue} profit={m.profit} />}
               </span>
@@ -285,6 +285,8 @@ export function ClientsSection({
   }
 
   const rows = useMemo(() => clientListRows(projects, groups, today, money, period), [projects, groups, today, money, period])
+  // „Dawno bez zlecenia" opisuje klienta dziś, nie okres — liczymy po wszystkich.
+  const allRows = useMemo(() => clientListRows(projects, groups, today, money), [projects, groups, today, money])
   const years = useMemo(() => clientPeriodYears(projects, new Date().getFullYear(), money), [projects, money])
   const visible = useMemo(() => listClientRows(rows, sort, query), [rows, sort, query])
   const directory = useMemo(() => clientDirectory(projects), [projects])
@@ -333,9 +335,9 @@ export function ClientsSection({
       clientProfit: summaries.reduce((sum, c) => sum + c.profit, 0),
       noClientJobs: noClient.length,
       noClientRevenue: noClient.reduce((sum, p) => sum + revenueInPeriod(moneyOf(p, money), period), 0),
-      nudges: summaries.filter((c) => c.nudge).length,
+      nudges: allRows.filter((r) => r.summary.nudge).length,
     }
-  }, [projects, rows, money, period])
+  }, [projects, rows, allRows, money, period])
 
   const open = (key: string | null) => {
     setOpenKey(key)
