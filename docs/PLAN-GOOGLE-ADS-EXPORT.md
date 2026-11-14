@@ -214,3 +214,20 @@ Gotowe: kwalifikacja, plik CSV, zapis wysłanych i okno w Marketing → Leady. B
   przeżywa przeładowanie, „Potwierdź import" zapisuje `confirmed` i rekord zostaje.
 - Niesprawdzone, do głównej sesji na buildzie produkcyjnym: natywne „Zapisz jako…" i `writeFile` (anulowanie nic nie
   zapisuje, udany zapis dopisuje `pending`), odczyt `ads-exports.json` po restarcie aplikacji, wygląd okna w Tauri.
+
+## 11. Marketing: wszystkie kampanie (14.11.2026)
+
+Pierwsza opcja selektora w Marketingu. Liczone na żywo z danych (`summarizeCampaigns` w `lib/marketing-calc.ts`), nic nie jest zapisane; wybór pamięta localStorage (`nonoise-marketing-campaign`).
+
+| Przypadek | Zachowanie |
+|---|---|
+| Wskaźniki (CTR, CPC, koszt leada, klik→lead, ROAS, ROI, koszt zlecenia) | z sum liczników i mianowników, nigdy ze średniej wskaźników kampanii; reguły miesięcy jak w widoku jednej kampanii |
+| Miesiąc bez odczytu z panelu | szacunek z budżetu, oznaczony ~ |
+| Projekt z leadów dwóch kampanii | liczony raz (po id) w powiązanych, wycenach, wygranych, przegranych, przychodzie, zysku i otwartych wycenach |
+| Leady spoza kampanii | nie wchodzą, mają własną opcję |
+| Okno | od pierwszego startu do ostatniego końca (otwarte, gdy któraś trwa); dni emisji = suma dni kampanii |
+| Tabela miesięcy | wiersz na kampanię i miesiąc, z nazwą, po miesiącu; tylko do odczytu (odczyty wpisuje się w widoku jednej kampanii) |
+| Panel „Ruch" | bez budżetu dziennego i wskazówek o budżecie |
+| Ustawienia kampanii, dodawanie miesięcy | ukryte w widoku zbiorczym |
+
+Dane prawdziwe (tylko odczyt, 14.11.2026): wydatki 10 705,21 zł (w tym 1 120 zł szac. za 11.2026), 859 kliknięć, 12 832 wyświetleń, 36 leadów (32 realne), 16 projektów, 4 wygrane, 11 przegranych, przychód 129 324,51 zł, zysk 51 956,92 zł, ROAS 12,08, ROI 3,85.

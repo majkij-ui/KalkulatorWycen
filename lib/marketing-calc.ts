@@ -150,6 +150,9 @@ export interface CampaignMonth {
   /** Pozycje kosztów za ten miesiąc (zwykle jedna). */
   costs: FixedCost[]
   leads: LeadCounts
+  /** Tylko w widoku „Wszystkie kampanie": z której kampanii jest ten wiersz. */
+  campaignId?: string
+  campaignName?: string
 }
 
 function sumDefined(values: (number | undefined)[]): number | null {
@@ -260,23 +263,65 @@ function ratio(a: number, b: number | null): number | null {
   return b && b > 0 ? a / b : null
 }
 
-export function summarizeCampaign(
-  campaign: Campaign,
-  params: {
-    costs: FixedCost[]
-    leads: Lead[]
-    projects: Project[]
-    /** Wydarzenia (do wykrycia wysłanych wycen). */
-    quoteSentProjectIds?: ReadonlySet<string>
-    today: string
-    /** Pieniądze projektów z pętli (U1); brak = plan z `financials`. */
-    money?: MoneyById | null
-  }
+export interface SummaryParams {
+  costs: FixedCost[]
+  leads: Lead[]
+  projects: Project[]
+  /** Wydarzenia (do wykrycia wysłanych wycen). */
+  quoteSentProjectIds?: ReadonlySet<string>
+  today: string
+  /** Pieniądze projektów z pętli (U1); brak = plan z `financials`. */
+  money?: MoneyById | null
+}
+
+export function summarizeCampaign(campaign: Campaign, params: SummaryParams): CampaignSummary {
+  return buildSummary(
+    campaignWindow(campaign, params.today),
+    campaignMonths(campaign, params.costs, params.leads, params.today),
+    campaignLeads(params.leads, campaign.id),
+    params
+  )
+}
+
+/**
+ * Wszystkie kampanie naraz: te same liczby co w widoku jednej kampanii, ale
+ * liczone z sum liczników i mianowników (nigdy ze średniej wskaźników).
+ * Leady spoza kampanii nie wchodzą (mają własny wybór). Projekt z leadów
+ * dwóch kampanii liczy się raz. Wiersze miesięcy: jeden na kampanię i miesiąc.
+ */
+export function summarizeCampaigns(campaigns: Campaign[], params: SummaryParams): CampaignSummary {
+  const { today } = params
+  const windows = campaigns.map((c) => campaignWindow(c, today)).filter((w): w is CampaignWindow => !!w)
+  const window: CampaignWindow | null = windows.length
+    ? {
+        start: windows.reduce((a, w) => (w.start < a ? w.start : a), windows[0].start),
+        end: windows.reduce((a, w) => (w.end > a ? w.end : a), windows[0].end),
+        days: windows.reduce((sum, w) => sum + w.days, 0),
+        running: windows.some((w) => w.running),
+        upcoming: windows.every((w) => w.upcoming),
+        ended: windows.every((w) => w.ended),
+      }
+    : null
+  const months = campaigns
+    .flatMap((c) =>
+      campaignMonths(c, params.costs, params.leads, today).map((m) => ({
+        ...m,
+        campaignId: c.id,
+        campaignName: c.name,
+      }))
+    )
+    .sort((a, b) => a.month.localeCompare(b.month) || (a.campaignName ?? '').localeCompare(b.campaignName ?? '', 'pl'))
+  const own = campaigns.flatMap((c) => campaignLeads(params.leads, c.id))
+  return buildSummary(window, months, own, params)
+}
+
+function buildSummary(
+  window: CampaignWindow | null,
+  months: CampaignMonth[],
+  own: Lead[],
+  params: SummaryParams
 ): CampaignSummary {
-  const { costs, projects, today } = params
-  const window = campaignWindow(campaign, today)
-  const months = campaignMonths(campaign, costs, params.leads, today)
-  const own = campaignLeads(params.leads, campaign.id)
+  const { projects } = params
   const leads = countLeads(own)
 
   const spend = months.reduce((sum, m) => sum + m.effectiveSpend, 0)

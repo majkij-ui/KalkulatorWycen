@@ -89,6 +89,41 @@ export function CampaignHeader({
   )
 }
 
+export function AllCampaignsHeader({ summary, count: n }: { summary: CampaignSummary; count: number }) {
+  const w = summary.window
+  return (
+    <section className="mb-4 rounded-xl border border-white/5 bg-zinc-900/40 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-semibold text-white" style={archivo}>
+          Wszystkie kampanie
+        </h2>
+        <span className="text-xs text-zinc-500">
+          {n} {plural(n, 'kampania', 'kampanie', 'kampanii')}
+        </span>
+        {w?.running && (
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+            Trwa
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-zinc-400">
+        {w ? shortDate(w.start) : 'brak daty startu'}
+        {' – '}
+        {w && !w.running ? shortDate(w.end) : 'trwa'}
+        {w && w.days > 0 && (
+          <span className="text-zinc-500">
+            {' · '}
+            {w.days} {plural(w.days, 'dzień', 'dni', 'dni')} emisji łącznie
+          </span>
+        )}
+      </p>
+      <p className="mt-1 text-[11px] text-zinc-600">
+        Suma wszystkich kampanii bez leadów spoza kampanii. Odczyty z panelu wpisujesz w widoku pojedynczej kampanii.
+      </p>
+    </section>
+  )
+}
+
 // ── Kafle KPI ────────────────────────────────────────────────────────────────
 
 function Tile({
@@ -213,10 +248,10 @@ export function CampaignFunnel({ summary }: { summary: CampaignSummary }) {
 
 // ── Ruch i wnioski ───────────────────────────────────────────────────────────
 
-function insightsFor(summary: CampaignSummary, campaign: Campaign): string[] {
+function insightsFor(summary: CampaignSummary, campaign: Campaign | null): string[] {
   const s = summary
   const out: string[] = []
-  if (campaign.budgets.length === 0) {
+  if (campaign && campaign.budgets.length === 0) {
     out.push('Wpisz budżet dzienny z panelu w ustawieniach kampanii — bez niego miesiące bez odczytu liczą się jako 0 zł.')
   }
   if (s.estimatedMonths.length) {
@@ -242,7 +277,8 @@ function insightsFor(summary: CampaignSummary, campaign: Campaign): string[] {
   return out
 }
 
-export function CampaignTraffic({ summary, campaign }: { summary: CampaignSummary; campaign: Campaign }) {
+/** `campaign` = null: widok „Wszystkie kampanie" (bez budżetu dziennego). */
+export function CampaignTraffic({ summary, campaign }: { summary: CampaignSummary; campaign: Campaign | null }) {
   const s = summary
   const rows = [
     { label: 'Wyświetlenia', value: count(s.impressions) },
@@ -290,6 +326,47 @@ export interface MonthReading {
 
 const cellInput =
   'h-7 w-full rounded border border-transparent bg-transparent px-1.5 text-right text-xs text-zinc-100 outline-none [color-scheme:dark] placeholder:text-zinc-600 hover:border-white/10 focus:border-white/30 focus:bg-black/40'
+
+function ReadOnlyMonthRow({ month }: { month: CampaignMonth }) {
+  const ctr = month.clicks !== null && month.impressions ? month.clicks / month.impressions : null
+  const cpc = month.spend !== null && month.clicks ? month.spend / month.clicks : null
+  const cpl = month.leads.real ? month.effectiveSpend / month.leads.real : null
+  return (
+    <tr className="border-t border-white/[0.04]">
+      <td className="py-1 pr-2 text-zinc-300">
+        {monthShort(month.month)}
+        <span className="ml-1.5 text-[11px] text-zinc-500">{month.campaignName || 'Kampania bez nazwy'}</span>
+      </td>
+      <td className="px-1 text-right text-zinc-500" style={mono}>
+        {month.budget ? pln(month.budget) : '—'}
+      </td>
+      <td className={`px-2.5 text-right ${month.estimated ? 'text-zinc-500' : 'text-zinc-100'}`} style={mono}>
+        {month.estimated ? '~' : ''}
+        {pln(month.effectiveSpend)}
+      </td>
+      <td className="px-2.5 text-right text-zinc-300" style={mono}>
+        {count(month.clicks)}
+      </td>
+      <td className="px-2.5 text-right text-zinc-300" style={mono}>
+        {count(month.impressions)}
+      </td>
+      <td className="px-1 text-right text-zinc-400" style={mono}>
+        {pct(ctr, 2)}
+      </td>
+      <td className="px-1 text-right text-zinc-400" style={mono}>
+        {pln(cpc, 2)}
+      </td>
+      <td className="px-1 text-right text-zinc-300" style={mono}>
+        {month.leads.real}
+        <span className="text-zinc-600">/{month.leads.total}</span>
+      </td>
+      <td className={`pl-1 text-right ${month.estimated ? 'text-zinc-500' : 'text-zinc-100'}`} style={mono}>
+        {month.estimated && cpl !== null ? '~' : ''}
+        {pln(cpl)}
+      </td>
+    </tr>
+  )
+}
 
 function MonthRow({
   month,
@@ -379,7 +456,8 @@ export function CampaignMonths({
   onSave,
 }: {
   summary: CampaignSummary
-  onSave: (month: CampaignMonth, reading: MonthReading) => Promise<void>
+  /** Brak = tylko do odczytu (widok „Wszystkie kampanie"). */
+  onSave?: (month: CampaignMonth, reading: MonthReading) => Promise<void>
 }) {
   if (!summary.months.length) return null
   return (
@@ -387,7 +465,9 @@ export function CampaignMonths({
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Miesiące</h3>
         <p className="text-[11px] text-zinc-600">
-          Wpisz odczyt z panelu. Wydatki trafiają do Finansów jako koszt marketingu. Puste = szacunek z budżetu (~).
+          {onSave
+            ? 'Wpisz odczyt z panelu. Wydatki trafiają do Finansów jako koszt marketingu. Puste = szacunek z budżetu (~).'
+            : 'Tylko odczyt. Odczyty z panelu wpisujesz w widoku pojedynczej kampanii. ~ = szacunek z budżetu.'}
         </p>
       </div>
       <div className="-mx-1 overflow-x-auto">
@@ -408,9 +488,13 @@ export function CampaignMonths({
             </tr>
           </thead>
           <tbody>
-            {summary.months.map((m) => (
-              <MonthRow key={m.month} month={m} onSave={onSave} />
-            ))}
+            {summary.months.map((m) =>
+              onSave ? (
+                <MonthRow key={m.month} month={m} onSave={onSave} />
+              ) : (
+                <ReadOnlyMonthRow key={`${m.campaignId}-${m.month}`} month={m} />
+              )
+            )}
           </tbody>
           <tfoot>
             <tr className="border-t border-white/10 font-semibold text-zinc-200">
