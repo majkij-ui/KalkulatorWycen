@@ -230,6 +230,13 @@ planned tax) instead of the money register behind the Finanse tiles; it now uses
 `tsc` clean; real data read-only: 36 quotes and every Finance year total identical, 2026 fixed costs back to the
 morning's figure. Checked in the installed app: ZUS tile and „Podatki".
 
+**Merged and installed 2026-11-14, Podatki compares invoiced with invoiced:** the hub's flat tax is now the tax on
+invoice pieces plus the sessions (8.5 %), without work in progress or barters; a „Notki podatkowe" section lists
+what does not add up (docs/PLAN-KSEF.md §10). No conflicts. 1,153 tests, `tsc` clean. Real data, read-only: 36
+quotes and every Finance year total identical; data files unchanged. Checked in the installed app: the table and
+the notes. Waiting for M.J.: whether the sessions also enter the hub's revenue, and the accountant's flat-tax
+calculation for the months that differ.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
