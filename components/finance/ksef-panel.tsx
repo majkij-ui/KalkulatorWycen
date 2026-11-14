@@ -6,12 +6,13 @@
  *    Hub proponuje dopasowanie i rozwiązanie różnic, a każdą rzecz da się
  *    zmienić ręcznie: projekt faktury, wpis huba, który zastępuje, różnicę kwot.
  *  - „Faktury": lista faktur sprzedaży i zakupu z sumami okresu i podglądem.
- * Kopię faktur pobiera `npm run data -- ksef-sync`; ten ekran ją czyta. Nic nie
- * zmienia się samo — dane projektu zapisuje dopiero „Zastosuj".
+ * Kopię faktur pobiera przycisk „Pobierz z KSeF" (`ksef-app-sync.ts`; w terminalu to samo
+ * robi `npm run data -- ksef-sync`). Nic w projektach nie zmienia się samo — dane
+ * projektu zapisuje dopiero „Zastosuj".
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, CircleSlash, FileText, Loader2, RefreshCw, Undo2 } from 'lucide-react'
+import { AlertTriangle, Check, CircleSlash, Download, FileText, Loader2, RefreshCw, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ClientDetails } from '@/lib/client-details'
 import { listClientDetails, mutateClientDetails } from '@/lib/client-details-store'
@@ -35,6 +36,8 @@ import {
   type RowStatus,
 } from '@/lib/ksef-reconcile'
 import { listKsefDecisions, readKsefCache, removeKsefDecision, upsertKsefDecision } from '@/lib/ksef-store'
+import { syncProgressText, syncSummary } from '@/lib/ksef-app-bridge'
+import { canSyncKsefHere, KSEF_TOKEN_COMMAND, syncKsefFromApp } from '@/lib/ksef-app-sync'
 import type { ProjectMoney } from '@/lib/money-loop'
 import { pln } from '@/lib/money-loop-labels'
 import { plural } from '@/lib/pl-plural'
@@ -495,9 +498,14 @@ export function KsefPanel({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Pobieranie z KSeF: co się dzieje teraz, czym się skończyło i czego brakuje, żeby ruszyć. */
+  const [syncing, setSyncing] = useState<string | null>(null)
+  const [syncProblem, setSyncProblem] = useState<{ reason: 'no-nip' | 'no-token' | 'error' | 'partial'; message: string } | null>(null)
+  const [nipDraft, setNipDraft] = useState('')
+  const canSync = canSyncKsefHere()
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     const [readSales, readPurchases, savedDecisions, savedDetails] = await Promise.all([
       readKsefCache('sale'),
       readKsefCache('purchase'),
@@ -515,6 +523,28 @@ export function KsefPanel({
   useEffect(() => {
     void load()
   }, [load])
+
+  const syncFromKsef = async () => {
+    setNotice(null)
+    setSyncProblem(null)
+    setSyncing('Łączę się z KSeF…')
+    const outcome = await syncKsefFromApp({
+      nip: nipDraft,
+      onProgress: (progress) => {
+        const text = syncProgressText(progress)
+        if (text) setSyncing(text)
+      },
+    })
+    if (outcome.ok) {
+      const summary = syncSummary(outcome.result)
+      await load(true)
+      setNotice(summary.text)
+      if (summary.warning) setSyncProblem({ reason: 'partial', message: summary.warning })
+    } else {
+      setSyncProblem({ reason: outcome.reason, message: outcome.message })
+    }
+    setSyncing(null)
+  }
 
   const inPeriod = useCallback((value: string) => isInPeriod(value, period), [period])
   const result = useMemo(
@@ -674,16 +704,59 @@ export function KsefPanel({
               {fetched
                 ? `Pobrane ${day(fetched.fetchedAt)} ${new Date(fetched.fetchedAt).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}: ${sales?.invoices.length ?? 0} faktur sprzedaży i ${purchases?.invoices.length ?? 0} zakupu od ${day(fetched.from)}.`
                 : 'Faktur jeszcze nie pobrano.'}{' '}
-              Nowe faktury pobiera polecenie <code className="text-zinc-300">npm run data -- ksef-sync</code> w terminalu (albo Claude na czacie), potem
-              „Odśwież”. KSeF jest tu tylko czytany — faktury wystawiasz w panelu biura rachunkowego.
+              {canSync ? (
+                <>KSeF jest tu tylko czytany — faktury wystawiasz w panelu biura rachunkowego.</>
+              ) : (
+                <>
+                  To podgląd w przeglądarce: faktury z KSeF pobiera przycisk w aplikacji albo polecenie{' '}
+                  <code className="text-zinc-300">npm run data -- ksef-sync</code>.
+                </>
+              )}
             </p>
             {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
           </div>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>
-            <RefreshCw className="size-3.5" />
-            Odśwież
-          </Button>
+          {canSync ? (
+            <Button size="sm" disabled={busy || syncing !== null} onClick={() => void syncFromKsef()}>
+              {syncing !== null ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              Pobierz z KSeF
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>
+              <RefreshCw className="size-3.5" />
+              Odśwież
+            </Button>
+          )}
         </div>
+        {syncing !== null && <p className="mt-2 text-xs text-zinc-400">{syncing}</p>}
+        {syncProblem && syncing === null && (
+          <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs text-amber-200">
+            <p>{syncProblem.message}</p>
+            {syncProblem.reason === 'no-token' && (
+              <code className="mt-1.5 block select-all rounded bg-black/30 px-2 py-1 text-zinc-200">{KSEF_TOKEN_COMMAND}</code>
+            )}
+            {syncProblem.reason === 'no-nip' && (
+              <form
+                className="mt-2 flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void syncFromKsef()
+                }}
+              >
+                <input
+                  value={nipDraft}
+                  onChange={(event) => setNipDraft(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="NIP firmy"
+                  aria-label="NIP firmy"
+                  className="h-8 w-40 rounded-md border border-white/10 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none focus:border-white/30"
+                />
+                <Button type="submit" size="sm" variant="outline" disabled={nipDraft.replace(/\D/g, '').length !== 10}>
+                  Pobierz
+                </Button>
+              </form>
+            )}
+          </div>
+        )}
         {fetched && (
           <div className="mt-3 inline-flex rounded-lg border border-white/10 p-0.5 text-sm" role="tablist" aria-label="Widok KSeF">
             {(

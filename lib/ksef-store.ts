@@ -3,17 +3,17 @@
 /**
  * Odczyt kopii KSeF i zapis decyzji ekranu „Zgodność z KSeF".
  *
- * `ksef/sprzedaz.json` i `ksef/zakupy.json` pisze tylko `npm run data -- ksef-sync`;
- * aplikacja je czyta. Decyzje (faktura przypisana ręcznie, projekt bez faktury) aplikacja
- * trzyma we własnym `ksef-decisions.json`.
+ * `ksef/sprzedaz.json` i `ksef/zakupy.json` zapisuje synchronizacja z KSeF: przycisk w
+ * aplikacji (`ksef-app-sync.ts`) albo `npm run data -- ksef-sync`. Decyzje (faktura
+ * przypisana ręcznie, projekt bez faktury) aplikacja trzyma we własnym `ksef-decisions.json`.
  *
  * W przeglądarce (podgląd deweloperski) kopia to localStorage `nonoise-ksef-v1`.
  */
 
-import { BaseDirectory, exists, readTextFile } from '@tauri-apps/plugin-fs'
+import { BaseDirectory, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { isTauriRuntime } from './storage'
 import { createCollectionStore } from './v3-store'
-import { KSEF_DIR, KSEF_PURCHASES_FILE, KSEF_SALES_FILE, parseKsefCache, type KsefCache } from './ksef-cache'
+import { KSEF_DIR, KSEF_PURCHASES_FILE, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache, type KsefCache } from './ksef-cache'
 import type { KsefDirection } from './ksef-invoices'
 import { KSEF_DECISIONS_FILE, ksefDecisionSchema, type KsefDecision } from './ksef-reconcile'
 
@@ -35,6 +35,13 @@ export async function readKsefCache(direction: KsefDirection = 'sale'): Promise<
   } catch (error) {
     return { cache: null, error: `nie da się odczytać kopii KSeF (${String(error)})` }
   }
+}
+
+/** Zapis kopii po synchronizacji z aplikacji (tylko w aplikacji; podgląd w przeglądarce nie synchronizuje). */
+export async function writeKsefCache(direction: KsefDirection, cache: KsefCache): Promise<void> {
+  await mkdir(KSEF_DIR, { baseDir: BaseDirectory.AppData, recursive: true })
+  const path = `${KSEF_DIR}/${direction === 'sale' ? KSEF_SALES_FILE : KSEF_PURCHASES_FILE}`
+  await writeTextFile(path, JSON.stringify(ksefCacheFile(cache), null, 2), { baseDir: BaseDirectory.AppData })
 }
 
 const decisions = createCollectionStore<KsefDecision>({

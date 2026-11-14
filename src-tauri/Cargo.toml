@@ -25,3 +25,5 @@ tauri = { version = "2.10.3", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
+# KSeF tylko do odczytu (src/ksef.rs). TLS systemowy, bez dodatkowych bibliotek.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
