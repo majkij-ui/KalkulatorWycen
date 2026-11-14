@@ -237,6 +237,13 @@ quotes and every Finance year total identical; data files unchanged. Checked in 
 the notes. Waiting for M.J.: whether the sessions also enter the hub's revenue, and the accountant's flat-tax
 calculation for the months that differ.
 
+**Merged and installed 2026-11-14, Podsumowanie and sessions note:** the first Finanse tab is „Podsumowanie"; under
+the tiles one note gives the sessions' total, income tax and VAT for periods that have them (the tiles stay video
+production only, as M.J. decided). In „Podatki" the ZUS tile shows paid next to the hub's figure and ZUS paid from
+another account reads like a statement transfer. No conflicts. 1,153 tests, `tsc` clean. Real data, read-only: 36
+quotes and every Finance year total identical; data files unchanged. Checked in the installed app: the tab name
+and the note. „Podatki" after this change was checked in the browser preview only.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
