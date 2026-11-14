@@ -81,7 +81,7 @@ import { createKsefClient, KSEF_BASE_URLS, type KsefEnvironment } from '../lib/k
 import type { KsefDirection } from '../lib/ksef-invoices'
 import { KSEF_DIRECTIONS, runKsefSync } from '../lib/ksef-sync'
 import { KSEF_DIR, KSEF_PURCHASES_FILE, KSEF_SALES_FILE, ksefCacheFile, parseKsefCache } from '../lib/ksef-cache'
-import { KSEF_FROM } from '../lib/ksef-reconcile'
+import { KSEF_FROM, ksefDecisionSchema } from '../lib/ksef-reconcile'
 import { companySchema } from '../lib/company-settings-core'
 import { clientDetailsSchema } from '../lib/client-details'
 import {
@@ -115,6 +115,8 @@ const SCHEMAS: Record<string, z.ZodType<any, z.ZodTypeDef, any>> = {
   'company.json': companySchema,
   // Nazwa z faktury i NIP klienta (KSeF); nazwa wyświetlana to pole `client` projektów.
   'client-details.json': clientDetailsSchema,
+  // Decyzje ekranu KSeF, wyciągu z banku i podatków (np. faktura zakupu, która nie dotyczy firmy).
+  'ksef-decisions.json': ksefDecisionSchema,
 }
 
 type Item = Record<string, unknown> & { id: string }
