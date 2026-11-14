@@ -362,6 +362,7 @@ test('VAT: przelew z następnego miesiąca rozlicza poprzedni; paliwo w połowie
   const [may, june, july, august] = summary.months
   assert.deepEqual([may.vatApplies, may.flatTaxPaid, may.zus], [false, 200, 0])
   assert.deepEqual([june.vatPaid, june.flatTaxPaid, june.zus], [10100, 700, 1400.1])
+  assert.deepEqual([may.flatTaxTransfers, june.flatTaxTransfers, august.flatTaxTransfers], [[200], [700], []])
   assert.deepEqual([july.vatPaid, july.vatPurchases, july.vatDeductible], [2000, 1300, 1050])
   // Wrzesień jest w wyciągu do 25., przelewu VAT nie ma: zero zapłacone, nie „nie wiadomo".
   assert.deepEqual([august.vatPaid, august.flatTaxPaid], [0, 0])
@@ -414,7 +415,9 @@ test('sesje: wpłaty od pomijanych nadawców to sprzedaż poza KSeF; VAT to 23/1
     decisions,
   })
   assert.deepEqual(summary.months.map((month) => [month.outsideGross, month.vatOutside]), [[180, 0], [246, 46], [123, 23]])
-  assert.deepEqual(summary.outside, { count: 3, gross: 549, net: 480, vat: 69 })
+  // Ryczałt od sesji: 8,5 % netto (180 w maju bez VAT, 200 i 100 netto w czerwcu i lipcu).
+  assert.deepEqual(summary.months.map((month) => month.flatTaxOutside), [15.3, 17, 8.5])
+  assert.deepEqual(summary.outside, { count: 3, gross: 549, net: 480, vat: 69, flatTax: 40.8 })
   // Odliczone naprawdę: VAT z faktur 11 700 + z sesji 69 − wpłacone 11 400.
   assert.deepEqual([summary.vat.salesOutside, summary.vat.deductedReal], [69, 369])
 })

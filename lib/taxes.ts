@@ -24,6 +24,12 @@ import type { KsefDecision } from './ksef-reconcile'
 export const VAT_PAYER_SINCE = '2026-06'
 /** Stawka VAT sprzedaży poza KSeF (sesje): wpłata jest kwotą brutto. */
 const OUTSIDE_VAT_RATE = 0.23
+/**
+ * Ryczałt od sesji. 8,5 % to stawka usług edukacyjnych (PKWiU dział 85, w tym coaching jako 85.59),
+ * bez progu 100 tys. zł. Gdyby księgowa kwalifikowała je jako doradztwo w zarządzaniu (70.22),
+ * byłoby 15 %, a jako opiekę zdrowotną (dział 86) 14 % — wtedy zmienić tutaj.
+ */
+export const OUTSIDE_FLAT_TAX_PERCENT = 8.5
 
 const round = (value: number) => Math.round(value * 100) / 100
 const CENT = 0.005
@@ -44,9 +50,13 @@ const lastDay = (month: string) => {
 }
 
 /** Suma przelewów danego rodzaju w miesiącu operacji (kwota dodatnia). */
-function paidIn(operations: BankOperation[], kind: BankOperation['kind'], month: string): { total: number; days: string[] } {
+function paidIn(operations: BankOperation[], kind: BankOperation['kind'], month: string): { total: number; days: string[]; amounts: number[] } {
   const hits = operations.filter((operation) => operation.kind === kind && operation.date.startsWith(month))
-  return { total: round(hits.reduce((sum, operation) => sum - operation.amount, 0)), days: hits.map((operation) => operation.date).sort() }
+  return {
+    total: round(hits.reduce((sum, operation) => sum - operation.amount, 0)),
+    days: hits.map((operation) => operation.date).sort(),
+    amounts: hits.map((operation) => round(-operation.amount)).sort((a, b) => a - b),
+  }
 }
 
 /** Czy wyciągi obejmują miesiąc co najmniej do dnia `untilDay` (np. 25. dla VAT). */
@@ -129,6 +139,10 @@ export interface TaxMonth {
   zus: number
   /** Ryczałt i VAT przelane w NASTĘPNYM miesiącu, czyli za ten miesiąc; `null` = wyciąg tam nie sięga. */
   flatTaxPaid: number | null
+  /** Kwoty poszczególnych przelewów ryczałtu za ten miesiąc (dwa = zwykle dopłata albo korekta). */
+  flatTaxTransfers: number[]
+  /** Ryczałt od sprzedaży poza KSeF (sesje): netto wpłat tego miesiąca × stawka. */
+  flatTaxOutside: number
   vatPaid: number | null
   /** VAT na fakturach sprzedaży wystawionych w tym miesiącu (z korektami). */
   vatSales: number
@@ -162,7 +176,7 @@ export interface TaxSummary {
     excluded: number
   }
   /** Sprzedaż poza KSeF w całym okresie: do notki w Finansach (hub jej nie liczy w przychodzie). */
-  outside: { count: number; gross: number; net: number; vat: number }
+  outside: { count: number; gross: number; net: number; vat: number; flatTax: number }
 }
 
 export function taxSummary(input: {
@@ -186,6 +200,10 @@ export function taxSummary(input: {
       month,
       zus: paidIn(bank.operations, 'zus', month).total,
       flatTaxPaid: flat.days.length || monthSeen(bank, after, 20) ? flat.total : null,
+      flatTaxTransfers: flat.amounts,
+      flatTaxOutside: round(
+        (outsideHere.reduce((sum, operation) => sum + operation.amount - vatInGross(operation.amount, operation.date), 0) * OUTSIDE_FLAT_TAX_PERCENT) / 100,
+      ),
       vatPaid: vat.days.length || monthSeen(bank, after, 25) ? vat.total : null,
       vatSales: round(input.sales.filter((invoice) => monthOf(invoice) === month).reduce((sum, invoice) => sum + invoice.vatAmount, 0)),
       outsideGross: round(outsideHere.reduce((sum, operation) => sum + operation.amount, 0)),
@@ -226,6 +244,12 @@ export function taxSummary(input: {
           .reduce((total, invoice) => total + (invoice.vatAmount * (100 - share.get(invoice.ksefNumber)!.percent)) / 100, 0),
       ),
     },
-    outside: { count: outside.length, gross: outsideGross, net: round(outsideGross - outsideVat), vat: outsideVat },
+    outside: {
+      count: outside.length,
+      gross: outsideGross,
+      net: round(outsideGross - outsideVat),
+      vat: outsideVat,
+      flatTax: sum(months, (month) => month.flatTaxOutside),
+    },
   }
 }

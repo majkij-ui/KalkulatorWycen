@@ -190,3 +190,11 @@ KSeF: still not revenue of the hub, but their VAT (transfer × 23/123, only from
 VAT in „Podatki", and a note there says how much came in. With it the two VAT numbers agree to within the
 rounding of a few declarations and purchases that never reach KSeF.
 
+**„Podatki" compares like with like (M.J., 2026-11-14, afternoon):** flat tax by the hub = tax on revenue pieces
+that are invoices in the hub (issue month, the project's rate) plus tax on the sessions (8.5 %, the rate of
+educational services, PKWiU 85; management consulting would be 15 %). Work in progress without an invoice is left
+out, and so is a barter (in the hub's revenue, no invoice, rate 0). A section „Notki podatkowe" at the bottom
+lists what needs attention: the sessions' totals, untaxed projects, every month where the transfer and the hub
+differ by 100 zł or more (with the revenue that difference stands for), the yearly difference, the VAT gap and
+bank transfers without an invoice. Open with M.J.: whether the sessions should also enter the hub's revenue.
+

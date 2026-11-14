@@ -1038,18 +1038,32 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     [ledger, statusById, scopeIds, period]
   )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
-  // Zakładka „Podatki": ryczałt, który hub wylicza z przychodu każdego miesiąca (ten sam rejestr co kafle
-  // Finansów: przychód w miesiącu wystawienia faktury, każdy projekt swoją stawką), i ZUS z kosztów stałych
-  // razem z ratami subskrypcji (`yearCosts`), żeby miesiąc nie liczył się dwa razy ani nie znikał.
-  const taxEstimate = useMemo(
+  // Zakładka „Podatki": ryczałt od tego, co w hubie ZAFAKTUROWANE (kawałki przychodu ze źródłem „faktura",
+  // w miesiącu wystawienia, każdy projekt swoją stawką). Praca w realizacji bez faktury tu nie wchodzi:
+  // urząd jej jeszcze nie widział (M.J., 2026-11-14).
+  const invoicedTax = useMemo(() => {
+    const months = new Set(periodMonths(period))
+    const byMonth = new Map<string, { revenue: number; tax: number }>()
+    ledger.forEach((money) => {
+      if (!money.counts) return
+      money.pieces.forEach((piece) => {
+        const month = piece.day.slice(0, 7)
+        if (piece.source !== 'invoice' || !months.has(month)) return
+        const entry = byMonth.get(month) ?? { revenue: 0, tax: 0 }
+        entry.revenue += piece.amount
+        entry.tax += (piece.amount * money.taxRatePercent) / 100
+        byMonth.set(month, entry)
+      })
+    })
+    return byMonth
+  }, [ledger, period])
+  // Projekty liczone w przychodzie bez faktury i bez podatku (barter): do notek podatkowych.
+  const untaxedProjects = useMemo(
     () =>
-      new Map(
-        periodMonths(period).map((month) => [
-          month,
-          summarizeMoney(ledger, [], { kind: 'month', year: Number(month.slice(0, 4)), index: Number(month.slice(5)) }).tax,
-        ]),
-      ),
-    [ledger, period],
+      ledger
+        .filter((money) => money.counts && money.taxRatePercent === 0 && (money.revenue ?? 0) > 0 && isInPeriod(money.anchor, period))
+        .map((money) => ({ name: projects.find((project) => project.id === money.id)?.name ?? '', amount: money.revenue ?? 0 })),
+    [ledger, projects, period],
   )
   const zusCosts = useMemo(
     () =>
@@ -1168,7 +1182,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
       ) : tab === 'ksef' ? (
         <KsefPanel period={period} periodLabel={periodLabel(period)} moneyById={ledgerById} onOpenProject={onOpenProject} />
       ) : tab === 'taxes' ? (
-        <TaxesPanel period={period} periodLabel={periodLabel(period)} taxEstimate={taxEstimate} zusCosts={zusCosts} />
+        <TaxesPanel period={period} periodLabel={periodLabel(period)} invoicedTax={invoicedTax} untaxedProjects={untaxedProjects} zusCosts={zusCosts} />
       ) : tab === 'report' ? (
         <ReportTab
           period={period}
