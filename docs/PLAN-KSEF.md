@@ -6,7 +6,7 @@
 ## 0. The hub never adds invoices to KSeF
 
 Decision of M.J., 2026-10-30: invoices are issued in the panel provided by the accounting firm. The hub only reads.
-A test in `lib/ksef-proposals.test.ts` fails if any app or script code outside `scripts/ksef-test-env.mts` touches
+A test in `lib/ksef-reconcile.test.ts` fails if any app or script code outside `scripts/ksef-test-env.mts` touches
 the invoice-sending endpoints or asks for `InvoiceWrite`. That script issues fake invoices on the Ministry's TEST
 environment only, because the read-only client needs something to read; nothing in the app imports it.
 
@@ -118,3 +118,24 @@ signal that something needs attention.
   for invoices stored since the previous one. Invoice content downloads sales first, 55 a run; invoices still
   waiting are listed with amounts and dates and stay out of the reconciliation.
 - With no copy yet, the screen shows only how to fetch it (before: every project looked like „Brak faktury").
+
+## 9. „Pobierz z KSeF” in the app (2026-11-14)
+
+M.J.: a button in the app should fetch new invoices, not a terminal command.
+
+- Finanse → KSeF has „Pobierz z KSeF”. It runs the same synchronisation as `npm run data -- ksef-sync`
+  (`lib/ksef-sync.ts`, shared by both), shows progress, then a plain summary: how many new invoices, and what is
+  left for the next run when KSeF's hourly limit stops it.
+- The window has no network access of its own. Requests go through two commands in `src-tauri/src/ksef.rs`:
+  `ksef_request` builds the address from the environment name and repeats the read-only allowlist in Rust;
+  `ksef_token` reads the token from the Keychain through the system `security` tool (no macOS prompt, because
+  that tool created the entry). The token is used only to log in and is never written anywhere.
+- `lib/ksef-client.ts` encrypts with WebCrypto (key taken from the certificate by a small DER reader), so the same
+  code runs in Node and in the window.
+- NIP: company settings, else the NIP of the existing copy, else the screen asks for it.
+- No token in the Keychain: the screen shows the one terminal command that saves it. Saving the token from inside
+  the app is not built.
+- Proven: Rust tests (allowlist; on request, a live call to KSeF's public certificates and a Keychain read),
+  `ksef-sync --dry-run` on the real account with the new encryption, unit tests of the sync, the bridge and the
+  texts. The button itself needs a built app to try.
+

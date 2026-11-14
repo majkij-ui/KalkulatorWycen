@@ -2,10 +2,10 @@
  * Kopia faktur z KSeF w folderze danych huba: sprzedaż (`ksef/sprzedaz.json`)
  * i zakupy (`ksef/zakupy.json`).
  *
- * Pisze ją WYŁĄCZNIE `npm run data -- ksef-sync` (nowy plik podmieniany w
- * całości, więc działa także przy otwartej aplikacji); aplikacja tylko czyta.
- * Decyzje użytkownika leżą osobno (`ksef-decisions.json`), więc kolejna
- * synchronizacja niczego nie zaciera.
+ * Pisze ją wyłącznie synchronizacja z KSeF (`ksef-sync.ts`): przycisk w
+ * aplikacji albo `npm run data -- ksef-sync`. Plik jest zawsze zapisywany w
+ * całości. Decyzje użytkownika leżą osobno (`ksef-decisions.json`), więc
+ * kolejna synchronizacja niczego nie zaciera.
  *
  * Moduł czysty — testy w `ksef-reconcile.test.ts`.
  */

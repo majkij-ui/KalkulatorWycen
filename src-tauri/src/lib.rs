@@ -1,3 +1,5 @@
+mod ksef;
+
 #[tauri::command]
 fn safe_local_action(name: String) -> String {
   format!(
@@ -11,7 +13,7 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![safe_local_action])
+    .invoke_handler(tauri::generate_handler![safe_local_action, ksef::ksef_token, ksef::ksef_request])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

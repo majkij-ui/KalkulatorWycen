@@ -7,9 +7,11 @@
  *
  * Token nie trafia do komunikatów błędów ani do logów. Dokumentacja:
  * https://github.com/CIRFMF/ksef-docs
+ *
+ * Moduł działa tak samo w Node (`npm run data -- ksef-sync`) i w oknie aplikacji
+ * (przycisk w Finanse → KSeF): szyfruje przez WebCrypto, bez `node:crypto`.
  */
 
-import { constants, publicEncrypt, X509Certificate } from 'node:crypto'
 import {
   normalizeKsefInvoice,
   type KsefDirection,
@@ -35,6 +37,57 @@ const READ_ONLY_ENDPOINTS: ReadonlyArray<{ method: 'GET' | 'POST'; path: RegExp 
   { method: 'GET', path: /^\/invoices\/ksef\/[\w-]+$/ },
 ]
 
+function bytesFromBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = ''
+  bytes.forEach((byte) => (binary += String.fromCharCode(byte)))
+  return btoa(binary)
+}
+
+/** Jeden element DER: znacznik, początek treści i koniec. */
+function derElement(bytes: Uint8Array, offset: number) {
+  const first = bytes[offset + 1]
+  let header = 2
+  let length = first
+  if (first & 0x80) {
+    const count = first & 0x7f
+    length = 0
+    for (let index = 0; index < count; index += 1) length = length * 256 + bytes[offset + 2 + index]
+    header = 2 + count
+  }
+  return { tag: bytes[offset], start: offset, content: offset + header, end: offset + header + length }
+}
+
+/**
+ * Klucz publiczny (SubjectPublicKeyInfo) z certyfikatu X.509 w DER. WebCrypto nie
+ * czyta certyfikatów, a klucz leży w stałym miejscu: siódme pole danych certyfikatu
+ * (po wersji, numerze, algorytmie, wystawcy, ważności i podmiocie).
+ */
+export function publicKeyInfoFromCertificate(certificate: Uint8Array): Uint8Array<ArrayBuffer> {
+  const whole = derElement(certificate, 0)
+  const data = derElement(certificate, whole.content)
+  let field = derElement(certificate, data.content)
+  if (field.tag === 0xa0) field = derElement(certificate, field.end)
+  for (let skipped = 0; skipped < 5; skipped += 1) field = derElement(certificate, field.end)
+  if (whole.tag !== 0x30 || field.tag !== 0x30 || field.end > data.end) {
+    throw new Error('KSeF: nie da się odczytać klucza publicznego z certyfikatu')
+  }
+  return certificate.slice(field.start, field.end) as Uint8Array<ArrayBuffer>
+}
+
+/** RSA-OAEP z SHA-256 (także w MGF1), jak wymaga KSeF dla tokenu. Wynik w base64. */
+export async function encryptForKsef(publicKeyInfo: Uint8Array<ArrayBuffer>, text: string): Promise<string> {
+  const key = await crypto.subtle.importKey('spki', publicKeyInfo, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
+  const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, new TextEncoder().encode(text))
+  return base64FromBytes(new Uint8Array(encrypted))
+}
+
 export function isReadOnlyEndpoint(method: string, path: string): boolean {
   const pathname = path.split('?')[0]
   return READ_ONLY_ENDPOINTS.some((endpoint) => endpoint.method === method && endpoint.path.test(pathname))
@@ -47,7 +100,8 @@ export function isReadOnlyEndpoint(method: string, path: string): boolean {
  */
 export function isReadOnlyAccessToken(accessToken: string): boolean {
   try {
-    const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString('utf8')) as { per?: unknown }
+    const body = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(new TextDecoder().decode(bytesFromBase64(body))) as { per?: unknown }
     const permissions: unknown = typeof payload.per === 'string' ? JSON.parse(payload.per) : payload.per
     return Array.isArray(permissions) && permissions.length === 1 && permissions[0] === 'InvoiceRead'
   } catch {
@@ -164,11 +218,8 @@ export function createKsefClient(options: KsefClientOptions) {
     const certificates = (await response.json()) as Array<{ certificate: string; usage: string[] }>
     const certificate = certificates.find((entry) => entry.usage.includes('KsefTokenEncryption'))
     if (!certificate) throw new Error('KSeF: brak klucza publicznego do szyfrowania tokenu')
-    const { publicKey } = new X509Certificate(Buffer.from(certificate.certificate, 'base64'))
-    return publicEncrypt(
-      { key: publicKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' },
-      Buffer.from(`${token}|${timestampMs}`, 'utf8'),
-    ).toString('base64')
+    const publicKeyInfo = publicKeyInfoFromCertificate(bytesFromBase64(certificate.certificate))
+    return encryptForKsef(publicKeyInfo, `${token}|${timestampMs}`)
   }
 
   async function authenticate(): Promise<string> {
