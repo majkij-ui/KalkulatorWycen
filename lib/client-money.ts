@@ -18,8 +18,14 @@
 import type { ProjectMoney } from './money-loop'
 import { toYear, type Project } from './project-types'
 
+/** Domyślna stawka podatku (`DEFAULT_TAX_RATE` w `realization-plan.ts`; tu kopia, by nie ciągnąć całego modułu). */
+const DEFAULT_TAX_RATE_PERCENT = 8.5
+
 /** Tyle z `ProjectMoney`, ile potrzebują Klienci i Projekty. */
-export type ClientMoney = Pick<ProjectMoney, 'revenue' | 'profit' | 'margin' | 'pieces' | 'anchor' | 'revenueBasis'>
+export type ClientMoney = Pick<
+  ProjectMoney,
+  'revenue' | 'profit' | 'margin' | 'pieces' | 'anchor' | 'revenueBasis' | 'costs' | 'taxRatePercent'
+>
 
 /** Pieniądze projektów po id (`moneyLedger` → `Map`). */
 export type MoneyById = ReadonlyMap<string, ClientMoney>
@@ -34,6 +40,12 @@ export function planMoney(project: Pick<Project, 'date' | 'financials'>): Client
     pieces: revenue === null ? [] : [{ day: project.date, amount: revenue, source: 'plan', paid: false }],
     anchor: project.date,
     revenueBasis: revenue === null ? 'none' : 'plan',
+    costs: project.financials ? project.financials.koszty : null,
+    // Jak `planFromFinancials`: stawka z planu, a bez przychodu domyślna (8,5%).
+    taxRatePercent:
+      project.financials && project.financials.sumaNetto > 0
+        ? (project.financials.podatek / project.financials.sumaNetto) * 100
+        : DEFAULT_TAX_RATE_PERCENT,
   }
 }
 

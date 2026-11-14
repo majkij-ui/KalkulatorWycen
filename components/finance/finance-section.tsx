@@ -24,6 +24,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { PeriodPicker } from '@/components/period-picker'
 import { ArrowRight, Loader2, Sparkles } from 'lucide-react'
 import {
   Bar,
@@ -45,7 +46,6 @@ import {
   periodMonths,
   summarizePeriod,
   type Period,
-  type PeriodKind,
 } from '@/lib/finance-calc'
 import { fixedCostCategory } from '@/lib/fixed-cost-categories'
 import { moneyLedger, moneyYears, openInvoices, paymentDays, summarizeMoney, type OpenInvoice } from '@/lib/money-loop'
@@ -136,110 +136,10 @@ const FINANCE_TABS = [
 ] as const
 type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
-const KIND_LABELS: Record<Exclude<PeriodKind, 'month'>, string> = {
-  year: 'Rok',
-  half: 'Półrocze',
-  quarter: 'Kwartał',
-}
-
 function compactPln(amount: number): string {
   const abs = Math.abs(amount)
   if (abs >= 1000) return `${(amount / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 0 })}k`
   return String(Math.round(amount))
-}
-
-// ── Wybór okresu ─────────────────────────────────────────────────────────────
-
-function Segmented<T extends string | number>({
-  options,
-  value,
-  onChange,
-  label,
-}: {
-  options: { value: T; label: string }[]
-  value: T
-  onChange: (next: T) => void
-  label: string
-}) {
-  return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-lg border border-white/10 bg-black/30 p-0.5">
-      {options.map((opt) => {
-        const active = opt.value === value
-        return (
-          <button
-            key={String(opt.value)}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(opt.value)}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-              active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-200'
-            }`}
-          >
-            {opt.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function PeriodPicker({
-  period,
-  years,
-  onChange,
-}: {
-  period: Period
-  years: number[]
-  onChange: (next: Period) => void
-}) {
-  const kind = period.kind === 'month' ? 'year' : period.kind
-  const indexOptions =
-    kind === 'half'
-      ? [1, 2].map((i) => ({ value: i, label: `H${i}` }))
-      : kind === 'quarter'
-        ? [1, 2, 3, 4].map((i) => ({ value: i, label: `Q${i}` }))
-        : []
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Segmented
-        label="Rodzaj okresu"
-        value={kind}
-        options={(Object.keys(KIND_LABELS) as (keyof typeof KIND_LABELS)[]).map((k) => ({
-          value: k,
-          label: KIND_LABELS[k],
-        }))}
-        onChange={(nextKind) => {
-          // Zmiana typu okresu zostaje w tym samym roku, na okresie z „dziś"
-          // (gdy to bieżący rok) albo na pierwszym okresie roku.
-          const today = new Date()
-          const base = periodContaining(today, nextKind)
-          onChange(base.year === period.year ? base : { kind: nextKind, year: period.year, index: nextKind === 'year' ? undefined : 1 })
-        }}
-      />
-      <select
-        value={period.year}
-        onChange={(e) => onChange({ ...period, year: Number(e.target.value) })}
-        aria-label="Rok"
-        className="h-8 rounded-lg border border-white/10 bg-black/30 px-2 text-xs font-medium text-zinc-200"
-      >
-        {years.map((y) => (
-          <option key={y} value={y}>
-            {y}
-          </option>
-        ))}
-      </select>
-      {indexOptions.length > 0 && (
-        <Segmented
-          label={kind === 'half' ? 'Półrocze' : 'Kwartał'}
-          value={period.index ?? 1}
-          options={indexOptions}
-          onChange={(index) => onChange({ ...period, index })}
-        />
-      )}
-    </div>
-  )
 }
 
 // ── Baner uzupełniania finansów ──────────────────────────────────────────────
