@@ -82,6 +82,7 @@ import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
 import { KsefPanel } from './ksef-panel'
+import { SessionsNote } from './sessions-note'
 import { TaxesPanel } from './taxes-panel'
 import { ExtraSalesPanel } from './extra-sales-panel'
 import { GearCostsPanel } from './gear-costs-panel'
@@ -127,7 +128,7 @@ const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wr
 
 /** Zakładki Finansów; „Raport" (S5) to trzecia, „KSeF" czwarta. */
 const FINANCE_TABS = [
-  { value: 'projects', label: 'Projekty' },
+  { value: 'projects', label: 'Podsumowanie' },
   { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
   { value: 'report', label: 'Raport' },
   { value: 'ksef', label: 'KSeF' },
@@ -1159,6 +1160,7 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
             today={today}
             onOpenFixed={() => switchTab('fixed')}
           />
+          <SessionsNote period={period} periodLabel={periodLabel(period)} />
           <PaymentsPanel
             open={open}
             stats={days}
