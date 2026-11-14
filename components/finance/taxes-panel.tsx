@@ -124,7 +124,11 @@ export function TaxesPanel({
   const coveredTo = bankCoveredTo(bank)
   const settledFlat = summary.months.filter((month) => month.flatTaxPaid !== null)
   const flatEstimate = settledFlat.reduce((sum, month) => sum + (taxEstimate.get(month.month) ?? 0), 0)
-  const zusHub = months.reduce((sum, month) => sum + (zusByMonth.get(month)?.amount ?? 0), 0)
+  // ZUS w hubie do miesiąca, do którego sięga wyciąg; osobno to, co poszło z kont spoza wyciągów.
+  const seenMonths = months.filter((month) => coveredTo && month <= coveredTo.slice(0, 7))
+  const zusHub = seenMonths.reduce((sum, month) => sum + (zusByMonth.get(month)?.amount ?? 0), 0)
+  const zusElsewhere = seenMonths.reduce((sum, month) => sum + (zusByMonth.get(month)?.paidFrom ? (zusByMonth.get(month)?.amount ?? 0) : 0), 0)
+  const zusAgrees = Math.abs(zusHub - zusElsewhere - summary.zus) < 0.01
   const { vat, outside } = summary
   const gap = Math.round((vat.deductibleByInvoices - vat.deductedReal) * 100) / 100
   const cell = 'whitespace-nowrap px-3 py-1.5 text-right tabular-nums'
@@ -161,11 +165,15 @@ export function TaxesPanel({
       )}
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Tile label="ZUS z banku" value={money(summary.zus)} hint={`w kosztach stałych huba: ${money(zusHub)}`} />
+        <Tile
+          label="ZUS z banku"
+          value={money(summary.zus)}
+          hint={`${zusAgrees ? 'zgodne z hubem' : `w hubie za te miesiące: ${money(zusHub - zusElsewhere)}`}${zusElsewhere ? `; do tego ${money(zusElsewhere)} z kont spoza wyciągu` : ''}`}
+        />
         <Tile
           label="Ryczałt zapłacony"
           value={money(summary.flatTaxPaid)}
-          hint={settledFlat.length ? `hub szacował za te miesiące: ${money(flatEstimate)}` : 'brak rozliczonych miesięcy w wyciągu'}
+          hint={settledFlat.length ? `hub szacuje za te miesiące: ${money(flatEstimate)} (z pracą w realizacji, bez sesji)` : 'brak rozliczonych miesięcy w wyciągu'}
         />
         <Tile label="VAT wpłacony do urzędu" value={money(vat.paid)} hint={vat.months.length ? `za ${monthName(vat.months[0])}–${monthName(vat.months.at(-1)!)}` : 'brak rozliczonych miesięcy'} />
         <Tile label="Odliczony VAT (realnie)" value={money(vat.deductedReal)} hint={`według faktur zakupu: ${money(vat.deductibleByInvoices)}`} />
@@ -179,7 +187,7 @@ export function TaxesPanel({
               <th className="px-3 py-2 text-right font-medium">ZUS (bank)</th>
               <th className="px-3 py-2 font-medium">ZUS w hubie</th>
               <th className="px-3 py-2 text-right font-medium">Ryczałt zapłacony</th>
-              <th className="px-3 py-2 text-right font-medium" title="Szacunek huba z przychodu projektów tego miesiąca; hub i urząd mogą liczyć ten sam przychód w różnych miesiącach, więc porównuj sumy">
+              <th className="px-3 py-2 text-right font-medium" title="Stawka ryczałtu projektu × przychód huba w miesiącu wystawienia faktury. Hub liczy też pracę w realizacji bez faktury i nie zna sprzedaży poza KSeF, więc miesiące mogą się różnić">
                 Ryczałt wg huba
               </th>
               <th className="px-3 py-2 text-right font-medium">VAT sprzedaż</th>

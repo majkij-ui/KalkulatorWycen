@@ -201,6 +201,8 @@ function CostRow({
 }) {
   const category = fixedCostCategory(cost)
   const name = sub?.name ?? cost.label
+  // ZUS z wyciągu: także rata subskrypcji i jej poprawka (jedna pozycja ZUS na miesiąc, skądkolwiek pochodzi).
+  const zus = category === 'zus' && !future && bank.operations.length > 0 ? zusCheck(cost, bank) : null
 
   // Rata wyliczona: każda zmiana to nowa poprawka tego miesiąca.
   if (cost.derived && sub) {
@@ -211,6 +213,7 @@ function CostRow({
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate px-1 text-zinc-300">{name}</span>
           <Tag tone="sky">{future ? 'plan' : 'auto'}</Tag>
+          {zus && <ZusMark check={zus} />}
           {derived.currency !== 'PLN' && (
             <span className="hidden truncate text-xs text-zinc-500 sm:inline">
               {money(derived.originalAmount, derived.currency)} × {rateText(derived.rate)}
@@ -252,6 +255,7 @@ function CostRow({
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate px-1 text-zinc-300">{name}</span>
           <Tag tone={skipped ? 'amber' : 'zinc'}>{skipped ? 'pominięta' : auto ? 'poprawiona' : 'dopłata'}</Tag>
+          {zus && <ZusMark check={zus} />}
           {auto && !skipped && Math.abs(auto.amount - cost.amount) > 0.001 && (
             <span className="hidden truncate text-xs text-zinc-600 sm:inline">auto {money(auto.amount)}</span>
           )}
@@ -275,7 +279,6 @@ function CostRow({
   }
 
   // Zwykły koszt (też odczyt z panelu reklam i poprawka usuniętej subskrypcji).
-  const zus = category === 'zus' && bank.operations.length > 0 ? zusCheck(cost, bank) : null
   const remove = async () => {
     const stamp = await fixed.removeCosts([cost.id])
     onNotice({
