@@ -11,9 +11,24 @@
  * projektu zapisuje dopiero „Zastosuj".
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, CircleSlash, Download, FileText, Loader2, RefreshCw, Undo2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, Check, CircleSlash, Download, FileText, Landmark, Loader2, RefreshCw, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  applyPaymentUpdate,
+  bankDecisionId,
+  matchPayments,
+  payableInvoices,
+  paymentChanges,
+  paymentChangeSummary,
+  paymentView,
+  senderDecisionId,
+  type BankMatchResult,
+  type PaymentChange,
+  type PaymentView,
+} from '@/lib/bank-match'
+import { BankFileError, bankCoveredTo, EMPTY_BANK, type BankCopy, type BankOperation } from '@/lib/bank-statement'
+import { importBankFile, readBankCopy } from '@/lib/bank-store'
 import type { ClientDetails } from '@/lib/client-details'
 import { listClientDetails, mutateClientDetails } from '@/lib/client-details-store'
 import { useEvents } from '@/lib/events-context'
@@ -36,6 +51,7 @@ import {
   type RowStatus,
 } from '@/lib/ksef-reconcile'
 import { listKsefDecisions, readKsefCache, removeKsefDecision, upsertKsefDecision } from '@/lib/ksef-store'
+import { purchaseVatDecisionId } from '@/lib/taxes'
 import { syncProgressText, syncSummary } from '@/lib/ksef-app-bridge'
 import { canSyncKsefHere, KSEF_TOKEN_COMMAND, syncKsefFromApp } from '@/lib/ksef-app-sync'
 import type { ProjectMoney } from '@/lib/money-loop'
@@ -43,6 +59,7 @@ import { pln } from '@/lib/money-loop-labels'
 import { plural } from '@/lib/pl-plural'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { day, KsefInvoiceList, money } from './ksef-invoice-list'
+import { PaymentChip } from './payment-chip'
 
 const STATUS: Record<RowStatus, { label: string; className: string }> = {
   ok: { label: 'Zgodne', className: 'bg-emerald-500/10 text-emerald-300' },
@@ -110,6 +127,48 @@ interface Actions {
   reopenAmount: (row: ReconcileRow) => void
   removeHubInvoice: (event: TimelineEvent) => void
   openProject: (id: string) => void
+  /** Wpłata faktury według wyciągu; `null` = nie wczytano wyciągu. */
+  paymentOf: (ksefNumber: string) => PaymentView | null
+  /** Wpłaty projektu do zapisania z wyciągu. */
+  paymentChangesOf: (projectId: string) => PaymentChange[]
+  /** Operacje z wyciągu dopasowane do faktury (do „potwierdź" i „to nie ta wpłata"). */
+  paymentOperations: (ksefNumber: string) => { operation: BankOperation; confident: boolean }[]
+  confirmPayment: (operation: BankOperation, ksefNumber: string) => void
+  detachPayment: (operation: BankOperation) => void
+}
+
+/** Wiersz, w którym jedyne, co zostało do zapisania, to wpłaty z wyciągu, też jest „Do zapisania". */
+function shownStatus(row: ReconcileRow, payments: PaymentChange[]): RowStatus {
+  return payments.length && (row.status === 'ok' || row.status === 'accepted' || row.status === 'awaiting') ? 'changes' : row.status
+}
+
+function PaymentChangeList({ changes, documents }: { changes: PaymentChange[]; documents: KsefDocument[] }) {
+  const numberOf = (ksefNumber: string) => documents.find((d) => d.sale.ksefNumber === ksefNumber)?.sale.invoiceNumber ?? ''
+  return (
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-md border border-white/5 bg-black/20 px-2.5 py-1.5 text-[11px]">
+      {changes.map((change) => {
+        const summary = paymentChangeSummary(change)
+        return (
+          <div key={change.ksefNumber} className="contents">
+            <dt className="text-zinc-600">Wpłata za {numberOf(change.ksefNumber)} (z wyciągu)</dt>
+            <dd className="min-w-0 break-words text-zinc-100">
+              {summary.fresh ? (
+                <>nowa wpłata w projekcie, {day(summary.day)}</>
+              ) : summary.before ? (
+                <>
+                  <span className="text-zinc-500 line-through decoration-zinc-700">{day(summary.before)}</span>
+                  <span className="px-1.5 text-zinc-600" aria-label="zmienia się na">→</span>
+                  {day(summary.day)}
+                </>
+              ) : (
+                <span className="text-zinc-400">dzień się zgadza; wpis dostanie numer faktury i znak „z wyciągu”</span>
+              )}
+            </dd>
+          </div>
+        )
+      })}
+    </dl>
+  )
 }
 
 function ChangeList({ changes, projectNames }: { changes: KsefChange[]; projectNames: Map<string, string> }) {
@@ -207,7 +266,8 @@ function InvoicePicker({ row, actions, busy }: { row: ReconcileRow; actions: Act
 }
 
 function RowCard({ row, busy, actions }: { row: ReconcileRow; busy: boolean; actions: Actions }) {
-  const status = STATUS[row.status]
+  const payments = actions.paymentChangesOf(row.project.id)
+  const status = STATUS[shownStatus(row, payments)]
   const suggested = row.documents.some((d) => d.reason === 'suggested')
   const invoiceChanges = row.changes.filter((c) => c.kind !== 'client')
   const clientChange = row.changes.find((c): c is Extract<KsefChange, { kind: 'client' }> => c.kind === 'client')
@@ -249,6 +309,7 @@ function RowCard({ row, busy, actions }: { row: ReconcileRow; busy: boolean; act
         <ul className="mt-2 space-y-1.5 text-xs text-zinc-400">
           {row.documents.map((document) => {
             const pair = row.pairs.find((p) => p.ksefNumber === document.sale.ksefNumber)
+            const payment = actions.paymentOf(document.sale.ksefNumber)
             return (
               <li key={document.sale.ksefNumber} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span>
@@ -260,6 +321,30 @@ function RowCard({ row, busy, actions }: { row: ReconcileRow; busy: boolean; act
                       + korekta {c.invoiceNumber} ({c.netAmount} {c.currency})
                     </span>
                   ))}
+                  {payment && (
+                    <span className="ml-2 inline-flex items-center gap-1">
+                      <PaymentChip view={payment} />
+                      {actions.paymentOperations(document.sale.ksefNumber).map(({ operation, confident }) => (
+                        <span key={operation.id} className="inline-flex items-center gap-1">
+                          {!confident && (
+                            <button type="button" disabled={busy} onClick={() => actions.confirmPayment(operation, document.sale.ksefNumber)} className="text-sky-300 hover:underline">
+                              potwierdź
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            title={`To nie ta wpłata: ${operation.description}`}
+                            aria-label="To nie ta wpłata"
+                            onClick={() => actions.detachPayment(operation)}
+                            className="text-zinc-600 hover:text-zinc-300"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
                 <span className="ml-auto flex flex-wrap items-center gap-2">
                   {pair && !pair.saved && row.replaceable.length > 0 && (
@@ -329,6 +414,7 @@ function RowCard({ row, busy, actions }: { row: ReconcileRow; busy: boolean; act
       )}
 
       {invoiceChanges.length > 0 && <ChangeList changes={invoiceChanges} projectNames={actions.projectNames} />}
+      {payments.length > 0 && <PaymentChangeList changes={payments} documents={row.documents} />}
 
       {row.amountState && (
         <div className="mt-2 rounded-md border border-amber-500/15 bg-amber-500/5 px-2.5 py-2 text-xs">
@@ -417,14 +503,99 @@ function RowCard({ row, busy, actions }: { row: ReconcileRow; busy: boolean; act
             Ustaw klienta „{clientChange.to}”
           </Button>
         )}
-        {invoiceChanges.length > 0 && (
+        {(invoiceChanges.length > 0 || payments.length > 0) && (
           <Button size="sm" disabled={busy} onClick={() => actions.apply(row)}>
             <Check className="size-3.5" />
-            {suggested ? 'To ten projekt — zastosuj z KSeF' : 'Zastosuj z KSeF'}
+            {suggested ? 'To ten projekt — zastosuj z KSeF' : invoiceChanges.length > 0 ? 'Zastosuj z KSeF' : 'Zapisz wpłatę z wyciągu'}
           </Button>
         )}
       </div>
     </li>
+  )
+}
+
+/** Wpłaty z wyciągu, które nie pasują do żadnej faktury: zwinięte, pogrupowane po nadawcy. */
+function UnmatchedIncomes({
+  operations,
+  matched,
+  busy,
+  action,
+}: {
+  operations: BankOperation[]
+  matched: BankMatchResult
+  busy: boolean
+  action: { assign: (operation: BankOperation, ksefNumber: string) => void; ignore: (operation: BankOperation) => void; ignoreSender: (account: string) => void }
+}) {
+  const groups = new Map<string, BankOperation[]>()
+  operations.forEach((operation) => {
+    const key = operation.counterAccount || operation.id
+    groups.set(key, [...(groups.get(key) ?? []), operation])
+  })
+  const open = [...matched.byInvoice.values()].filter((payment) => payment.state !== 'paid')
+  const senderName = (operation: BankOperation) =>
+    operation.description
+      .replace(/^PP\/PRZELEW \S+ PRZYCHODZĄCY /, '')
+      .split(/,| UL\.| PRZELEW /)[0]
+      .slice(0, 48)
+  return (
+    <details className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-zinc-200">
+        Wpłaty bez faktury w KSeF: {operations.length}
+        <span className="ml-2 text-xs font-normal text-zinc-500">
+          {matched.ignored > 0 ? `(pominiętych: ${matched.ignored}) ` : ''}
+          wpłaty spoza huba pomiń, a zapłatę za fakturę wskaż z listy
+        </span>
+      </summary>
+      <ul className="mt-3 space-y-3">
+        {[...groups.entries()].map(([key, list]) => (
+          <li key={key} className="rounded-lg border border-white/5 bg-black/20 p-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-zinc-200">
+                {senderName(list[0])}
+                <span className="ml-2 text-zinc-500">
+                  {list.length} {plural(list.length, 'wpłata', 'wpłaty', 'wpłat')} · {money(list.reduce((sum, operation) => sum + operation.amount, 0), list[0].currency)}
+                </span>
+              </span>
+              {list[0].counterAccount && (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => action.ignoreSender(list[0].counterAccount)}>
+                  Pomijaj tego nadawcę
+                </Button>
+              )}
+            </div>
+            <ul className="mt-1.5 space-y-1">
+              {list.map((operation) => (
+                <li key={operation.id} className="flex flex-wrap items-center gap-2 text-zinc-400">
+                  <span className="tabular-nums">{day(operation.date)}</span>
+                  <span className="tabular-nums text-zinc-200">{money(operation.amount, operation.currency)}</span>
+                  <span className="min-w-0 flex-1 truncate" title={operation.description}>
+                    {operation.description}
+                  </span>
+                  <select
+                    value=""
+                    disabled={busy || open.length === 0}
+                    aria-label="Faktura, którą opłaca ta wpłata"
+                    onChange={(event) => event.target.value && action.assign(operation, event.target.value)}
+                    className={`${selectClass} w-48`}
+                  >
+                    <option value="">to zapłata za fakturę…</option>
+                    {open
+                      .filter((payment) => payment.invoice.currency === operation.currency)
+                      .map((payment) => (
+                        <option key={payment.invoice.key} value={payment.invoice.key}>
+                          {payment.invoice.number} · {payment.invoice.payer.slice(0, 24)} · {money(payment.invoice.gross, payment.invoice.currency)}
+                        </option>
+                      ))}
+                  </select>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => action.ignore(operation)}>
+                    Pomiń
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
@@ -503,15 +674,19 @@ export function KsefPanel({
   const [syncProblem, setSyncProblem] = useState<{ reason: 'no-nip' | 'no-token' | 'error' | 'partial'; message: string } | null>(null)
   const [nipDraft, setNipDraft] = useState('')
   const canSync = canSyncKsefHere()
+  const [bank, setBank] = useState<BankCopy>(EMPTY_BANK)
+  const bankInput = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
-    const [readSales, readPurchases, savedDecisions, savedDetails] = await Promise.all([
+    const [readSales, readPurchases, savedDecisions, savedDetails, bankCopy] = await Promise.all([
       readKsefCache('sale'),
       readKsefCache('purchase'),
       listKsefDecisions(),
       listClientDetails(),
+      readBankCopy(),
     ])
+    setBank(bankCopy)
     setSales(readSales.cache)
     setPurchases(readPurchases.cache)
     setError(readSales.error ?? readPurchases.error)
@@ -546,6 +721,25 @@ export function KsefPanel({
     setSyncing(null)
   }
 
+  const loadBankFile = async (file: File) => {
+    setNotice(null)
+    setSyncProblem(null)
+    setBusy(true)
+    try {
+      const imported = await importBankFile(file)
+      setBank(imported.copy)
+      setNotice(
+        imported.added
+          ? `Wyciąg ${day(imported.from)}–${day(imported.to)}: ${imported.added} ${plural(imported.added, 'nowa operacja', 'nowe operacje', 'nowych operacji')}${imported.added < imported.total ? ` (${imported.total - imported.added} już było)` : ''}.`
+          : `Wyciąg ${day(imported.from)}–${day(imported.to)}: wszystkie operacje już były wczytane.`,
+      )
+    } catch (error) {
+      setSyncProblem({ reason: 'error', message: error instanceof BankFileError ? error.message : `Nie udało się wczytać pliku (${String(error)}).` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const inPeriod = useCallback((value: string) => isInPeriod(value, period), [period])
   const result = useMemo(
     () =>
@@ -561,6 +755,25 @@ export function KsefPanel({
         now: new Date().toISOString(),
       }),
     [projects, moneyById, allEvents, sales, details, decisions, inPeriod],
+  )
+
+  // Wpłaty z wyciągu: która faktura jest zapłacona i co z tego zapisać w projektach.
+  const hasBank = bank.operations.length > 0
+  const coveredTo = bankCoveredTo(bank)
+  const matched: BankMatchResult = useMemo(
+    () => matchPayments({ invoices: payableInvoices(result.documents.map((entry) => entry.document)), operations: bank.operations, decisions }),
+    [result.documents, bank.operations, decisions],
+  )
+  const paymentChangesByProject = useMemo(
+    () => (hasBank ? paymentChanges({ documents: result.documents, payments: matched.byInvoice, events: allEvents }) : new Map<string, PaymentChange[]>()),
+    [hasBank, result.documents, matched.byInvoice, allEvents],
+  )
+  const paymentOf = useCallback(
+    (ksefNumber: string): PaymentView | null => {
+      const payment = hasBank ? matched.byInvoice.get(ksefNumber) : undefined
+      return payment ? paymentView(payment, new Date().toISOString().slice(0, 10), coveredTo) : null
+    },
+    [hasBank, matched.byInvoice, coveredTo],
   )
 
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects])
@@ -620,6 +833,23 @@ export function KsefPanel({
       }
       // Zmiana klienta ma własny przycisk: zapis faktury jej nie wymusza.
     }
+    for (const change of paymentChangesByProject.get(row.project.id) ?? []) {
+      if (change.kind === 'update') {
+        const event = allEvents.find((e) => e.id === change.eventId)
+        if (event) await save(applyPaymentUpdate(event, change, now))
+      } else {
+        await save(
+          createEvent({
+            kind: 'invoice_paid',
+            start: change.start,
+            projectId: row.project.id,
+            title: change.title,
+            data: change.data,
+            source: { type: 'bank', ref: `ksef:${change.ksefNumber}` },
+          }),
+        )
+      }
+    }
   }
 
   const resolveAmount = async (row: ReconcileRow, option: AmountOption) => {
@@ -645,6 +875,18 @@ export function KsefPanel({
     } else {
       for (const eventId of option.eventIds) await remove(eventId)
     }
+  }
+
+  const bankAction = {
+    assign: (operation: BankOperation, ksefNumber: string) =>
+      void run(
+        () => upsertKsefDecision({ id: bankDecisionId(operation.id), kind: 'bank_assign', projectId: '', ksefNumber, at: new Date().toISOString() }),
+        ksefNumber ? 'Wpłata przypisana do faktury.' : 'Wpłata odpięta od faktury.',
+      ),
+    ignore: (operation: BankOperation) =>
+      void run(() => upsertKsefDecision({ id: bankDecisionId(operation.id), kind: 'bank_ignore', projectId: '', at: new Date().toISOString() }), 'Wpłata pominięta.'),
+    ignoreSender: (account: string) =>
+      void run(() => upsertKsefDecision({ id: senderDecisionId(account), kind: 'bank_sender', projectId: '', at: new Date().toISOString() }), 'Wpłaty od tego nadawcy są pomijane.'),
   }
 
   const actions: Actions = {
@@ -680,10 +922,18 @@ export function KsefPanel({
     reopenAmount: (row) => void run(() => removeKsefDecision(`amount:${row.project.id}`), 'Różnica znów czeka na decyzję.'),
     removeHubInvoice: (event) => void run(() => remove(event.id), 'Wpis faktury usunięty z projektu (da się przywrócić w projekcie).'),
     openProject: onOpenProject,
+    paymentOf,
+    paymentChangesOf: (projectId) => paymentChangesByProject.get(projectId) ?? [],
+    paymentOperations: (ksefNumber) =>
+      hasBank ? (matched.byInvoice.get(ksefNumber)?.operations ?? []).map(({ operation, reason }) => ({ operation, confident: reason !== 'amount_only' })) : [],
+    confirmPayment: (operation, ksefNumber) => bankAction.assign(operation, ksefNumber),
+    detachPayment: (operation) => bankAction.assign(operation, ''),
   }
 
-  const bulk = result.rows.filter(safeToApplyInBulk)
-  const counts = result.rows.reduce<Record<RowStatus, number>>((acc, row) => ({ ...acc, [row.status]: acc[row.status] + 1 }), EMPTY_COUNTS)
+  const statusOf = (row: ReconcileRow) => shownStatus(row, paymentChangesByProject.get(row.project.id) ?? [])
+  // Pewne = faktury dopasowane pewnie; sama wpłata do zapisania też się liczy (wiersz bez otwartej różnicy kwot).
+  const bulk = result.rows.filter((row) => safeToApplyInBulk(row) || (row.status !== 'changes' && statusOf(row) === 'changes' && row.documents.every((d) => d.reason !== 'suggested')))
+  const counts = result.rows.reduce<Record<RowStatus, number>>((acc, row) => ({ ...acc, [statusOf(row)]: acc[statusOf(row)] + 1 }), EMPTY_COUNTS)
   const fetched = sales ?? purchases
 
   if (loading) {
@@ -715,18 +965,40 @@ export function KsefPanel({
             </p>
             {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
           </div>
-          {canSync ? (
-            <Button size="sm" disabled={busy || syncing !== null} onClick={() => void syncFromKsef()}>
-              {syncing !== null ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-              Pobierz z KSeF
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={bankInput}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                event.target.value = ''
+                if (file) void loadBankFile(file)
+              }}
+            />
+            <Button size="sm" variant="outline" disabled={busy || syncing !== null} onClick={() => bankInput.current?.click()}>
+              <Landmark className="size-3.5" />
+              Wczytaj wyciąg z banku
             </Button>
-          ) : (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>
-              <RefreshCw className="size-3.5" />
-              Odśwież
-            </Button>
-          )}
+            {canSync ? (
+              <Button size="sm" disabled={busy || syncing !== null} onClick={() => void syncFromKsef()}>
+                {syncing !== null ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                Pobierz z KSeF
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>
+                <RefreshCw className="size-3.5" />
+                Odśwież
+              </Button>
+            )}
+          </div>
         </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          {hasBank
+            ? `Wyciąg z banku: do ${day(coveredTo)}, ${bank.operations.length} ${plural(bank.operations.length, 'operacja', 'operacje', 'operacji')}. Wpłaty są dopasowane do faktur; po tej dacie hub nic nie wie.`
+            : 'Wyciągu z banku jeszcze nie wczytano: plik CSV z mBanku (Historia → Eksport) pokaże, które faktury są zapłacone.'}
+        </p>
         {syncing !== null && <p className="mt-2 text-xs text-zinc-400">{syncing}</p>}
         {syncProblem && syncing === null && (
           <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs text-amber-200">
@@ -782,7 +1054,25 @@ export function KsefPanel({
       </section>
 
       {!fetched ? null : tab === 'invoices' ? (
-        <KsefInvoiceList sales={sales} purchases={purchases} inPeriod={inPeriod} periodLabel={periodLabel} projectOfInvoice={projectOfInvoice} onOpenProject={onOpenProject} />
+        <KsefInvoiceList
+          sales={sales}
+          purchases={purchases}
+          inPeriod={inPeriod}
+          periodLabel={periodLabel}
+          projectOfInvoice={projectOfInvoice}
+          onOpenProject={onOpenProject}
+          paymentOf={paymentOf}
+          decisions={decisions}
+          onPurchaseVat={(invoice, percent) =>
+            void run(
+              () =>
+                percent === null
+                  ? removeKsefDecision(purchaseVatDecisionId(invoice.ksefNumber))
+                  : upsertKsefDecision({ id: purchaseVatDecisionId(invoice.ksefNumber), kind: 'purchase_vat', projectId: '', ksefNumber: invoice.ksefNumber, amount: percent, at: new Date().toISOString() }),
+              `Faktura ${invoice.invoiceNumber}: ${percent === null ? 'odliczenie VAT wg zasad huba' : percent === 0 ? 'nie dotyczy firmy' : `do odliczenia ${percent}% VAT`}.`,
+            )
+          }
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -828,6 +1118,10 @@ export function KsefPanel({
                 ))}
               </ul>
             </section>
+          )}
+
+          {hasBank && matched.unmatched.length > 0 && (
+            <UnmatchedIncomes operations={matched.unmatched} matched={matched} busy={busy} action={bankAction} />
           )}
 
           {result.rows.length === 0 && result.unassigned.length === 0 && (

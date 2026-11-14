@@ -42,6 +42,7 @@ import {
   isInPeriod,
   periodContaining,
   periodLabel,
+  periodMonths,
   summarizePeriod,
   type Period,
   type PeriodKind,
@@ -80,6 +81,7 @@ import { fixedCostsInYear, type EffectiveFixedCost } from '@/lib/subscriptions'
 import { Button } from '@/components/ui/button'
 import { FixedCostsPanel } from './fixed-costs-panel'
 import { KsefPanel } from './ksef-panel'
+import { TaxesPanel } from './taxes-panel'
 import { ExtraSalesPanel } from './extra-sales-panel'
 import { GearCostsPanel } from './gear-costs-panel'
 import { RentalsPanel } from './rentals-panel'
@@ -128,6 +130,7 @@ const FINANCE_TABS = [
   { value: 'fixed', label: 'Koszty stałe i subskrypcje' },
   { value: 'report', label: 'Raport' },
   { value: 'ksef', label: 'KSeF' },
+  { value: 'taxes', label: 'Podatki' },
 ] as const
 type FinanceTab = (typeof FINANCE_TABS)[number]['value']
 
@@ -1035,6 +1038,21 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
   )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
   const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period, ledgerById), [projects, period, ledgerById])
+  // Zakładka „Podatki": ryczałt, który hub wylicza z przychodu każdego miesiąca, i ZUS z kosztów stałych.
+  const taxEstimate = useMemo(
+    () =>
+      new Map(
+        periodMonths(period).map((month) => [
+          month,
+          summarizePeriod(projects, [], { kind: 'month', year: Number(month.slice(0, 4)), index: Number(month.slice(5)) }, ledgerById).tax,
+        ]),
+      ),
+    [projects, period, ledgerById],
+  )
+  const zusCosts = useMemo(
+    () => fixed.costs.filter((cost) => !cost.deletedAt && cost.type === 'zus').map((cost) => ({ month: cost.month, amount: cost.amount, paidFrom: cost.paidFrom })),
+    [fixed.costs],
+  )
   const pipeline = useMemo(
     () =>
       projects.filter(
@@ -1143,6 +1161,8 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
         </>
       ) : tab === 'ksef' ? (
         <KsefPanel period={period} periodLabel={periodLabel(period)} moneyById={ledgerById} onOpenProject={onOpenProject} />
+      ) : tab === 'taxes' ? (
+        <TaxesPanel period={period} periodLabel={periodLabel(period)} taxEstimate={taxEstimate} zusCosts={zusCosts} />
       ) : tab === 'report' ? (
         <ReportTab
           period={period}

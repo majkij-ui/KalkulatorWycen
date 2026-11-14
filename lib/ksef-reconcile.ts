@@ -55,7 +55,24 @@ export const ksefDecisionSchema = z
      * (bez faktury), `amount:<id projektu>` (różnica kwot przyjęta / czeka na korektę).
      */
     id: z.string().min(1),
-    kind: z.enum(['assign', 'unassign', 'pair', 'no_invoice', 'accept_amount', 'await_correction']),
+    /**
+     * Od wyciągu z banku (`bank-match.ts`): `bank_assign` (`bank:<id operacji>` → faktura; pusty
+     * numer = „to nie zapłata faktury"), `bank_ignore` (pomiń operację), `bank_sender`
+     * (`sender:<rachunek>` = pomijaj wpłaty od tego nadawcy). Od podatków (`taxes.ts`):
+     * `purchase_vat` (`vat:<numer KSeF>`, `amount` = procent VAT do odliczenia: 0, 50 albo 100).
+     */
+    kind: z.enum([
+      'assign',
+      'unassign',
+      'pair',
+      'no_invoice',
+      'accept_amount',
+      'await_correction',
+      'bank_assign',
+      'bank_ignore',
+      'bank_sender',
+      'purchase_vat',
+    ]),
     projectId: z.string().catch(''),
     ksefNumber: z.string().optional().catch(undefined),
     /** `pair`: id wydarzenia faktury w hubie albo `new` = dopisz jako kolejną fakturę. */

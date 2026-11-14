@@ -509,6 +509,11 @@ export const fixedCostSchema = z
      * sam zakup — z katalogu. Kwota w pliku zostaje taka, jak była zapłacona.
      */
     catalogueItemIds: z.array(z.string().min(1)).optional().catch(undefined),
+    /**
+     * Rachunek spoza wczytanych wyciągów, z którego to zapłacono (np. „ERSTE").
+     * Hub nie szuka wtedy przelewu w wyciągu i nie zgłasza jego braku (`taxes.ts`).
+     */
+    paidFrom: z.string().min(1).optional().catch(undefined),
     /** Miękkie usunięcie (ISO); „Cofnij" zdejmuje znacznik. */
     deletedAt: z.string().optional().catch(undefined),
   })
