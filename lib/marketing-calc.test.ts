@@ -11,6 +11,7 @@ import {
   leadOrigin,
   originBreakdown,
   summarizeCampaign,
+  summarizeCampaigns,
 } from './marketing-calc'
 import { readLead, type Lead } from './marketing-leads'
 import { campaignSchema, type Campaign } from './marketing-types'
@@ -289,4 +290,138 @@ test('pochodzenie leada: kampania > pole leada > projekt', () => {
   assert.equal(leadOrigin({ campaignId: null, origin: 'networking', projectId: 'p' }, campaigns, projects), 'networking')
   assert.equal(leadOrigin({ campaignId: null, origin: '', projectId: 'p' }, campaigns, projects), 'powracajacy')
   assert.equal(leadOrigin({ campaignId: 'usunięta', origin: '', projectId: null }, campaigns, projects), '')
+})
+
+// ── „Wszystkie kampanie" ─────────────────────────────────────────────────────
+
+const c2 = () =>
+  campaign({ id: 'c2', name: 'Autumn', startDate: '2026-06-01', endDate: undefined, budgets: [{ from: '2026-06-01', daily: 100 }] })
+const cost2 = (month: string, amount: number, extra: Partial<FixedCost> = {}) =>
+  cost(month, amount, { id: `fc2-${month}`, campaignId: 'c2', ...extra })
+const both = () => [campaign(), c2()]
+const baseParams = (extra: Record<string, unknown> = {}) => ({ costs: [], leads: [], projects: [], today: TODAY, ...extra })
+
+test('wszystkie: wskaźniki z sum, nie ze średniej wskaźników kampanii', () => {
+  const costs = [
+    cost('2026-05', 1000, { clicks: 100, impressions: 1000 }),
+    cost2('2026-06', 3000, { clicks: 200, impressions: 9000 }),
+  ]
+  const leads = [
+    lead('2026-05-12', 'good'),
+    lead('2026-05-13', 'fake'),
+    lead('2026-06-12', 'very_good', { campaignId: 'c2' }),
+    lead('2026-06-13', 'good', { campaignId: 'c2' }),
+    lead('2026-06-14', 'good', { campaignId: 'c2' }),
+  ]
+  const s = summarizeCampaigns(both(), baseParams({ costs, leads }))
+  assert.equal(s.clicks, 300)
+  assert.equal(s.impressions, 10000)
+  assert.equal(s.ctr, 300 / 10000, 'CTR 3%, a średnia z 10% i 2,2% dałaby 6,1%')
+  assert.equal(s.cpc, 4000 / 300, 'CPC 13,33, a średnia z 10 i 15 dałaby 12,5')
+  assert.deepEqual(s.leads, { total: 5, fake: 1, good: 3, veryGood: 1, unrated: 0, real: 4 })
+  assert.equal(s.costPerLead, s.spend / 5)
+  assert.equal(s.costPerRealLead, s.spend / 4)
+  assert.equal(s.costPerVeryGoodLead, s.spend / 1)
+  assert.equal(s.fakeShare, 1 / 5)
+  assert.equal(s.spendFromPanel, 4000)
+  assert.ok(s.clickToLead !== null && s.clickToLead > 0 && s.clickToLead < 1)
+})
+
+test('wszystkie: miesiąc bez odczytu liczy się z budżetu i jest oznaczony', () => {
+  const costs = [cost('2026-05', 2300)]
+  const s = summarizeCampaigns(both(), baseParams({ costs }))
+  const one = summarizeCampaign(campaign(), baseParams({ costs }))
+  const two = summarizeCampaign(c2(), baseParams())
+  assert.equal(s.spend, one.spend + two.spend)
+  assert.ok(s.estimatedMonths.includes('2026-04'))
+  assert.ok(!s.estimatedMonths.includes('2026-05'), 'maj ma odczyt z panelu')
+  assert.equal(s.spendFromPanel, 2300)
+  assert.equal(s.clicks, null, 'wydatek bez kliknięć to nie zero kliknięć')
+  assert.equal(s.cpc, null)
+  assert.equal(s.ctr, null)
+})
+
+test('wszystkie: projekt z leadów dwóch kampanii liczy się raz', () => {
+  const projects = [
+    project('p-won', 'done', 10000, 4000),
+    project('p-open', 'quote', 3000, 0),
+    project('p-lost', 'lost', 5000, 0),
+    project('p-only2', 'won', 8000, 2000),
+  ]
+  const leads = [
+    lead('2026-05-01', 'good', { projectId: 'p-won' }),
+    lead('2026-06-20', 'good', { campaignId: 'c2', projectId: 'p-won' }),
+    lead('2026-05-02', 'good', { projectId: 'p-open' }),
+    lead('2026-06-21', 'good', { campaignId: 'c2', projectId: 'p-open' }),
+    lead('2026-05-03', 'good', { projectId: 'p-lost' }),
+    lead('2026-06-22', 'good', { campaignId: 'c2', projectId: 'p-only2' }),
+  ]
+  const s = summarizeCampaigns(both(), baseParams({ projects, leads }))
+  assert.equal(s.projects.linked.length, 4, 'p-won i p-open tylko raz')
+  assert.equal(s.projects.quoted, 3, 'p-open bez wyceny się nie liczy, reszta po wycenie')
+  assert.deepEqual(s.projects.won.map((p) => p.id).sort(), ['p-only2', 'p-won'])
+  assert.equal(s.projects.lost, 1)
+  assert.equal(s.revenue, 18000)
+  assert.equal(s.profit, 6000)
+  assert.equal(s.pipeline, 3000)
+  assert.equal(s.costPerWon, s.spend / 2)
+  assert.equal(s.roas, 18000 / s.spend)
+  assert.equal(s.roi, (6000 - s.spend) / s.spend)
+  assert.equal(s.profitAfterAds, 6000 - s.spend)
+  assert.equal(s.leads.total, 6, 'leady się nie dedupują, tylko projekty')
+})
+
+test('wszystkie: leady spoza kampanii nie wchodzą', () => {
+  const leads = [
+    lead('2026-05-01', 'good'),
+    lead('2026-05-02', 'good', { campaignId: undefined }),
+    lead('2026-05-03', 'good', { campaignId: 'usunięta' }),
+  ]
+  const s = summarizeCampaigns(both(), baseParams({ leads }))
+  assert.equal(s.leads.total, 1)
+  assert.equal(s.months.reduce((n, m) => n + m.leads.total, 0), 1)
+})
+
+test('wszystkie: okno od pierwszego startu do ostatniego końca, dni emisji sumą', () => {
+  const running = summarizeCampaigns(both(), baseParams()).window!
+  assert.equal(running.start, '2026-04-09')
+  assert.equal(running.end, TODAY, 'jedna trwa, więc okno otwarte do dziś')
+  assert.equal(running.running, true)
+  assert.equal(running.days, 90 + 130, 'B2B 90 dni + Autumn 1.06–8.10 = 130 dni')
+
+  const old = campaign({ id: 'c3', startDate: '2026-02-01', endDate: '2026-03-01' })
+  const ended = summarizeCampaigns([campaign(), old], baseParams())
+  assert.equal(ended.window!.start, '2026-02-01')
+  assert.equal(ended.window!.end, '2026-07-07')
+  assert.equal(ended.window!.running, false)
+  assert.equal(ended.window!.days, 90 + 29)
+  assert.equal(ended.dailyAverage, ended.spend / 119)
+
+  const none = summarizeCampaigns([], baseParams())
+  assert.equal(none.window, null)
+  assert.equal(none.spend, 0)
+  assert.equal(none.roas, null)
+})
+
+test('wszystkie: tabela miesięcy — wiersz na kampanię i miesiąc, z nazwą, po miesiącu', () => {
+  const s = summarizeCampaigns(both(), baseParams({ costs: [cost('2026-06', 2000), cost2('2026-06', 3000)] }))
+  const order = s.months.map((m) => m.month)
+  assert.deepEqual(order, [...order].sort())
+  const june = s.months.filter((m) => m.month === '2026-06')
+  assert.deepEqual(june.map((m) => m.campaignName), ['Autumn', 'B2B'])
+  assert.deepEqual(june.map((m) => m.campaignId), ['c2', 'c1'])
+  assert.deepEqual(june.map((m) => m.spend), [3000, 2000])
+  assert.equal(s.months.filter((m) => m.campaignName === 'Autumn').at(-1)!.month, '2026-10')
+})
+
+test('wszystkie: jedna kampania daje te same liczby co widok pojedynczy', () => {
+  const costs = [cost('2026-05', 2300, { clicks: 150, impressions: 2000 })]
+  const leads = [lead('2026-05-12', 'good'), lead('2026-05-13', 'very_good', { projectId: 'p' })]
+  const params = baseParams({ costs, leads, projects: [project('p', 'done', 10000, 4000)] })
+  const one = summarizeCampaign(campaign(), params)
+  const all = summarizeCampaigns([campaign()], params)
+  const { months: m1, ...rest1 } = one
+  const { months: m2, ...rest2 } = all
+  assert.deepEqual(rest2, rest1)
+  assert.deepEqual(m2.map(({ campaignId: _id, campaignName: _n, ...m }) => m), m1)
 })

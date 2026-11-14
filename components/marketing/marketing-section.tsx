@@ -19,6 +19,7 @@ import {
   campaignActiveOn,
   campaignSpendInYear,
   summarizeCampaign,
+  summarizeCampaigns,
   type CampaignMonth,
 } from '@/lib/marketing-calc'
 import type { Campaign, LeadQuality } from '@/lib/marketing-types'
@@ -30,6 +31,7 @@ import { LeadForm } from './lead-form'
 import { LeadsPanel } from './leads-panel'
 import { OriginsPanel } from './origins-panel'
 import {
+  AllCampaignsHeader,
   CampaignFunnel,
   CampaignHeader,
   CampaignKpis,
@@ -43,6 +45,26 @@ import { useCampaigns } from './use-campaigns'
 
 /** Wybór w selektorze: id kampanii albo leady spoza kampanii. */
 const NO_CAMPAIGN = '__none__'
+/** „Wszystkie kampanie" — suma na żywo z danych, nic nie jest zapisane. */
+const ALL_CAMPAIGNS = '__all__'
+const SELECTED_KEY = 'nonoise-marketing-campaign'
+
+function readPref(key: string): string | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writePref(key: string, value: string): void {
+  try {
+    if (value) window.localStorage.setItem(key, value)
+    else window.localStorage.removeItem(key)
+  } catch {
+    // Preferencja — brak zapisu niczego nie psuje.
+  }
+}
 
 type SheetState =
   | { type: 'campaign'; campaign: Campaign | null }
@@ -56,7 +78,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   const { events, isLoading: eventsLoading, save } = useEvents()
   const { projects, updateProject } = useProjectHub()
 
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(() => readPref(SELECTED_KEY))
   const [sheet, setSheet] = useState<SheetState>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const adsExports = useAdsExports()
@@ -71,8 +93,14 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
 
   // Domyślnie: kampania, która trwa, a gdy żadna — najnowsza.
   const fallback = campaignActiveOn(campaigns, today) ?? campaigns[0] ?? null
-  const current = selected === NO_CAMPAIGN ? null : (campaigns.find((c) => c.id === selected) ?? fallback)
-  const showingOutside = selected === NO_CAMPAIGN || (!current && campaigns.length === 0)
+  const showingAll = selected === ALL_CAMPAIGNS && campaigns.length > 0
+  const current =
+    showingAll || selected === NO_CAMPAIGN ? null : (campaigns.find((c) => c.id === selected) ?? fallback)
+  const showingOutside = !showingAll && (selected === NO_CAMPAIGN || (!current && campaigns.length === 0))
+  const choose = (value: string | null) => {
+    setSelected(value)
+    writePref(SELECTED_KEY, value ?? '')
+  }
 
   const quoteSentProjectIds = useMemo(
     () => new Set(events.filter((e) => e.kind === 'quote_sent' && e.projectId).map((e) => e.projectId as string)),
@@ -81,13 +109,11 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   // U1: przychód i zysk zleceń z pętli pieniędzy — jak w Finansach.
   const money = useProjectMoney()
   const ledger = useMemo(() => [...money.values()], [money])
-  const summary = useMemo(
-    () =>
-      current
-        ? summarizeCampaign(current, { costs: fixed.costs, leads, projects, quoteSentProjectIds, today, money })
-        : null,
-    [current, fixed.costs, leads, projects, quoteSentProjectIds, today, money]
-  )
+  const summary = useMemo(() => {
+    const params = { costs: fixed.costs, leads, projects, quoteSentProjectIds, today, money }
+    if (showingAll) return summarizeCampaigns(campaigns, params)
+    return current ? summarizeCampaign(current, params) : null
+  }, [showingAll, campaigns, current, fixed.costs, leads, projects, quoteSentProjectIds, today, money])
 
   const adsSpendForYear = (year: number | null) =>
     campaigns
@@ -133,7 +159,11 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   }
 
   const loading = isLoading || fixed.isLoading || eventsLoading
-  const currentLeads = current ? leads.filter((l) => l.campaignId === current.id) : outsideLeads
+  const currentLeads = showingAll
+    ? leads.filter((l) => l.campaignId && campaignIds.has(l.campaignId))
+    : current
+      ? leads.filter((l) => l.campaignId === current.id)
+      : outsideLeads
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -148,10 +178,11 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           {(campaigns.length > 0 || outsideLeads.length > 0) && (
             <select
               aria-label="Kampania"
-              value={showingOutside ? NO_CAMPAIGN : (current?.id ?? '')}
-              onChange={(e) => setSelected(e.target.value)}
+              value={showingAll ? ALL_CAMPAIGNS : showingOutside ? NO_CAMPAIGN : (current?.id ?? '')}
+              onChange={(e) => choose(e.target.value)}
               className="h-8 max-w-[22rem] rounded-lg border border-white/10 bg-black/30 px-2 text-xs font-medium text-zinc-200 [color-scheme:dark]"
             >
+              {campaigns.length > 0 && <option value={ALL_CAMPAIGNS}>Wszystkie kampanie</option>}
               {campaigns.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name || 'Kampania bez nazwy'}
@@ -178,7 +209,17 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
         </div>
       ) : (
         <>
-          {current && summary ? (
+          {showingAll && summary ? (
+            <>
+              <AllCampaignsHeader summary={summary} count={campaigns.length} />
+              <CampaignKpis summary={summary} />
+              <div className="mb-4 grid gap-3 md:grid-cols-2">
+                <CampaignFunnel summary={summary} />
+                <CampaignTraffic summary={summary} campaign={null} />
+              </div>
+              <CampaignMonths summary={summary} />
+            </>
+          ) : current && summary ? (
             <>
               <CampaignHeader
                 campaign={current}
@@ -214,10 +255,10 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           )}
 
           <LeadsPanel
-            title={current ? 'Leady z kampanii' : 'Leady spoza kampanii'}
+            title={showingAll ? 'Leady ze wszystkich kampanii' : current ? 'Leady z kampanii' : 'Leady spoza kampanii'}
             leads={currentLeads}
             projects={projects}
-            showOrigin={!current}
+            showOrigin={!current && !showingAll}
             onAdd={() => setSheet({ type: 'lead', lead: null })}
             onEdit={(lead) => setSheet({ type: 'lead', lead })}
             onRate={rate}
@@ -252,11 +293,11 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
               today={today}
               onSave={async (campaign) => {
                 await saveCampaign(campaign)
-                setSelected(campaign.id)
+                choose(campaign.id)
               }}
               onDelete={async (id) => {
                 await removeCampaign(id)
-                setSelected(null)
+                choose(null)
               }}
               onClose={() => setSheet(null)}
             />
