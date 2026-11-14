@@ -193,6 +193,14 @@ every Finance year total identical; data files unchanged. Checked in the browser
 with the invoice list rebuilt from the morning's read-only preview, because KSeF's hourly limits were used up.
 Waiting for M.J.: the first `ksef-sync` into the real data folder, then the desktop check of both views.
 
+**Merged and installed 2026-11-14, KSeF button:** Finanse → KSeF has „Pobierz z KSeF”, which runs the same sync as
+`npm run data -- ksef-sync` from inside the app (docs/PLAN-KSEF.md §9): shared `lib/ksef-sync.ts`, Rust commands
+`ksef_request` / `ksef_token` with their own read-only allowlist, WebCrypto in the client. No conflicts. 1,124
+tests, `tsc` clean, 3 Rust tests. Real data, read-only: 36 quotes and every Finance year total identical; data
+files unchanged by the checks. Checked in the installed app: one click fetched the one new sales invoice
+(23 sales, 62 purchases, all with content) and the screen showed the summary and a new „Do zapisania” row.
+Not exercised on the desktop: the no-token and no-NIP messages, and a run cut by the hourly limit.
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
