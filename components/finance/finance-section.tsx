@@ -47,7 +47,8 @@ import {
   type Period,
   type PeriodKind,
 } from '@/lib/finance-calc'
-import { moneyLedger, moneyYears, openInvoices, paymentDays, type OpenInvoice } from '@/lib/money-loop'
+import { fixedCostCategory } from '@/lib/fixed-cost-categories'
+import { moneyLedger, moneyYears, openInvoices, paymentDays, summarizeMoney, type OpenInvoice } from '@/lib/money-loop'
 import {
   companyTaxRate,
   marginSummary,
@@ -1037,22 +1038,27 @@ export function FinanceSection({ onOpenProject }: { onOpenProject: (id: string) 
     [ledger, statusById, scopeIds, period]
   )
   // Wyceny nie mają faktur — w okresie leżą po dacie księgowej, jak dotąd.
-  const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period, ledgerById), [projects, period, ledgerById])
-  // Zakładka „Podatki": ryczałt, który hub wylicza z przychodu każdego miesiąca, i ZUS z kosztów stałych.
+  // Zakładka „Podatki": ryczałt, który hub wylicza z przychodu każdego miesiąca (ten sam rejestr co kafle
+  // Finansów: przychód w miesiącu wystawienia faktury, każdy projekt swoją stawką), i ZUS z kosztów stałych
+  // razem z ratami subskrypcji (`yearCosts`), żeby miesiąc nie liczył się dwa razy ani nie znikał.
   const taxEstimate = useMemo(
     () =>
       new Map(
         periodMonths(period).map((month) => [
           month,
-          summarizePeriod(projects, [], { kind: 'month', year: Number(month.slice(0, 4)), index: Number(month.slice(5)) }, ledgerById).tax,
+          summarizeMoney(ledger, [], { kind: 'month', year: Number(month.slice(0, 4)), index: Number(month.slice(5)) }).tax,
         ]),
       ),
-    [projects, period, ledgerById],
+    [ledger, period],
   )
   const zusCosts = useMemo(
-    () => fixed.costs.filter((cost) => !cost.deletedAt && cost.type === 'zus').map((cost) => ({ month: cost.month, amount: cost.amount, paidFrom: cost.paidFrom })),
-    [fixed.costs],
+    () =>
+      yearCosts
+        .filter((cost) => !cost.deletedAt && fixedCostCategory(cost) === 'zus')
+        .map((cost) => ({ month: cost.month, amount: cost.amount, paidFrom: cost.paidFrom })),
+    [yearCosts],
   )
+  const pipelineSummary = useMemo(() => summarizePeriod(projects, [], period, ledgerById), [projects, period, ledgerById])
   const pipeline = useMemo(
     () =>
       projects.filter(
