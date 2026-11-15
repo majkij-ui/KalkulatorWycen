@@ -12,6 +12,7 @@ import { ArrowUpRight, ChevronDown, Loader2, Repeat } from 'lucide-react'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { useEvents } from '@/lib/events-context'
 import { useRentalItems } from '@/lib/use-rental-items'
+import { periodLabel, type Period } from '@/lib/finance-calc'
 import { rentedGearReport, type RentedItemStats } from '@/lib/rentals'
 import { gearDaysWithCalendarDates } from '@/lib/realization-days'
 import { dayLabel, plural } from '@/lib/pl-plural'
@@ -140,7 +141,7 @@ function ItemCard({
   )
 }
 
-export function RentedGearPanel({ onOpenProject }: { onOpenProject?: (id: string) => void }) {
+export function RentedGearPanel({ onOpenProject, period = null }: { onOpenProject?: (id: string) => void; period?: Period | null }) {
   const { projects } = useProjectHub()
   const { allEvents } = useEvents()
   const { allItems, isLoading, renameItem, removeItem, restoreItem } = useRentalItems()
@@ -151,8 +152,8 @@ export function RentedGearPanel({ onOpenProject }: { onOpenProject?: (id: string
       rentedGearReport(projects, allItems, (project) => {
         const days = gearDaysWithCalendarDates(project, allEvents)
         return new Map(days.filter((d) => d.date).map((d) => [d.id, d.date]))
-      }),
-    [projects, allItems, allEvents]
+      }, period),
+    [projects, allItems, allEvents, period]
   )
   const thisYear = new Date().getFullYear()
 
@@ -171,7 +172,7 @@ export function RentedGearPanel({ onOpenProject }: { onOpenProject?: (id: string
           <div className="text-[11px] uppercase tracking-wide text-zinc-500">Wynajem razem</div>
           <div className="mt-1 text-xl font-bold tabular-nums text-zinc-100">{pln(report.total)}</div>
           <div className="text-xs text-zinc-500">
-            w {thisYear}: {pln(report.byYear.get(thisYear) ?? 0)}
+            {period ? periodLabel(period) : `w ${thisYear}: ${pln(report.byYear.get(thisYear) ?? 0)}`}
           </div>
         </div>
         <div className="rounded-xl border border-white/5 bg-zinc-900/40 p-4">

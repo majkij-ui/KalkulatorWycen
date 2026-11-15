@@ -19,6 +19,7 @@
  */
 
 import { costAmount, isOwnWork, liveCosts, makeCost } from './project-costs'
+import { isInPeriod, type Period } from './finance-calc'
 import { countsTowardRevenue, toYear, type GearDay, type Project, type ProjectCost } from './project-types'
 import { draftCosts, editPatch, planKeyDay, quotePlanRows, realizationMode, type CostInit } from './realization-costs'
 import type { FinancialsSource } from './quote-financials'
@@ -299,13 +300,15 @@ type StatsProject = Pick<Project, 'id' | 'name' | 'status' | 'date' | 'costs' | 
 /**
  * Wynajem z projektów w realizacji i zrealizowanych (jak inne statystyki
  * sprzętu). `dayDates` = data dnia realizacji (np. z kalendarza); bez niej
- * data zapisana w dniu, a na końcu data projektu.
+ * data zapisana w dniu, a na końcu data projektu. Z `period` — tylko wynajmy
+ * z datą w okresie (ta sama reguła daty); `null` = całość.
  */
 export function rentedGearReport<P extends StatsProject>(
   projects: P[],
   dictionary: RentalItem[],
   dayDates: (project: P) => Map<string, string> = (project) =>
-    new Map((project.gearDays ?? []).filter((d) => d.date).map((d) => [d.id, d.date]))
+    new Map((project.gearDays ?? []).filter((d) => d.date).map((d) => [d.id, d.date])),
+  period: Period | null = null
 ): RentedGearReport {
   const byId = new Map(dictionary.map((item) => [item.id, item]))
   const stats = new Map<string, RentedItemStats>()
@@ -327,6 +330,7 @@ export function rentedGearReport<P extends StatsProject>(
         .forEach((cost) => {
           const amount = costAmount(cost)
           const date = (cost.dayId && dates.get(cost.dayId)) || project.date
+          if (period && !isInPeriod(date, period)) return
           total += amount
           add(byYear, date, amount)
           if (!cost.rentalItemId) {

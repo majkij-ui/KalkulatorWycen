@@ -210,3 +210,25 @@ Lista „Klienci" ma filtr okresu jak Finanse (z opcją „Całość") i pokazuj
 | Lata | Lata z jakimkolwiek kawałkiem przychodu plus bieżący rok, malejąco |
 
 Spójność z Finansami: dla roku, półrocza i kwartału suma przychodu i zysku klientów plus zleceń bez klienta równa się `summarizeMoney` (koszty stałe puste) — pilnuje tego `lib/client-period.test.ts`.
+
+## Sprzęt: filtr okresu (15.11.2026)
+
+Ten sam wybór okresu co w Klientach (`PeriodPicker` z „Całość"), nad kafelkami, wspólny dla zakładek Na plan, Zaplecze i Wynajmowany. Domyślnie Całość (wygląda jak dotąd), wybór nie jest zapamiętywany.
+
+| Co | Reguła w okresie |
+|---|---|
+| Data | Sprzęt wpada w okres wg daty dnia na planie (kalendarz, potem data dnia, potem data projektu) — nigdy wg faktury |
+| Odpracował | Suma po dniach w okresie: sztuki × (`dayRate` dnia albo stawka katalogowa), dokładnie z dnia |
+| Zarobił | „Zarobił" pozycji w projekcie dzielone na jej dni wg wartości dnia (przy 0 — po równo); dni w okresie biorą swój udział, projekt na dwa lata dzieli się między nie |
+| Wiersz | Projekty, dni, Odpracował, Zarobił z okresu; „ostatnio", „na plusie" / „wynik końcowy" i pasek spłaty zostają od początku |
+| Widoczne pozycje | Użyte w okresie, kupione w nim (`purchaseDate`) albo sprzedane w nim (`soldDate`); „Pokaż wycofane" działa jak dotąd |
+| Zainwestowane | Zakupy z `purchaseDate` w okresie × sztuki, plan i zaplecze osobno, plus liczba zakupów |
+| Nieużywane | Pozycje z zerem dni w okresie, które w nim posiadałem: kupione najpóźniej w ostatnim dniu okresu (albo bez daty), niesprzedane i niewycofane przed jego początkiem |
+| Kafelki Odpracował / Zarobił | Sumy okresu; zamiast „% zainwestowanego" i „spłacone" — liczba dni na planie |
+| Kapitał w sprzęcie | W okresie: zakupy − sprzedaże z okresu (`gearCapital` przyjmuje rok albo okres); w Całości bez zmian |
+| Wynajmowany | Wynajmy z datą w okresie (data dnia realizacji, inaczej data projektu): sumy, pozycje, część bez pozycji |
+| Sortowanie | Odpracował, Zarobił i „Najczęściej na planie" wg okresu; „Najbliżej spłaty" i „Najdłużej nieużywany" od początku |
+| Bez zmian | „Własność czy wynajem", baner brakującego sprzętu, lista Zaplecza (kafelki idą za zakupami w okresie) |
+| Arkusz pozycji | Tabela „Po latach" (rok · projekty · dni · odpracował · zarobił), zawsze od początku, niezależna od wyboru okresu; suma lat = sumy od początku |
+
+Pilnuje tego `lib/gear-period.test.ts` (m.in. suma półroczy i kwartałów = rok, Całość = dotychczasowy raport).

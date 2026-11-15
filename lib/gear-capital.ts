@@ -8,6 +8,7 @@
  * Moduł czysty — testy w `gear-capital.test.ts`.
  */
 
+import { isInPeriod, type Period } from './finance-calc'
 import { unitsOwned, type EquipmentItem } from './project-types'
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/
@@ -39,8 +40,10 @@ export function soldPriceOf(item: EquipmentItem): number | null {
     : null
 }
 
-export function gearCapital(items: EquipmentItem[], year: number): GearCapital {
-  const prefix = `${year}-`
+/** Rok (liczba) albo dowolny okres (półrocze, kwartał…): pola `…InYear` oznaczają wtedy okres. */
+export function gearCapital(items: EquipmentItem[], when: number | Period): GearCapital {
+  const period: Period = typeof when === 'number' ? { kind: 'year', year: when } : when
+  const year = period.year
   const result: GearCapital = {
     year,
     purchasesInYear: 0,
@@ -56,12 +59,12 @@ export function gearCapital(items: EquipmentItem[], year: number): GearCapital {
     if (price > 0) {
       result.purchasesTotal += price
       if (!DATE_KEY.test(item.purchaseDate)) result.undatedCount += 1
-      else if (item.purchaseDate.startsWith(prefix)) result.purchasesInYear += price
+      else if (isInPeriod(item.purchaseDate, period)) result.purchasesInYear += price
     }
     const sold = soldPriceOf(item)
     if (sold !== null) {
       result.salesTotal += sold
-      if (item.soldDate!.startsWith(prefix)) result.salesInYear += sold
+      if (isInPeriod(item.soldDate!, period)) result.salesInYear += sold
     }
   })
   result.netInYear = result.purchasesInYear - result.salesInYear

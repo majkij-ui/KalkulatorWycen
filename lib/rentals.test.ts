@@ -289,3 +289,37 @@ test('schematy: nowe pola wiersza są opcjonalne, śmieci znikają, nieznane pol
   assert.equal((item as Record<string, unknown>).extra, true)
   assert.equal(rentalItemSchema.parse({ id: 'ri', name: 5 }).name, '')
 })
+
+test('„Wynajmowany" w okresie: wynajmy z datą dnia (inaczej projektu) w okresie — sumy, pozycje i część bez pozycji', () => {
+  const dictionary: RentalItem[] = [{ id: 'ri-fx6', name: 'Sony FX6', createdAt: '' }]
+  const projects = [
+    project(
+      'A',
+      'done',
+      [
+        cost('wynajem', 450, { rentalItemId: 'ri-fx6', dayId: 'd1' }),
+        cost('wynajem', 300, { rentalItemId: 'ri-fx6', dayId: 'd2' }),
+        cost('wynajem', 120, { label: 'Wynajem sprzętu' }),
+      ],
+      {
+        date: '2026-09-01',
+        gearDays: [
+          { id: 'd1', label: '', date: '2026-02-10', lines: [] },
+          { id: 'd2', label: '', date: '2026-08-20', lines: [] },
+        ],
+      }
+    ),
+    project('B', 'done', [cost('wynajem', 80, { rentalItemId: 'ri-fx6' })], { date: '2025-12-01' }),
+  ]
+  const h1 = rentedGearReport(projects, dictionary, undefined, { kind: 'half', year: 2026, index: 1 })
+  assert.equal(h1.total, 450)
+  assert.equal(h1.items[0].total, 450)
+  assert.equal(h1.unitemized.total, 0, 'wiersz bez dnia leży na dacie projektu (wrzesień)')
+  const h2 = rentedGearReport(projects, dictionary, undefined, { kind: 'half', year: 2026, index: 2 })
+  assert.equal(h2.total, 420)
+  assert.equal(h2.unitemized.total, 120)
+  assert.equal(h2.unitemized.projects, 1)
+  const all = rentedGearReport(projects, dictionary)
+  assert.equal(all.total, h1.total + h2.total + 80)
+  assert.equal(rentedGearReport(projects, dictionary, undefined, null).total, all.total)
+})
