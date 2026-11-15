@@ -20,7 +20,10 @@ import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
 import { investedSplit } from '@/lib/gear-backstage'
 import { gearCapital } from '@/lib/gear-capital'
-import { computeGearReport, formatGearBalance, gearBalance, ownVsRent, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
+import { investedInPeriod } from '@/lib/gear-period'
+import { periodLabel, type Period } from '@/lib/finance-calc'
+import { PeriodPicker } from '@/components/period-picker'
+import { computeGearReport, formatGearBalance, gearBalance, gearPeriodYears, ownVsRent, visibleInPeriod, type EquipmentRoi, type MissingGearProject, type OwnVsRent } from '@/lib/equipment-roi'
 import { equipmentCategoryLabel, equipmentCategoryRank, unitsOwned, type EquipmentItem } from '@/lib/project-types'
 import { dayLabel, plural } from '@/lib/pl-plural'
 import { Button } from '@/components/ui/button'
@@ -65,10 +68,14 @@ type Sort = (typeof SORTS)[number]['value']
 const byName = (a: EquipmentRoi, b: EquipmentRoi) => a.item.name.localeCompare(b.item.name, 'pl')
 const nullsLast = (a: number | null, b: number | null) => (b ?? -Infinity) - (a ?? -Infinity)
 
-const COMPARE: Record<Exclude<Sort, 'kategoria'>, (a: EquipmentRoi, b: EquipmentRoi) => number> = {
-  odpracowal: (a, b) => b.rentValue - a.rentValue || byName(a, b),
-  zarobil: (a, b) => b.clientPaid - a.clientPaid || byName(a, b),
-  czestosc: (a, b) => nullsLast(a.daysPerMonth, b.daysPerMonth) || byName(a, b),
+/** Odpracował, Zarobił i częstość idą za okresem (`null` = od początku); spłata i „nieużywany" zawsze od początku. */
+const COMPARE: Record<Exclude<Sort, 'kategoria'>, (a: EquipmentRoi, b: EquipmentRoi, period: Period | null) => number> = {
+  odpracowal: (a, b, period) =>
+    (period ? b.inPeriod.rentValue - a.inPeriod.rentValue : b.rentValue - a.rentValue) || byName(a, b),
+  zarobil: (a, b, period) =>
+    (period ? b.inPeriod.clientPaid - a.inPeriod.clientPaid : b.clientPaid - a.clientPaid) || byName(a, b),
+  czestosc: (a, b, period) =>
+    (period ? b.inPeriod.daysUsed - a.inPeriod.daysUsed : nullsLast(a.daysPerMonth, b.daysPerMonth)) || byName(a, b),
   splata: (a, b) => nullsLast(a.rentValuePct, b.rentValuePct) || byName(a, b),
   // Nigdy nieużywany na górze, potem najdawniej użyty.
   nieuzywany: (a, b) => (a.lastUsed ?? '').localeCompare(b.lastUsed ?? '') || byName(a, b),
@@ -108,8 +115,9 @@ function PayoffBar({ roi }: { roi: EquipmentRoi }) {
   )
 }
 
-function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
+function ItemRow({ roi, onOpen, inPeriod }: { roi: EquipmentRoi; onOpen: () => void; inPeriod: boolean }) {
   const { item } = roi
+  const shown = inPeriod ? roi.inPeriod : roi
   const units = unitsOwned(item)
   const balance = gearBalance(roi, item)
   return (
@@ -150,7 +158,7 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
         ) : (
           <>
             <div>
-              {roi.projectsUsed} proj. · {roi.daysUsed} {dayLabel(roi.daysUsed)}
+              {shown.projectsUsed} proj. · {shown.daysUsed} {dayLabel(shown.daysUsed)}
             </div>
             <div className="text-zinc-600">ostatnio {formatDate(roi.lastUsed)}</div>
           </>
@@ -158,8 +166,8 @@ function ItemRow({ roi, onOpen }: { roi: EquipmentRoi; onOpen: () => void }) {
       </div>
 
       <div className="w-28 shrink-0 text-right tabular-nums">
-        <div className="text-sm font-semibold text-zinc-100">{pln(roi.rentValue)}</div>
-        <div className={`text-xs ${roi.clientPaid < 0 ? 'text-red-300/80' : 'text-zinc-500'}`}>{pln(roi.clientPaid)}</div>
+        <div className="text-sm font-semibold text-zinc-100">{pln(shown.rentValue)}</div>
+        <div className={`text-xs ${shown.clientPaid < 0 ? 'text-red-300/80' : 'text-zinc-500'}`}>{pln(shown.clientPaid)}</div>
       </div>
 
       <div className="w-36 shrink-0 whitespace-nowrap text-right tabular-nums" title={balance?.final ? 'Wynik końcowy' : 'Na plusie'}>
@@ -331,19 +339,26 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('kategoria')
   const [showRetired, setShowRetired] = useState(false)
+  /** Filtr okresu (`null` = Całość); nie jest zapamiętywany. */
+  const [period, setPeriod] = useState<Period | null>(null)
   /** `undefined` = panel zamknięty, `null` = nowa pozycja, id = edycja. */
   const [sheetItemId, setSheetItemId] = useState<string | null | undefined>(undefined)
 
   const report = useMemo(
-    () => computeGearReport(items, projects, { events: allEvents }),
-    [items, projects, allEvents]
+    () => computeGearReport(items, projects, { events: allEvents, period }),
+    [items, projects, allEvents, period]
+  )
+  const years = useMemo(
+    () => gearPeriodYears(report.items, new Date().getFullYear(), projects.map((p) => p.date)),
+    [report, projects]
   )
   const { totals } = report
   // Kafelek „Zainwestowane" liczy cały katalog i rozbija go na plan / zaplecze;
   // statystyki (report, `items`) obejmują tylko sprzęt na plan.
   const invested = useMemo(() => investedSplit(allItems), [allItems])
   const capitalYear = new Date().getFullYear()
-  const capital = useMemo(() => gearCapital(allItems, capitalYear), [allItems, capitalYear])
+  const capital = useMemo(() => gearCapital(allItems, period ?? capitalYear), [allItems, period, capitalYear])
+  const investedPeriod = useMemo(() => (period ? investedInPeriod(allItems, period) : null), [allItems, period])
 
   const active = items.filter((i) => !i.retiredAt)
   const missingRate = active.filter((i) => i.rentalDayRate <= 0).length
@@ -352,12 +367,15 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
   const visible = useMemo(() => {
     const needle = normalize(query.trim())
     return report.items.filter(
-      (r) => (showRetired || !r.item.retiredAt) && (!needle || normalize(r.item.name).includes(needle))
+      (r) =>
+        (showRetired || !r.item.retiredAt) &&
+        visibleInPeriod(r, period) &&
+        (!needle || normalize(r.item.name).includes(needle))
     )
-  }, [report, query, showRetired])
+  }, [report, query, showRetired, period])
 
   const groups = useMemo(() => {
-    if (sort !== 'kategoria') return [{ category: '', rows: [...visible].sort(COMPARE[sort]) }]
+    if (sort !== 'kategoria') return [{ category: '', rows: [...visible].sort((a, b) => COMPARE[sort](a, b, period)) }]
     const map = new Map<string, EquipmentRoi[]>()
     visible.forEach((r) => {
       const bucket = map.get(r.item.category) ?? []
@@ -367,7 +385,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
     return [...map.entries()]
       .sort(([a], [b]) => equipmentCategoryRank(a) - equipmentCategoryRank(b) || a.localeCompare(b, 'pl'))
       .map(([category, rows]) => ({ category, rows: rows.sort(byName) }))
-  }, [visible, sort])
+  }, [visible, sort, period])
 
   const sheetItem: EquipmentItem | null = sheetItemId ? (allItems.find((i) => i.id === sheetItemId) ?? null) : null
   const sheetRoi = sheetItemId ? report.items.find((r) => r.item.id === sheetItemId) : undefined
@@ -410,26 +428,39 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         })}
       </div>
 
+      <div className="mb-5">
+        <PeriodPicker allowAll period={period} years={years} onChange={setPeriod} />
+      </div>
+
       <div role="tabpanel" id="equipment-tabpanel" aria-labelledby={`equipment-tab-${tab}`}>
       {tab === 'wynajmowany' ? (
-        <RentedGearPanel onOpenProject={onOpenProject} />
+        <RentedGearPanel onOpenProject={onOpenProject} period={period} />
       ) : (
       <>
       {allItems.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile
             label="Zainwestowane"
-            value={pln(invested.total)}
-            lines={[
-              `na plan ${pln(invested.onSet)} · ${totals.activeCount} ${plural(totals.activeCount, 'pozycja', 'pozycje', 'pozycji')}${
-                totals.retiredCount > 0
-                  ? ` + ${totals.retiredCount} ${plural(totals.retiredCount, 'wycofana', 'wycofane', 'wycofanych')}`
-                  : ''
-              }`,
-              `zaplecze ${pln(invested.backstage)} · ${invested.backstageCount} ${plural(invested.backstageCount, 'pozycja', 'pozycje', 'pozycji')}`,
-            ]}
+            value={pln(investedPeriod ? investedPeriod.total : invested.total)}
+            lines={
+              investedPeriod
+                ? [
+                    `na plan ${pln(investedPeriod.onSet)} · ${investedPeriod.onSetCount} ${plural(investedPeriod.onSetCount, 'zakup', 'zakupy', 'zakupów')}`,
+                    `zaplecze ${pln(investedPeriod.backstage)} · ${investedPeriod.backstageCount} ${plural(investedPeriod.backstageCount, 'zakup', 'zakupy', 'zakupów')}`,
+                  ]
+                : [
+                    `na plan ${pln(invested.onSet)} · ${totals.activeCount} ${plural(totals.activeCount, 'pozycja', 'pozycje', 'pozycji')}${
+                      totals.retiredCount > 0
+                        ? ` + ${totals.retiredCount} ${plural(totals.retiredCount, 'wycofana', 'wycofane', 'wycofanych')}`
+                        : ''
+                    }`,
+                    `zaplecze ${pln(invested.backstage)} · ${invested.backstageCount} ${plural(invested.backstageCount, 'pozycja', 'pozycje', 'pozycji')}`,
+                  ]
+            }
             warn={
-              tab === 'plan'
+              period
+                ? undefined
+                : tab === 'plan'
                 ? missingPrice > 0
                   ? `${missingPrice} bez ceny zakupu`
                   : undefined
@@ -442,7 +473,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
             <>
               <Tile
                 label="Zaplecze"
-                value={pln(invested.backstage)}
+                value={pln(investedPeriod ? investedPeriod.backstage : invested.backstage)}
                 lines={['koszt, który nie jedzie na plan']}
               />
               <Tile
@@ -455,27 +486,43 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
           <>
           <Tile
             label="Odpracował"
-            value={pln(totals.rentValue)}
-            good={totals.rentValue > 0}
-            lines={[
-              totals.rentValuePct === null ? '' : `${Math.round(totals.rentValuePct)}% zainwestowanego`,
-              `spłacone: ${totals.paidOffByRentCount}`,
-            ]}
+            value={pln(period ? totals.period.rentValue : totals.rentValue)}
+            good={(period ? totals.period.rentValue : totals.rentValue) > 0}
+            lines={
+              period
+                ? [`${totals.period.daysOnSet} ${dayLabel(totals.period.daysOnSet)} na planie`]
+                : [
+                    totals.rentValuePct === null ? '' : `${Math.round(totals.rentValuePct)}% zainwestowanego`,
+                    `spłacone: ${totals.paidOffByRentCount}`,
+                  ]
+            }
             warn={missingRate > 0 ? `${missingRate} bez stawki rentalowej` : undefined}
           />
           <Tile
             label="Zarobił"
-            value={pln(totals.clientPaid)}
-            good={totals.clientPaid > 0}
-            lines={[
-              totals.clientPaidPct === null
-                ? 'Sprzęt z PDF − wynajem'
-                : `${Math.round(totals.clientPaidPct)}% zainwestowanego`,
-              `spłacone: ${totals.paidOffByClientsCount}`,
-            ]}
-            warn={Math.abs(totals.unassignedClientPaid) > 0.5 ? `${totals.unassignedClientPaid > 0 ? '+' : ''}${pln(totals.unassignedClientPaid)} nieprzypisane` : undefined}
+            value={pln(period ? totals.period.clientPaid : totals.clientPaid)}
+            good={(period ? totals.period.clientPaid : totals.clientPaid) > 0}
+            lines={
+              period
+                ? [`${totals.period.daysOnSet} ${dayLabel(totals.period.daysOnSet)} na planie`]
+                : [
+                    totals.clientPaidPct === null
+                      ? 'Sprzęt z PDF − wynajem'
+                      : `${Math.round(totals.clientPaidPct)}% zainwestowanego`,
+                    `spłacone: ${totals.paidOffByClientsCount}`,
+                  ]
+            }
+            warn={
+              Math.abs(period ? totals.period.unassignedClientPaid : totals.unassignedClientPaid) > 0.5
+                ? `${(period ? totals.period.unassignedClientPaid : totals.unassignedClientPaid) > 0 ? '+' : ''}${pln(period ? totals.period.unassignedClientPaid : totals.unassignedClientPaid)} nieprzypisane`
+                : undefined
+            }
           />
-          <Tile label="Nieużywane" value={String(totals.unusedCount)} lines={['aktywne pozycje bez dnia na planie']} />
+          <Tile
+            label="Nieużywane"
+            value={String(period ? totals.period.unusedCount : totals.unusedCount)}
+            lines={[period ? 'pozycje bez dnia na planie w okresie' : 'aktywne pozycje bez dnia na planie']}
+          />
           </>
           )}
         </div>
@@ -485,12 +532,20 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
         <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-4">
           <Tile
             label="Kapitał w sprzęcie"
-            value={pln(capital.netTotal)}
-            lines={[
-              `od początku: zakupy ${pln(capital.purchasesTotal)} − sprzedaże ${pln(capital.salesTotal)}`,
-              `${capital.year}: ${capital.netInYear >= 0 ? '+' : '−'}${pln(Math.abs(capital.netInYear))} (zakupy ${pln(capital.purchasesInYear)} − sprzedaże ${pln(capital.salesInYear)})`,
-            ]}
-            warn={capital.undatedCount > 0 ? `${capital.undatedCount} bez daty zakupu — tylko w sumie od początku` : undefined}
+            value={period ? `${capital.netInYear >= 0 ? '' : '−'}${pln(Math.abs(capital.netInYear))}` : pln(capital.netTotal)}
+            lines={
+              period
+                ? [`${periodLabel(period)}: zakupy ${pln(capital.purchasesInYear)} − sprzedaże ${pln(capital.salesInYear)}`]
+                : [
+                    `od początku: zakupy ${pln(capital.purchasesTotal)} − sprzedaże ${pln(capital.salesTotal)}`,
+                    `${capital.year}: ${capital.netInYear >= 0 ? '+' : '−'}${pln(Math.abs(capital.netInYear))} (zakupy ${pln(capital.purchasesInYear)} − sprzedaże ${pln(capital.salesInYear)})`,
+                  ]
+            }
+            warn={
+              !period && capital.undatedCount > 0
+                ? `${capital.undatedCount} bez daty zakupu — tylko w sumie od początku`
+                : undefined
+            }
           />
         </div>
       )}
@@ -566,7 +621,9 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
       ) : (
         <div className="flex flex-col gap-6">
           {visible.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-600">Nic nie pasuje do wyszukiwania.</p>
+            <p className="py-8 text-center text-sm text-zinc-600">
+              {period && !query ? 'Brak sprzętu w tym okresie.' : 'Nic nie pasuje do wyszukiwania.'}
+            </p>
           )}
           {groups.map((group) =>
             group.rows.length === 0 ? null : (
@@ -583,7 +640,7 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
                 </div>
                 <div className="flex flex-col gap-2">
                   {group.rows.map((roi) => (
-                    <ItemRow key={roi.item.id} roi={roi} onOpen={() => setSheetItemId(roi.item.id)} />
+                    <ItemRow key={roi.item.id} roi={roi} inPeriod={period !== null} onOpen={() => setSheetItemId(roi.item.id)} />
                   ))}
                 </div>
               </section>

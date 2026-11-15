@@ -11,7 +11,7 @@ import { ArrowRightLeft, ArrowUpRight, RotateCcw, Trash2 } from 'lucide-react'
 import { useEquipment } from '@/lib/equipment-context'
 import { useEvents } from '@/lib/events-context'
 import { useProjectHub } from '@/lib/project-hub-context'
-import { formatGearBalance, gearBalance, itemUsageHistory, type EquipmentRoi } from '@/lib/equipment-roi'
+import { formatGearBalance, gearBalance, itemUsageHistory, itemYearlyUse, type EquipmentRoi } from '@/lib/equipment-roi'
 import { isOnSet, withOnSet } from '@/lib/gear-backstage'
 import {
   EQUIPMENT_CATEGORIES,
@@ -122,6 +122,11 @@ export function EquipmentItemSheet({
   const { allEvents } = useEvents()
   const history = useMemo(
     () => (item ? itemUsageHistory(item.id, projects, items, { events: allEvents }) : []),
+    [item, projects, items, allEvents]
+  )
+
+  const yearly = useMemo(
+    () => (item ? itemYearlyUse(item.id, projects, items, { events: allEvents }) : []),
     [item, projects, items, allEvents]
   )
 
@@ -443,6 +448,36 @@ export function EquipmentItemSheet({
           {saved && <span className="text-xs text-emerald-400">Zapisano</span>}
         </div>
       </section>
+
+      {item && !backstage && yearly.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Po latach</h3>
+          <table className="w-full text-xs tabular-nums">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wide text-zinc-600">
+                <th className="py-1 font-normal">rok</th>
+                <th className="py-1 text-right font-normal">projekty</th>
+                <th className="py-1 text-right font-normal">dni</th>
+                <th className="py-1 text-right font-normal">odpracował</th>
+                <th className="py-1 text-right font-normal">zarobił</th>
+              </tr>
+            </thead>
+            <tbody>
+              {yearly.map((row) => (
+                <tr key={row.year} className="border-t border-white/5 text-zinc-300">
+                  <td className="py-1">{row.year}</td>
+                  <td className="py-1 text-right">{row.projects}</td>
+                  <td className="py-1 text-right">{row.days}</td>
+                  <td className="py-1 text-right text-emerald-400/80">{pln(row.rentValue)}</td>
+                  <td className={`py-1 text-right ${row.clientPaid < 0 ? 'text-red-300/80' : 'text-zinc-400'}`}>
+                    {pln(row.clientPaid)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {item && !backstage && (
         <section>

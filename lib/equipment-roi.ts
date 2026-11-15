@@ -18,6 +18,8 @@
  */
 
 import { daysBetween } from './calendar-layout'
+import { isInPeriod, type Period } from './finance-calc'
+import { boughtInPeriod, ownedInPeriod, soldInPeriod } from './gear-period'
 import { gearEarnings, type GearEarnings } from './gear-earnings'
 import { isOnSet, onSetItems } from './gear-backstage'
 import { gearDayDate, hasGearLogged, projectGearDays } from './gear-usage'
@@ -28,6 +30,7 @@ import type { TimelineEvent } from './event-types'
 import {
   countsTowardRevenue,
   toDateKey,
+  toYear,
   unitsOwned,
   type EquipmentItem,
   type Project,
@@ -47,6 +50,33 @@ export interface ProjectGearItemUse {
   clientPaid: number
   /** Daty dni użycia (dzień bez daty → data projektu), rosnąco. */
   dates: string[]
+  /**
+   * Rozbicie na dni (data = data dnia na planie): sztuki, wartość rentalowa
+   * dokładnie z tego dnia i udział w „zarobił". Wpis z `qty: 0` to „zarobił"
+   * bez dnia na planie (sprzęt z wyceny) — leży na dacie projektu.
+   */
+  days: GearUseDay[]
+}
+
+export interface GearUseDay {
+  date: string
+  qty: number
+  rentValue: number
+  clientPaid: number
+}
+
+/**
+ * „Zarobił" pozycji w projekcie dzielone na jej dni proporcjonalnie do wartości
+ * rentalowej dnia (a gdy wszystkie 0 — po równo na dni z planem). Suma = `total`.
+ */
+function allocateEarned(days: GearUseDay[], total: number): void {
+  if (days.length === 0) return
+  const weight = days.reduce((sum, day) => sum + day.rentValue, 0)
+  const live = days.filter((day) => day.qty > 0).length
+  days.forEach((day) => {
+    day.clientPaid =
+      weight > 0 ? (total * day.rentValue) / weight : live > 0 ? (day.qty > 0 ? total / live : 0) : total / days.length
+  })
 }
 
 export interface ProjectGearSummary {
@@ -109,11 +139,14 @@ export function summarizeProjectGear(
         rentValue: 0,
         clientPaid: 0,
         dates: [],
+        days: [],
       }
+      const date = gearDayDate(day, project)
       use.daysUsed += 1
       use.unitDays += line.qty
       use.rentValue += value
-      use.dates.push(gearDayDate(day, project))
+      use.dates.push(date)
+      use.days.push({ date, qty: line.qty, rentValue: value, clientPaid: 0 })
       uses.set(line.itemId, use)
     })
     return { dayId: day.id, rentValue: dayValue }
@@ -139,13 +172,20 @@ export function summarizeProjectGear(
       rentValue: 0,
       clientPaid: 0,
       dates: [],
+      days: [],
     }
     use.clientPaid += share.earned
     uses.set(share.itemId, use)
   })
 
   const items = [...uses.values()]
-  items.forEach((use) => use.dates.sort())
+  items.forEach((use) => {
+    use.dates.sort()
+    if (use.days.length === 0 && use.clientPaid !== 0) {
+      use.days.push({ date: project.date, qty: 0, rentValue: 0, clientPaid: 0 })
+    }
+    allocateEarned(use.days, use.clientPaid)
+  })
 
   return {
     items,
@@ -184,6 +224,11 @@ export interface EquipmentRoi {
    * tempa. `null` = nie ma od czego liczyć.
    */
   monthsOwned: number | null
+  /**
+   * Liczby z okresu filtra (wg dat dni na planie). Bez okresu = wartości
+   * „od początku". Ostatnio użyty, saldo i pasek spłaty zostają „od początku".
+   */
+  inPeriod: PeriodUse
   /** Dni na planie na miesiąc posiadania — „jak często jeździ". */
   daysPerMonth: number | null
   /**
@@ -192,6 +237,14 @@ export interface EquipmentRoi {
    */
   rentPayoffMonth: string | null
   clientPayoffMonth: string | null
+}
+
+export interface PeriodUse {
+  projectsUsed: number
+  daysUsed: number
+  unitDays: number
+  rentValue: number
+  clientPaid: number
 }
 
 export interface GearReportTotals {
@@ -211,6 +264,15 @@ export interface GearReportTotals {
   retiredCount: number
   /** Aktywne pozycje ani razu nieużyte w zrealizowanym projekcie. */
   unusedCount: number
+  /** Sumy okresu filtra (bez okresu = sumy „od początku"); `unusedCount` wg reguły okresu. */
+  period: {
+    rentValue: number
+    clientPaid: number
+    /** Różne dni (daty), w których coś było na planie. */
+    daysOnSet: number
+    unusedCount: number
+    unassignedClientPaid: number
+  }
 }
 
 export interface MissingGearProject {
@@ -289,16 +351,27 @@ function pct(value: number, invested: number): number | null {
 export function computeGearReport(
   items: EquipmentItem[],
   projects: Project[],
-  options: { now?: Date } & GearStatsOptions = {}
+  options: { now?: Date; period?: Period | null } & GearStatsOptions = {}
 ): GearReport {
+  const period = options.period ?? null
   const today = toDateKey(options.now ?? new Date())
   items = onSetItems(items)
   const byId = toCatalogMap(items)
   const acc = new Map<
     string,
-    { projectsUsed: number; daysUsed: number; unitDays: number; rentValue: number; clientPaid: number; dates: string[] }
+    {
+      projectsUsed: number
+      daysUsed: number
+      unitDays: number
+      rentValue: number
+      clientPaid: number
+      dates: string[]
+      inPeriod: PeriodUse
+    }
   >()
+  const setDates = new Set<string>()
   let unassignedClientPaid = 0
+  let periodUnassigned = 0
   const missingGear: MissingGearProject[] = []
   const reviewedNoGear: MissingGearProject[] = []
 
@@ -309,6 +382,7 @@ export function computeGearReport(
       ;(project.noGear === true ? reviewedNoGear : missingGear).push({ project, earnings: summary.earnings })
     }
     unassignedClientPaid += summary.earnings.unassigned
+    if (!period || isInPeriod(project.date, period)) periodUnassigned += summary.earnings.unassigned
     summary.items.forEach((use) => {
       if (!use.item) return
       const entry = acc.get(use.itemId) ?? {
@@ -318,6 +392,20 @@ export function computeGearReport(
         rentValue: 0,
         clientPaid: 0,
         dates: [],
+        inPeriod: { projectsUsed: 0, daysUsed: 0, unitDays: 0, rentValue: 0, clientPaid: 0 },
+      }
+      const here = use.days.filter((day) => !period || isInPeriod(day.date, period))
+      if (here.length > 0) {
+        entry.inPeriod.projectsUsed += 1
+        here.forEach((day) => {
+          if (day.qty > 0) {
+            entry.inPeriod.daysUsed += 1
+            setDates.add(day.date)
+          }
+          entry.inPeriod.unitDays += day.qty
+          entry.inPeriod.rentValue += day.rentValue
+          entry.inPeriod.clientPaid += day.clientPaid
+        })
       }
       entry.projectsUsed += 1
       entry.daysUsed += use.daysUsed
@@ -353,6 +441,7 @@ export function computeGearReport(
       unitDays: used?.unitDays ?? 0,
       rentValue,
       clientPaid,
+      inPeriod: used?.inPeriod ?? { projectsUsed: 0, daysUsed: 0, unitDays: 0, rentValue: 0, clientPaid: 0 },
       rentValuePct: pct(rentValue, invested),
       clientPaidPct: pct(clientPaid, invested),
       paidOffByRent: invested > 0 && rentValue >= invested,
@@ -378,6 +467,11 @@ export function computeGearReport(
       if (retired) sum.retiredCount += 1
       else sum.activeCount += 1
       if (!retired && r.daysUsed === 0) sum.unusedCount += 1
+      sum.period.rentValue += r.inPeriod.rentValue
+      sum.period.clientPaid += r.inPeriod.clientPaid
+      if (period ? ownedInPeriod(r.item, period) && r.inPeriod.daysUsed === 0 : !retired && r.daysUsed === 0) {
+        sum.period.unusedCount += 1
+      }
       return sum
     },
     {
@@ -392,8 +486,10 @@ export function computeGearReport(
       activeCount: 0,
       retiredCount: 0,
       unusedCount: 0,
+      period: { rentValue: 0, clientPaid: 0, daysOnSet: 0, unusedCount: 0, unassignedClientPaid: periodUnassigned },
     }
   )
+  totals.period.daysOnSet = setDates.size
   totals.rentValuePct = pct(totals.rentValue, totals.invested)
   totals.clientPaidPct = pct(totals.clientPaid, totals.invested)
 
@@ -421,6 +517,70 @@ export function itemUsageHistory(
       return use ? [{ project, use }] : []
     })
     .sort((a, b) => lastDate(b.use).localeCompare(lastDate(a.use)))
+}
+
+export interface ItemYearRow {
+  year: number
+  projects: number
+  days: number
+  rentValue: number
+  clientPaid: number
+}
+
+/** „Po latach" pozycji: dla każdego roku z użyciem (wg dat dni), malejąco. Zawsze „od początku". */
+export function itemYearlyUse(
+  itemId: string,
+  projects: Project[],
+  catalog: EquipmentItem[],
+  options: GearStatsOptions = {}
+): ItemYearRow[] {
+  const rows = new Map<number, ItemYearRow & { ids: Set<string> }>()
+  itemUsageHistory(itemId, projects, catalog, options).forEach(({ project, use }) => {
+    use.days.forEach((day) => {
+      const year = toYear(day.date)
+      if (year === null) return
+      const row = rows.get(year) ?? { year, projects: 0, days: 0, rentValue: 0, clientPaid: 0, ids: new Set<string>() }
+      row.ids.add(project.id)
+      if (day.qty > 0) row.days += 1
+      row.rentValue += day.rentValue
+      row.clientPaid += day.clientPaid
+      rows.set(year, row)
+    })
+  })
+  return [...rows.values()]
+    .map(({ ids, ...row }) => ({ ...row, projects: ids.size }))
+    .sort((a, b) => b.year - a.year)
+}
+
+/** Lata, w których coś było na planie — do wyboru roku w filtrze okresu (malejąco, z bieżącym). */
+export function gearPeriodYears(items: EquipmentRoi[], currentYear: number, extraDates: string[] = []): number[] {
+  const years = new Set<number>([currentYear])
+  const add = (date: string | null | undefined) => {
+    const year = date ? toYear(date) : null
+    if (year !== null) years.add(year)
+  }
+  items.forEach((r) => {
+    add(r.firstUsed)
+    add(r.lastUsed)
+    add(r.item.purchaseDate)
+    add(r.item.soldDate)
+  })
+  extraDates.forEach(add)
+  return [...years].sort((a, b) => b - a)
+}
+
+/**
+ * Widoczność w okresie: używana w okresie, kupiona w nim albo sprzedana w nim.
+ * Bez okresu — zawsze.
+ */
+export function visibleInPeriod(roi: Pick<EquipmentRoi, 'item' | 'inPeriod'>, period: Period | null): boolean {
+  if (!period) return true
+  return (
+    roi.inPeriod.daysUsed > 0 ||
+    roi.inPeriod.projectsUsed > 0 ||
+    boughtInPeriod(roi.item, period) ||
+    soldInPeriod(roi.item, period)
+  )
 }
 
 // ── Własność czy wynajem (V1) ────────────────────────────────────────────────
