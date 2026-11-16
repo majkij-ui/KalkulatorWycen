@@ -13,11 +13,16 @@ import { useMemo, useRef, useState } from 'react'
 import { Loader2, Megaphone, Plus } from 'lucide-react'
 import { useEvents } from '@/lib/events-context'
 import { todayKey, useProjectHub } from '@/lib/project-hub-context'
+import { type Period } from '@/lib/finance-calc'
+import { PeriodPicker } from '@/components/period-picker'
 import { useProjectMoney } from '@/lib/use-project-money'
 import { leadsFromEvents, patchLeadEvent, type Lead } from '@/lib/marketing-leads'
 import {
   campaignActiveOn,
-  campaignSpendInYear,
+  campaignRanInPeriod,
+  campaignSpendInPeriod,
+  leadsInPeriod,
+  marketingPeriodYears,
   summarizeCampaign,
   summarizeCampaigns,
   type CampaignMonth,
@@ -79,24 +84,37 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   const { projects, updateProject } = useProjectHub()
 
   const [selected, setSelected] = useState<string | null>(() => readPref(SELECTED_KEY))
+  const [period, setPeriod] = useState<Period | null>(null)
   const [sheet, setSheet] = useState<SheetState>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const adsExports = useAdsExports()
 
   const leads = useMemo(() => leadsFromEvents(events), [events])
+  const years = useMemo(
+    () => marketingPeriodYears(campaigns, fixed.costs, leads, projects, today, new Date().getFullYear()),
+    [campaigns, fixed.costs, leads, projects, today]
+  )
   const campaignIds = useMemo(() => new Set(campaigns.map((c) => c.id)), [campaigns])
-  /** Bez kampanii albo z kampanią, której już nie ma. */
+  /** Kampanie z miesiącem w okresie. */
+  const visibleCampaigns = useMemo(
+    () => campaigns.filter((c) => campaignRanInPeriod(c, fixed.costs, leads, today, period)),
+    [campaigns, fixed.costs, leads, today, period]
+  )
+  /** Bez kampanii albo z kampanią, której już nie ma — w okresie. */
   const outsideLeads = useMemo(
-    () => leads.filter((l) => !l.campaignId || !campaignIds.has(l.campaignId)),
-    [leads, campaignIds]
+    () => leadsInPeriod(leads, period).filter((l) => !l.campaignId || !campaignIds.has(l.campaignId)),
+    [leads, campaignIds, period]
   )
 
-  // Domyślnie: kampania, która trwa, a gdy żadna — najnowsza.
-  const fallback = campaignActiveOn(campaigns, today) ?? campaigns[0] ?? null
-  const showingAll = selected === ALL_CAMPAIGNS && campaigns.length > 0
+  // Domyślnie: kampania, która trwa, a gdy żadna — najnowsza (z widocznych w okresie).
+  const fallback = campaignActiveOn(visibleCampaigns, today) ?? visibleCampaigns[0] ?? null
+  const hasCampaignBlock = visibleCampaigns.length > 0
+  const selectedHidden =
+    !!selected && campaigns.some((c) => c.id === selected) && !visibleCampaigns.some((c) => c.id === selected)
+  const showingAll = hasCampaignBlock && (selected === ALL_CAMPAIGNS || selectedHidden)
   const current =
-    showingAll || selected === NO_CAMPAIGN ? null : (campaigns.find((c) => c.id === selected) ?? fallback)
-  const showingOutside = !showingAll && (selected === NO_CAMPAIGN || (!current && campaigns.length === 0))
+    showingAll || selected === NO_CAMPAIGN ? null : (visibleCampaigns.find((c) => c.id === selected) ?? fallback)
+  const showingOutside = !showingAll && (selected === NO_CAMPAIGN || !current)
   const choose = (value: string | null) => {
     setSelected(value)
     writePref(SELECTED_KEY, value ?? '')
@@ -110,18 +128,14 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
   const money = useProjectMoney()
   const ledger = useMemo(() => [...money.values()], [money])
   const summary = useMemo(() => {
-    const params = { costs: fixed.costs, leads, projects, quoteSentProjectIds, today, money }
-    if (showingAll) return summarizeCampaigns(campaigns, params)
+    const params = { costs: fixed.costs, leads, projects, quoteSentProjectIds, today, money, period }
+    if (showingAll) return summarizeCampaigns(visibleCampaigns, params)
     return current ? summarizeCampaign(current, params) : null
-  }, [showingAll, campaigns, current, fixed.costs, leads, projects, quoteSentProjectIds, today, money])
+  }, [showingAll, visibleCampaigns, current, fixed.costs, leads, projects, quoteSentProjectIds, today, money, period])
 
-  const adsSpendForYear = (year: number | null) =>
-    campaigns
-      .filter((c) => c.platform === 'google_ads')
-      .reduce((sum, c) => {
-        if (year !== null) return sum + campaignSpendInYear(c, fixed.costs, leads, today, year)
-        return sum + summarizeCampaign(c, { costs: fixed.costs, leads, projects, today }).spend
-      }, 0)
+  const adsSpend = campaigns
+    .filter((c) => c.platform === 'google_ads')
+    .reduce((sum, c) => sum + campaignSpendInPeriod(c, fixed.costs, leads, today, period), 0)
 
   /**
    * Odczyt z panelu za miesiąc → pozycja kosztów `marketing` tej kampanii.
@@ -160,9 +174,9 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
 
   const loading = isLoading || fixed.isLoading || eventsLoading
   const currentLeads = showingAll
-    ? leads.filter((l) => l.campaignId && campaignIds.has(l.campaignId))
+    ? leadsInPeriod(leads, period).filter((l) => l.campaignId && campaignIds.has(l.campaignId))
     : current
-      ? leads.filter((l) => l.campaignId === current.id)
+      ? leadsInPeriod(leads, period).filter((l) => l.campaignId === current.id)
       : outsideLeads
 
   return (
@@ -175,15 +189,15 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {(campaigns.length > 0 || outsideLeads.length > 0) && (
+          {(campaigns.length > 0 || leads.length > 0) && (
             <select
               aria-label="Kampania"
               value={showingAll ? ALL_CAMPAIGNS : showingOutside ? NO_CAMPAIGN : (current?.id ?? '')}
               onChange={(e) => choose(e.target.value)}
               className="h-8 max-w-[22rem] rounded-lg border border-white/10 bg-black/30 px-2 text-xs font-medium text-zinc-200 [color-scheme:dark]"
             >
-              {campaigns.length > 0 && <option value={ALL_CAMPAIGNS}>Wszystkie kampanie</option>}
-              {campaigns.map((c) => (
+              {hasCampaignBlock && <option value={ALL_CAMPAIGNS}>Wszystkie kampanie</option>}
+              {visibleCampaigns.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name || 'Kampania bez nazwy'}
                   {c.startDate ? ` · ${c.startDate.slice(0, 7)}` : ''}
@@ -203,6 +217,10 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
         </div>
       </header>
 
+      <div className="mb-5">
+        <PeriodPicker allowAll period={period} years={years} onChange={setPeriod} />
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-16 text-zinc-600">
           <Loader2 className="size-5 animate-spin" />
@@ -211,7 +229,7 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
         <>
           {showingAll && summary ? (
             <>
-              <AllCampaignsHeader summary={summary} count={campaigns.length} />
+              <AllCampaignsHeader summary={summary} count={visibleCampaigns.length} />
               <CampaignKpis summary={summary} />
               <div className="mb-4 grid gap-3 md:grid-cols-2">
                 <CampaignFunnel summary={summary} />
@@ -270,7 +288,8 @@ export function MarketingSection({ onOpenProject }: { onOpenProject: (id: string
           <OriginsPanel
             money={money}
             projects={projects}
-            adsSpendForYear={adsSpendForYear}
+            period={period}
+            adsSpend={adsSpend}
             onSetOrigin={(id, origin) => void updateProject(id, { leadSource: origin })}
             onOpenProject={onOpenProject}
           />

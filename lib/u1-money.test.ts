@@ -87,9 +87,9 @@ test('Marketing: ROAS i zysk kampanii z pętli pieniędzy (JHJ +4 090 przychodu)
   assert.equal(loop.revenue, 26340)
   assert.equal(Math.round(loop.profit), 11676)
   assert.equal(plan.revenue, 22250)
-  const origins = originBreakdown(projects, 2026, money).find((r) => r.key === 'google_ads')!
+  const origins = originBreakdown(projects, { kind: 'year', year: 2026 }, money).find((r) => r.key === 'google_ads')!
   assert.deepEqual([origins.revenue, Math.round(origins.profit), origins.won], [26340, 11676, 1])
-  assert.equal(originBreakdown(projects, 2026).find((r) => r.key === 'google_ads')!.revenue, 22250)
+  assert.equal(originBreakdown(projects, { kind: 'year', year: 2026 }).find((r) => r.key === 'google_ads')!.revenue, 22250)
 })
 
 test('Marketing / Finanse: wartość otwartych wycen z pętli (plan + dosprzedaż)', () => {
