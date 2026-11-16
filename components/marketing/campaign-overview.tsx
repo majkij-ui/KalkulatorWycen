@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react'
 import { Lightbulb, Pencil } from 'lucide-react'
 import { parseAmount } from '@/lib/event-draft'
-import { dailyBudgetOn, type CampaignMonth, type CampaignSummary } from '@/lib/marketing-calc'
+import { campaignWindow, dailyBudgetOn, type CampaignMonth, type CampaignSummary } from '@/lib/marketing-calc'
 import { platformLabel, type Campaign } from '@/lib/marketing-types'
 import { plural } from '@/lib/pl-plural'
 import { archivo, mono } from '@/components/calendar/calendar-bits'
@@ -40,6 +40,8 @@ export function CampaignHeader({
       ? 'border-sky-500/30 bg-sky-500/10 text-sky-300'
       : 'border-zinc-600/40 bg-zinc-700/20 text-zinc-400'
   const budgetNow = dailyBudgetOn(campaign, w?.running ? today : (campaign.endDate ?? today))
+  // „Dzień N” trwającej kampanii liczymy od jej startu, także przy wybranym okresie.
+  const dayOfCampaign = campaignWindow(campaign, today)?.days ?? 0
 
   return (
     <section className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/5 bg-zinc-900/40 p-4">
@@ -60,7 +62,7 @@ export function CampaignHeader({
           {w && w.days > 0 && (
             <span className="text-zinc-500">
               {' · '}
-              {w.running ? `dzień ${w.days}` : `${w.days} ${plural(w.days, 'dzień', 'dni', 'dni')} emisji`}
+              {w.running ? `dzień ${dayOfCampaign}` : `${w.days} ${plural(w.days, 'dzień', 'dni', 'dni')} emisji`}
             </span>
           )}
           {' · '}
