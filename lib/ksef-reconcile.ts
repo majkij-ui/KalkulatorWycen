@@ -60,6 +60,9 @@ export const ksefDecisionSchema = z
      * numer = „to nie zapłata faktury"), `bank_ignore` (pomiń operację), `bank_sender`
      * (`sender:<rachunek>` = pomijaj wpłaty od tego nadawcy). Od podatków (`taxes.ts`):
      * `purchase_vat` (`vat:<numer KSeF>`, `amount` = procent VAT do odliczenia: 0, 50 albo 100).
+     * Od zakupów (`ksef-purchases.ts`): `purchase_category` z polem `category` — dla jednego
+     * wiersza (`cat:<numer KSeF>:<wiersz>`), całej faktury (`cat:<numer KSeF>`) albo wszystkich
+     * faktur sprzedawcy (`cat-seller:<NIP>`).
      */
     kind: z.enum([
       'assign',
@@ -72,6 +75,7 @@ export const ksefDecisionSchema = z
       'bank_ignore',
       'bank_sender',
       'purchase_vat',
+      'purchase_category',
     ]),
     projectId: z.string().catch(''),
     ksefNumber: z.string().optional().catch(undefined),
@@ -79,6 +83,8 @@ export const ksefDecisionSchema = z
     eventId: z.string().optional().catch(undefined),
     /** `accept_amount`: różnica, którą przyjęto — inna różnica wymaga nowej decyzji. */
     amount: z.number().optional().catch(undefined),
+    /** `purchase_category`: klucz z `PURCHASE_CATEGORIES`. */
+    category: z.string().optional().catch(undefined),
     at: z.string().catch(''),
   })
   .passthrough()

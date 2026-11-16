@@ -17,7 +17,7 @@ import {
 } from './equipment-catalog'
 import { isOnSet } from './gear-backstage'
 import { createGearKit, deleteGearKit, listGearKits, updateGearKits, upsertGearKit } from './gear-kits'
-import type { EquipmentItem, GearKit } from './project-types'
+import type { EquipmentItem, GearKit, PurchaseInvoiceRef } from './project-types'
 
 interface EquipmentContextValue {
   /**
@@ -41,6 +41,8 @@ interface EquipmentContextValue {
     notes?: string
     /** `false` = zaplecze i drobiazgi (nie jedzie na plan). */
     onSet?: boolean
+    /** Faktury zakupu, z których pozycja powstała („Zakupy KSeF"). */
+    purchaseInvoices?: PurchaseInvoiceRef[]
   }) => Promise<EquipmentItem | null>
   updateItem: (item: EquipmentItem) => Promise<void>
   removeItem: (id: string) => Promise<void>

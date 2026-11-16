@@ -197,6 +197,21 @@ export function equipmentCategoryRank(category: string): number {
   return index === -1 ? EQUIPMENT_CATEGORIES.length : index
 }
 
+/** Faktura zakupu przypięta do pozycji sprzętu. */
+export const purchaseInvoiceRefSchema = z
+  .object({
+    ksefNumber: z.string().min(1).optional().catch(undefined),
+    line: z.number().int().min(0).optional().catch(undefined),
+    number: z.string().catch(''),
+    seller: z.string().catch(''),
+    /** Data wystawienia, `YYYY-MM-DD`. */
+    date: z.string().catch(''),
+    quantity: z.number().finite().nonnegative().catch(1),
+    net: z.number().finite().catch(0),
+  })
+  .passthrough()
+export type PurchaseInvoiceRef = z.infer<typeof purchaseInvoiceRefSchema>
+
 export const equipmentItemSchema = z
   .object({
     id: z.string().min(1),
@@ -236,6 +251,13 @@ export const equipmentItemSchema = z
      * informacja („realny koszt"); ROI, „Na plusie" i spłata liczą pełną cenę.
      */
     fundedBySale: z.array(z.string()).optional().catch(undefined),
+    /**
+     * Faktury zakupu tej pozycji (`ksef-purchases.ts`). Z KSeF: `ksefNumber` i
+     * `line` (numer wiersza faktury od 0) — po nich hub wie, że wiersz jest już
+     * rozpisany. Faktura spoza KSeF (zagraniczny sprzedawca) ma tylko numer.
+     * `net` = koszt całego wpisu (wszystkie sztuki, z udziałem w wysyłce).
+     */
+    purchaseInvoices: z.array(purchaseInvoiceRefSchema).optional().catch(undefined),
   })
   .passthrough()
 export type EquipmentItem = z.infer<typeof equipmentItemSchema>

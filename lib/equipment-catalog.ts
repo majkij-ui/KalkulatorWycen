@@ -13,6 +13,7 @@ import {
   createEquipmentId,
   equipmentItemSchema,
   type EquipmentItem,
+  type PurchaseInvoiceRef,
 } from './project-types'
 
 export const EQUIPMENT_FILE = 'equipment.json'
@@ -48,6 +49,8 @@ export function createEquipmentItem(params: {
   notes?: string
   /** `false` = zaplecze i drobiazgi; domyślnie na plan (pole nie jest zapisywane). */
   onSet?: boolean
+  /** Faktury zakupu, z których pozycja powstała. */
+  purchaseInvoices?: PurchaseInvoiceRef[]
 }): EquipmentItem {
   const item: EquipmentItem = {
     id: createEquipmentId(),
@@ -60,6 +63,7 @@ export function createEquipmentItem(params: {
   }
   if (params.quantity && params.quantity > 1) item.quantity = Math.floor(params.quantity)
   if (params.onSet === false) item.onSet = false
+  if (params.purchaseInvoices?.length) item.purchaseInvoices = params.purchaseInvoices
   return item
 }
 
