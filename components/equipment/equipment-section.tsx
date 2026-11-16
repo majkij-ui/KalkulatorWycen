@@ -33,6 +33,7 @@ import { EquipmentItemSheet, formatPayoff } from './equipment-item-sheet'
 import { BackstagePanel } from './backstage-panel'
 import { RentedGearPanel } from './rented-gear-panel'
 import { GearKitsPanel } from './gear-kits-panel'
+import { KsefPurchasesPanel } from './ksef-purchases-panel'
 
 function pln(amount: number): string {
   return `${Math.round(amount).toLocaleString('pl-PL', { useGrouping: 'always' })} zł`
@@ -52,6 +53,7 @@ const TABS = [
   { value: 'plan', label: 'Na plan' },
   { value: 'zaplecze', label: 'Zaplecze i drobiazgi' },
   { value: 'wynajmowany', label: 'Wynajmowany' },
+  { value: 'zakupy', label: 'Zakupy KSeF' },
 ] as const
 type EquipmentTab = (typeof TABS)[number]['value']
 
@@ -435,6 +437,8 @@ export function EquipmentSection({ onOpenProject }: { onOpenProject?: (id: strin
       <div role="tabpanel" id="equipment-tabpanel" aria-labelledby={`equipment-tab-${tab}`}>
       {tab === 'wynajmowany' ? (
         <RentedGearPanel onOpenProject={onOpenProject} period={period} />
+      ) : tab === 'zakupy' ? (
+        <KsefPurchasesPanel period={period} onOpenItem={(id) => setSheetItemId(id)} />
       ) : (
       <>
       {allItems.length > 0 && (

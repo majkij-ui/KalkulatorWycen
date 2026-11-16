@@ -73,7 +73,7 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
   )
 }
 
-function InvoiceDialog({
+export function InvoiceDialog({
   invoice,
   projectName,
   payment,

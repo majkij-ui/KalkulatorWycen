@@ -17,7 +17,7 @@ environment only, because the read-only client needs something to read; nothing 
 | K0 | Read-only client, proof on the Ministry's TEST environment | done 2026-10-30 |
 | K1 | M.J.'s own token in the macOS Keychain; preview from the real account, nothing written to the hub | can start now (decided 2026-11-13); `ksef-preview` built and proven on TEST |
 | K2 | Sales: `npm run data -- ksef-sync` keeps a copy of sales invoices; Finanse → „Zgodność z KSeF" sets them against projects (§7) | rebuilt 2026-11-13: the screen replaces the Skrzynka proposals |
-| K3 | „Zakupy" tab in Sprzęt: new gear, small items (`onSet: false`), other cost | waits for K1 |
+| K3 | „Zakupy KSeF" tab in Sprzęt: new gear, small items (`onSet: false`), other cost (§11) | stage 1 built 2026-11-16 |
 
 ## 2. Safety model
 
@@ -204,3 +204,43 @@ their total, the income tax and the VAT that came with them. ZUS paid from anoth
 exactly like a transfer from the statement, with no extra wording; the ZUS tile shows what was paid and, beside
 it, what the hub has for the same months.
 
+## 11. Purchases: „Zakupy KSeF" in Sprzęt (2026-11-16)
+
+Goal (M.J.): purchase invoices from KSeF become the list of what the firm spends. From 2027 it should be nearly
+complete; for 2026 it is partial (foreign sellers and some marketplace sellers never reach KSeF). Gear first;
+subscriptions, invoices from outside KSeF and a monthly folder for the accountant are a later stage.
+
+Rules (`lib/ksef-purchases.ts`, tests in `lib/ksef-purchases.test.ts`):
+
+- The unit of decision is an invoice **line**, because one invoice often holds several things.
+- A line becomes gear in one of three ways: a new item „na plan", a new item in „Zaplecze i drobiazgi", or a link
+  to an item that is already in the catalogue. The link lives only on the item (`purchaseInvoices`: KSeF number +
+  line index, invoice number, seller, date, quantity, net). Deleting the item returns the line to „Do decyzji".
+- Linking to an existing item offers „Ustaw cenę i datę z faktury": price = average net per unit over all linked
+  invoices, date = the earliest one. It is ticked by default only when the invoices cover every unit of the item;
+  otherwise the invoice is just a trace next to the item.
+- A line that is not gear gets an expense category (fuel, car, subscriptions, project cost, office, other) for the
+  line, the whole invoice, or every invoice of that seller (`purchase_category` decisions). „Nie dotyczy firmy" is
+  the same decision as in Finanse (`purchase_vat` = 0). Fuel is recognised from the lines.
+- Cost of a line = net; before June 2026 (no VAT deduction) = gross. A line priced only gross is converted with its
+  own rate. Shipping lines are spread over the other lines in proportion to value. A correction that names an
+  invoice from the copy changes its lines (a returned line shows as „Zwrócone"); a correction the hub cannot split
+  stays as its own invoice.
+- Company total counts fuel at half (mixed-use car). Categories are a list for now; only gear reaches Finanse,
+  through the catalogue (`gear-costs.ts`), like any other gear purchase.
+- An item may also carry an invoice from outside KSeF (no KSeF number); for now such entries are written by a data
+  patch, the app only shows them.
+
+| Case | What the hub does |
+|---|---|
+| One invoice, one item already in the catalogue | suggests the item (name, or price net/gross near the date); linking fixes price and date |
+| Several things on one invoice | each line decided separately |
+| Return by correction | the line shows „Zwrócone" and leaves „Do decyzji" |
+| Same gear on two invoices | one item, several invoices, average price |
+| Gear rental, studio | category „Koszt projektu", never the catalogue |
+| Invoice that is not the firm's | „Nie dotyczy firmy", outside the company total |
+| Gear without an invoice in KSeF | stays a manual item |
+
+Watch out: 2026 gear spending was first entered as monthly sums („Sprzęt" in fixed costs, gross amounts). When an
+invoice becomes a catalogue item, the matching amount has to leave the monthly sum, or it counts twice. The app
+does not do this by itself; the 2026 merge was done with a data patch and a before/after check of Finanse.

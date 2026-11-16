@@ -438,6 +438,27 @@ export function EquipmentItemSheet({
             Zainwestowane: {quantity} × {pln(amount(draft.purchasePrice))} = {pln(quantity * amount(draft.purchasePrice))}
           </p>
         )}
+        {item?.purchaseInvoices && item.purchaseInvoices.length > 0 && (
+          <div>
+            <div className={label}>Faktury zakupu</div>
+            <ul className="mt-1 flex flex-col gap-1">
+              {item.purchaseInvoices.map((ref, index) => (
+                <li key={`${ref.ksefNumber ?? ref.number}-${ref.line ?? index}`} className="rounded-md border border-white/5 bg-black/20 px-2.5 py-1.5 text-xs">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-zinc-200">{ref.seller || '—'}</span>
+                    <span className="shrink-0 tabular-nums text-zinc-100">
+                      {ref.net.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })} zł netto
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-zinc-500">
+                    {formatDate(ref.date)} · {ref.number || 'bez numeru'}
+                    {ref.quantity > 1 ? ` · ${ref.quantity} szt.` : ''} · {ref.ksefNumber ? 'z KSeF' : 'spoza KSeF'}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <Button onClick={save} disabled={!canSave} className="h-9">
             {item ? 'Zapisz' : 'Dodaj'}
