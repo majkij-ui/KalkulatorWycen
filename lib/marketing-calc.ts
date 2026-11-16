@@ -22,6 +22,8 @@
 
 import { addDays, daysBetween } from './calendar-layout'
 import { moneyOf, type MoneyById } from './client-money'
+import { hasRevenueInPeriod, profitInPeriod, revenueInPeriod } from './client-period'
+import { isInPeriod, type Period } from './finance-calc'
 import type { Lead } from './marketing-leads'
 import { originForPlatform, type Campaign } from './marketing-types'
 import {
@@ -272,13 +274,59 @@ export interface SummaryParams {
   today: string
   /** Pieniądze projektów z pętli (U1); brak = plan z `financials`. */
   money?: MoneyById | null
+  /** Filtr okresu; `null`/brak = cała historia kampanii. */
+  period?: Period | null
+}
+
+/** Miesiące kampanii wpadające w okres (`null` = wszystkie). */
+function monthsInPeriod<T extends { month: string }>(months: T[], period: Period | null | undefined): T[] {
+  return period ? months.filter((m) => isInPeriod(m.month, period)) : months
+}
+
+/** Leady z datą w okresie (`null` = wszystkie). */
+export function leadsInPeriod(leads: Lead[], period: Period | null | undefined): Lead[] {
+  return period ? leads.filter((l) => isInPeriod(l.date, period)) : leads
+}
+
+/**
+ * Czy kampania miała w okresie miesiąc: dni emisji, odczyt z panelu albo lead.
+ * `null` = zawsze.
+ */
+export function campaignRanInPeriod(
+  campaign: Campaign,
+  costs: FixedCost[],
+  leads: Lead[],
+  today: string,
+  period: Period | null
+): boolean {
+  return period === null || monthsInPeriod(campaignMonths(campaign, costs, leads, today), period).length > 0
+}
+
+/** Lata kampanii, leadów i projektów plus bieżący rok — malejąco (lista filtra okresu). */
+export function marketingPeriodYears(
+  campaigns: Campaign[],
+  costs: FixedCost[],
+  leads: Lead[],
+  projects: Pick<Project, 'date'>[],
+  today: string,
+  currentYear: number
+): number[] {
+  const years = new Set<number>([currentYear])
+  const add = (key: string) => {
+    const y = toYear(key)
+    if (y !== null) years.add(y)
+  }
+  campaigns.forEach((c) => campaignMonths(c, costs, leads, today).forEach((m) => add(m.month)))
+  leads.forEach((l) => add(l.date))
+  projects.forEach((p) => add(p.date))
+  return [...years].sort((a, b) => b - a)
 }
 
 export function summarizeCampaign(campaign: Campaign, params: SummaryParams): CampaignSummary {
   return buildSummary(
     campaignWindow(campaign, params.today),
-    campaignMonths(campaign, params.costs, params.leads, params.today),
-    campaignLeads(params.leads, campaign.id),
+    monthsInPeriod(campaignMonths(campaign, params.costs, params.leads, params.today), params.period),
+    leadsInPeriod(campaignLeads(params.leads, campaign.id), params.period),
     params
   )
 }
@@ -304,25 +352,33 @@ export function summarizeCampaigns(campaigns: Campaign[], params: SummaryParams)
     : null
   const months = campaigns
     .flatMap((c) =>
-      campaignMonths(c, params.costs, params.leads, today).map((m) => ({
+      monthsInPeriod(campaignMonths(c, params.costs, params.leads, today), params.period).map((m) => ({
         ...m,
         campaignId: c.id,
         campaignName: c.name,
       }))
     )
     .sort((a, b) => a.month.localeCompare(b.month) || (a.campaignName ?? '').localeCompare(b.campaignName ?? '', 'pl'))
-  const own = campaigns.flatMap((c) => campaignLeads(params.leads, c.id))
+  const own = leadsInPeriod(
+    campaigns.flatMap((c) => campaignLeads(params.leads, c.id)),
+    params.period
+  )
   return buildSummary(window, months, own, params)
 }
 
 function buildSummary(
-  window: CampaignWindow | null,
+  window0: CampaignWindow | null,
   months: CampaignMonth[],
   own: Lead[],
   params: SummaryParams
 ): CampaignSummary {
+  let window = window0
   const { projects } = params
   const leads = countLeads(own)
+  // W okresie dni emisji = suma dni emisji zostawionych miesięcy; status zostaje z całej kampanii.
+  if (params.period && window) {
+    window = { ...window, days: months.reduce((sum, m) => sum + m.activeDays, 0) }
+  }
 
   const spend = months.reduce((sum, m) => sum + m.effectiveSpend, 0)
   const spendFromPanel = months.reduce((sum, m) => sum + (m.spend ?? 0), 0)
@@ -397,17 +453,18 @@ function buildSummary(
   }
 }
 
-/** Wydatek kampanii w danym roku (panel + szacunek z budżetu). */
-export function campaignSpendInYear(
+/** Wydatek kampanii w okresie (panel + szacunek z budżetu); `null` = cała historia. */
+export function campaignSpendInPeriod(
   campaign: Campaign,
   costs: FixedCost[],
   leads: Lead[],
   today: string,
-  year: number
+  period: Period | null
 ): number {
-  return campaignMonths(campaign, costs, leads, today)
-    .filter((m) => m.month.startsWith(`${year}-`))
-    .reduce((sum, m) => sum + m.effectiveSpend, 0)
+  return monthsInPeriod(campaignMonths(campaign, costs, leads, today), period).reduce(
+    (sum, m) => sum + m.effectiveSpend,
+    0
+  )
 }
 
 /** Kampania aktywna w danym dniu — domyślna dla nowego leada. */
@@ -436,12 +493,42 @@ export interface OriginRow {
 }
 
 /**
- * Projekty pogrupowane po pochodzeniu klienta. `year` = rok daty księgowej
- * projektu; `null` = cały czas. Wiersze z listy pochodzeń są zawsze (także
- * puste — widać, czego brakuje), nieznane klucze po nich, „nie ustalono" na końcu.
+ * Czy projekt liczy się w okresie w „Pochodzeniu klientów" i z jakimi kwotami.
+ * Wygrane z wpisem w pętli pieniędzy: kawałki przychodu w okresie (jak Klienci
+ * i Finanse). Reszta (wyceny, utracone, bez wpisu): data projektu, całe kwoty.
+ * `null` = cały czas, kwoty jak dotąd.
+ */
+function originShare(
+  p: Project,
+  period: Period | null,
+  money: MoneyById | null | undefined
+): { revenue: number; profit: number; pipeline: number } | null {
+  const own = moneyOf(p, money)
+  const whole = { revenue: own.revenue ?? 0, profit: own.profit ?? 0, pipeline: own.revenue ?? 0 }
+  if (period === null) return whole
+  if (countsTowardRevenue(p.status) && money?.has(p.id)) {
+    if (!hasRevenueInPeriod(own, period)) return null
+    return { revenue: revenueInPeriod(own, period), profit: profitInPeriod(own, period), pipeline: 0 }
+  }
+  return isInPeriod(p.date, period) ? whole : null
+}
+
+/** Projekty policzone w okresie (te same co w `originBreakdown`). */
+export function originProjectsInPeriod(
+  projects: Project[],
+  period: Period | null,
+  money?: MoneyById | null
+): Project[] {
+  return projects.filter((p) => originShare(p, period, money) !== null)
+}
+
+/**
+ * Projekty pogrupowane po pochodzeniu klienta w okresie; `null` = cały czas.
+ * Wiersze z listy pochodzeń są zawsze (także puste — widać, czego brakuje),
+ * nieznane klucze po nich, „nie ustalono" na końcu.
  * Kwoty z pętli pieniędzy (`money`, U1); bez mapy — plan z `financials`.
  */
-export function originBreakdown(projects: Project[], year: number | null, money?: MoneyById | null): OriginRow[] {
+export function originBreakdown(projects: Project[], period: Period | null, money?: MoneyById | null): OriginRow[] {
   const rows = new Map<string, OriginRow>()
   const row = (key: string): OriginRow => {
     let existing = rows.get(key)
@@ -462,20 +549,20 @@ export function originBreakdown(projects: Project[], year: number | null, money?
   }
   LEAD_SOURCES.forEach(row)
 
-  projects
-    .filter((p) => year === null || toYear(p.date) === year)
-    .forEach((p) => {
-      const r = row(p.leadSource?.trim() ?? '')
-      r.projects += 1
-      r.projectIds.push(p.id)
-      if (countsTowardRevenue(p.status)) {
-        r.won += 1
-        r.revenue += moneyOf(p, money).revenue ?? 0
-        r.profit += moneyOf(p, money).profit ?? 0
-      } else if (p.status === 'quote') {
-        r.pipeline += moneyOf(p, money).revenue ?? 0
-      }
-    })
+  projects.forEach((p) => {
+    const share = originShare(p, period, money)
+    if (!share) return
+    const r = row(p.leadSource?.trim() ?? '')
+    r.projects += 1
+    r.projectIds.push(p.id)
+    if (countsTowardRevenue(p.status)) {
+      r.won += 1
+      r.revenue += share.revenue
+      r.profit += share.profit
+    } else if (p.status === 'quote') {
+      r.pipeline += share.pipeline
+    }
+  })
 
   const known = new Set<string>(LEAD_SOURCES)
   const all = [...rows.values()]

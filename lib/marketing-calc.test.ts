@@ -12,7 +12,11 @@ import {
   originBreakdown,
   summarizeCampaign,
   summarizeCampaigns,
+  campaignRanInPeriod,
+  campaignSpendInPeriod,
+  marketingPeriodYears,
 } from './marketing-calc'
+import type { Period } from './finance-calc'
 import { readLead, type Lead } from './marketing-leads'
 import { campaignSchema, type Campaign } from './marketing-types'
 import { eventSchema } from './event-types'
@@ -266,7 +270,7 @@ test('pochodzenie klientów: wiersze z listy zawsze, „nie ustalono" na końcu'
       project('e', 'done', 2000, 500),
       project('f', 'done', 9999, 9999, { leadSource: 'google_ads', date: '2025-12-01' }),
     ],
-    2026
+    { kind: 'year', year: 2026 }
   )
   assert.deepEqual(
     rows.map((r) => r.key),
@@ -424,4 +428,129 @@ test('wszystkie: jedna kampania daje te same liczby co widok pojedynczy', () => 
   const { months: m2, ...rest2 } = all
   assert.deepEqual(rest2, rest1)
   assert.deepEqual(m2.map(({ campaignId: _id, campaignName: _n, ...m }) => m), m1)
+})
+
+// ── Filtr okresu ─────────────────────────────────────────────────────────────
+
+const Q2: Period = { kind: 'quarter', year: 2026, index: 2 }
+const Q3: Period = { kind: 'quarter', year: 2026, index: 3 }
+const Q1: Period = { kind: 'quarter', year: 2026, index: 1 }
+const Q4: Period = { kind: 'quarter', year: 2026, index: 4 }
+
+function periodFixture() {
+  const c = campaign({ startDate: '2026-04-09', endDate: '2026-07-07' })
+  const costs = [cost('2026-04', 1000, { clicks: 100, impressions: 5000 }), cost('2026-05', 1500, { clicks: 150, impressions: 6000 })]
+  // czerwcowy lead, zlecenie zrealizowane w lipcu
+  const leads = [
+    lead('2026-06-10', 'very_good', { projectId: 'won-jul' }),
+    lead('2026-05-12', 'good'),
+    lead('2026-07-02', 'fake'),
+  ]
+  const projects = [project('won-jul', 'done', 20000, 9000, { date: '2026-07-20' })]
+  return { c, costs, leads, projects, params: { costs, leads, projects, today: TODAY } }
+}
+
+test('okres: lead z czerwca, zlecenie z lipca — cały przychód w II kwartale', () => {
+  const { c, params } = periodFixture()
+  const q2 = summarizeCampaign(c, { ...params, period: Q2 })
+  const q3 = summarizeCampaign(c, { ...params, period: Q3 })
+  assert.equal(q2.projects.won.length, 1)
+  assert.equal(q2.revenue, 20000)
+  assert.equal(q2.profit, 9000)
+  assert.equal(q3.revenue, 0, 'lead z lipca jest fałszywy i bez projektu')
+  assert.equal(q3.projects.won.length, 0)
+})
+
+test('okres: kwartały sumują się do Całości (wydatek, leady, dni)', () => {
+  const { c, params } = periodFixture()
+  const all = summarizeCampaign(c, params)
+  const parts = [Q1, Q2, Q3, Q4].map((period) => summarizeCampaign(c, { ...params, period }))
+  assert.equal(parts.reduce((s, p) => s + p.spend, 0), all.spend)
+  assert.equal(parts.reduce((s, p) => s + p.leads.total, 0), all.leads.total)
+  assert.equal(parts.reduce((s, p) => s + (p.window?.days ?? 0), 0), all.window?.days)
+  assert.equal(parts.reduce((s, p) => s + (p.clicks ?? 0), 0), all.clicks)
+  const allCampaigns = summarizeCampaigns([c], params)
+  const q = [Q1, Q2, Q3, Q4].map((period) => summarizeCampaigns([c], { ...params, period }))
+  assert.equal(q.reduce((s, p) => s + p.spend, 0), allCampaigns.spend)
+})
+
+test('okres: miesiąc kampanii poza okresem odpada, szacunek z budżetu zostaje', () => {
+  const { c, params } = periodFixture()
+  const q2 = summarizeCampaign(c, { ...params, period: Q2 })
+  assert.deepEqual(q2.months.map((m) => m.month), ['2026-04', '2026-05', '2026-06'])
+  assert.equal(q2.spendFromPanel, 2500)
+  assert.deepEqual(q2.estimatedMonths, ['2026-06'], 'czerwiec bez odczytu liczony z budżetu')
+  assert.equal(q2.window?.days, 22 + 31 + 30, 'dni emisji z kwietnia–czerwca')
+  assert.equal(q2.window?.ended, true, 'status z całej kampanii')
+  assert.equal(q2.leads.total, 2)
+  assert.equal(q2.costPerLead, q2.spend / 2)
+  const q3 = summarizeCampaign(c, { ...params, period: Q3 })
+  assert.deepEqual(q3.months.map((m) => m.month), ['2026-07'])
+  assert.equal(q3.window?.days, 7)
+  assert.equal(summarizeCampaign(c, { ...params, period: Q4 }).months.length, 0)
+})
+
+test('okres: lista kampanii i lat', () => {
+  const { c, costs, leads, projects } = periodFixture()
+  assert.equal(campaignRanInPeriod(c, costs, leads, TODAY, Q2), true)
+  assert.equal(campaignRanInPeriod(c, costs, leads, TODAY, Q4), false)
+  assert.equal(campaignRanInPeriod(c, costs, leads, TODAY, null), true)
+  assert.equal(campaignSpendInPeriod(c, costs, leads, TODAY, null), summarizeCampaign(c, { costs, leads, projects, today: TODAY }).spend)
+  assert.deepEqual(marketingPeriodYears([c], costs, leads, projects, TODAY, 2027), [2027, 2026])
+})
+
+test('okres: null = dotychczasowe wyniki', () => {
+  const { c, params } = periodFixture()
+  const a = summarizeCampaign(c, params)
+  const b = summarizeCampaign(c, { ...params, period: null })
+  assert.deepEqual(b, a)
+  assert.equal(a.window?.days, 90)
+  const ps = [project('a', 'done', 10000, 4000, { leadSource: 'google_ads' }), project('b', 'quote', 3000, 1000, { leadSource: 'google_ads', date: '2025-03-01' })]
+  const rows = originBreakdown(ps, null)
+  assert.equal(rows.find((r) => r.key === 'google_ads')!.projects, 2)
+  assert.equal(rows.find((r) => r.key === 'google_ads')!.revenue, 10000)
+})
+
+test('pochodzenie w półroczu: kawałki przychodu w okresie, reszta wg daty projektu', () => {
+  const H1: Period = { kind: 'half', year: 2026, index: 1 }
+  const H2: Period = { kind: 'half', year: 2026, index: 2 }
+  // Projekt z dwiema fakturami: 6000 w maju, 4000 we wrześniu (koszty 1000, podatek 10%).
+  const split = project('split', 'done', 10000, 0, {
+    date: '2026-09-15',
+    leadSource: 'google_ads',
+    financials: { sumaNetto: 10000, koszty: 1000, podatek: 1000, zysk: 8000, marzaPct: 0, computedAt: '' },
+  })
+  const quote = project('q', 'quote', 3000, 900, { date: '2026-02-01', leadSource: 'google_ads' })
+  const noEntry = project('n', 'done', 2000, 500, { date: '2026-11-01', leadSource: 'polecenie' })
+  const projects = [split, quote, noEntry]
+  const money = new Map([
+    [
+      'split',
+      {
+        revenue: 10000,
+        profit: 8000,
+        margin: 9000,
+        pieces: [
+          { day: '2026-05-10', amount: 6000, source: 'invoice' as const, paid: true },
+          { day: '2026-09-20', amount: 4000, source: 'invoice' as const, paid: false },
+        ],
+        anchor: '2026-09-15',
+        revenueBasis: 'invoices' as const,
+        costs: 1000,
+        taxRatePercent: 10,
+      },
+    ],
+  ])
+  const h1 = originBreakdown(projects, H1, money)
+  const h2 = originBreakdown(projects, H2, money)
+  const ads1 = h1.find((r) => r.key === 'google_ads')!
+  const ads2 = h2.find((r) => r.key === 'google_ads')!
+  assert.deepEqual([ads1.projects, ads1.won, ads1.revenue], [2, 1, 6000])
+  assert.equal(Math.round(ads1.profit), 6000 - 600 - 600, 'podatek i 60% kosztów')
+  assert.equal(ads1.pipeline, 3000, 'wycena wg daty projektu')
+  assert.deepEqual([ads2.projects, ads2.won, ads2.revenue], [1, 1, 4000])
+  assert.equal(h1.find((r) => r.key === 'polecenie')!.projects, 0, 'bez wpisu w pętli — wg daty projektu')
+  assert.equal(h2.find((r) => r.key === 'polecenie')!.revenue, 2000)
+  const total = [...h1, ...h2].filter((r) => r.key === 'google_ads').reduce((s, r) => s + r.revenue, 0)
+  assert.equal(total, originBreakdown(projects, null, money).find((r) => r.key === 'google_ads')!.revenue)
 })

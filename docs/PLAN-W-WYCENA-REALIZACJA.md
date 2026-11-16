@@ -232,3 +232,23 @@ Ten sam wybór okresu co w Klientach (`PeriodPicker` z „Całość"), nad kafel
 | Arkusz pozycji | Tabela „Po latach" (rok · projekty · dni · odpracował · zarobił), zawsze od początku, niezależna od wyboru okresu; suma lat = sumy od początku |
 
 Pilnuje tego `lib/gear-period.test.ts` (m.in. suma półroczy i kwartałów = rok, Całość = dotychczasowy raport).
+
+## Marketing: filtr okresu (16.11.2026)
+
+Jeden `PeriodPicker` z „Całość" w nagłówku Marketingu (domyślnie Całość, bez zapamiętywania), wspólny dla kampanii, leadów i pochodzenia klientów. Lata: miesiące kampanii, daty leadów i projektów plus bieżący rok, malejąco.
+
+| Co | Reguła w okresie |
+|---|---|
+| Miesiące kampanii | Tylko miesiące w okresie: wydatek, wydatek z panelu, budżet, kliknięcia, wyświetlenia, CTR i CPC z nich; miesiące bez odczytu (np. listopad) dalej szacowane z budżetu |
+| Leady | Leady kampanii z datą w okresie; koszt leada itd. = wydatek okresu / te leady |
+| Zlecenia, przychód, zysk, wyceny | Wg DATY LEADA: projekty z leadów okresu liczą się z całym przychodem i zyskiem, także gdy zdjęcia są później |
+| Dni i średnia dzienna | Dni emisji w okresie = suma `activeDays` zostawionych miesięcy; status „trwa / zakończona" dalej z całej kampanii |
+| Lista kampanii | Tylko kampanie z miesiącem w okresie (dni emisji, odczyt albo lead); wybrana spoza listy = „Wszystkie kampanie"; brak kampanii w okresie = blok kampanii ukryty, leady i pochodzenie zostają |
+| Leady spoza kampanii | Liczba i lista tylko z okresu |
+| Panel leadów | Tylko leady z datą w okresie, z kampanii i spoza |
+| Pochodzenie klientów | Bez własnego przełącznika roku. Wygrane z wpisem w pętli pieniędzy: `revenueInPeriod` / `profitInPeriod`, liczone gdy `hasRevenueInPeriod` (jak Klienci i Finanse). Wyceny, utracone i projekty bez wpisu: wg daty projektu, całe kwoty |
+| „Nie ustalono" | Projekty policzone w okresie |
+| Reklamy Google Ads | „reklamy X · zwrot Y×": wydatek miesięcy kampanii Google Ads w okresie (`campaignSpendInPeriod`) |
+| Bez zmian | „Eksport do Google Ads" i licznik oczekujących — niezależne od okresu; `null` = dotychczasowe wyniki |
+
+Pilnuje tego `lib/marketing-calc.test.ts` (lead z czerwca ze zleceniem z lipca, kwartały = Całość, miesiąc poza okresem, pochodzenie w półroczu, `null`).

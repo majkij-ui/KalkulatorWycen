@@ -9,10 +9,11 @@
  * uzupełnić od ręki, bez otwierania każdego projektu.
  */
 
-import { useMemo, useState } from 'react'
-import { originBreakdown } from '@/lib/marketing-calc'
+import { useMemo } from 'react'
+import { originBreakdown, originProjectsInPeriod } from '@/lib/marketing-calc'
+import type { Period } from '@/lib/finance-calc'
 import type { MoneyById } from '@/lib/client-money'
-import { LEAD_SOURCES, LEAD_SOURCE_LABELS, toYear, type Project } from '@/lib/project-types'
+import { LEAD_SOURCES, LEAD_SOURCE_LABELS, type Project } from '@/lib/project-types'
 import { plural } from '@/lib/pl-plural'
 import { ProjectBadge } from '@/components/projects/project-status-badge'
 import { mono } from '@/components/calendar/calendar-bits'
@@ -21,31 +22,26 @@ import { pln } from './marketing-bits'
 export function OriginsPanel({
   projects,
   money,
-  adsSpendForYear,
+  period,
+  adsSpend,
   onSetOrigin,
   onOpenProject,
 }: {
   projects: Project[]
   /** Pieniądze projektów z pętli (U1) — przychód i zysk jak w Finansach. */
   money: MoneyById
-  /** Wydatek na Google Ads w roku (`null` = cały czas). */
-  adsSpendForYear: (year: number | null) => number
+  /** Wspólny filtr okresu ekranu (`null` = Całość). */
+  period: Period | null
+  /** Wydatek na Google Ads w okresie. */
+  adsSpend: number
   onSetOrigin: (projectId: string, origin: string) => void
   onOpenProject: (id: string) => void
 }) {
-  const years = useMemo(() => {
-    const set = new Set<number>([new Date().getFullYear()])
-    projects.forEach((p) => {
-      const y = toYear(p.date)
-      if (y !== null) set.add(y)
-    })
-    return [...set].sort((a, b) => b - a)
-  }, [projects])
-  const [year, setYear] = useState<number | null>(() => new Date().getFullYear())
-
-  const rows = useMemo(() => originBreakdown(projects, year, money), [projects, year, money])
-  const unknown = projects.filter((p) => (year === null || toYear(p.date) === year) && !p.leadSource?.trim())
-  const adsSpend = adsSpendForYear(year)
+  const rows = useMemo(() => originBreakdown(projects, period, money), [projects, period, money])
+  const unknown = useMemo(
+    () => originProjectsInPeriod(projects, period, money).filter((p) => !p.leadSource?.trim()),
+    [projects, period, money]
+  )
   const maxRevenue = Math.max(1, ...rows.map((r) => r.revenue))
 
   return (
@@ -54,27 +50,8 @@ export function OriginsPanel({
         <div>
           <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Pochodzenie klientów</h3>
           <p className="mt-0.5 text-[11px] text-zinc-600">
-            Wszystkie projekty wg daty księgowej. Pochodzenie ustawiasz w pasku otwartego projektu albo poniżej.
+            Wygrane wg przychodu w okresie, reszta wg daty projektu. Pochodzenie ustawiasz w pasku otwartego projektu albo poniżej.
           </p>
-        </div>
-        <div className="flex rounded-lg border border-white/10 bg-black/30 p-0.5" role="radiogroup" aria-label="Rok">
-          {[...years.map((y) => ({ value: y as number | null, label: String(y) })), { value: null, label: 'Cały czas' }].map((opt) => {
-            const active = opt.value === year
-            return (
-              <button
-                key={opt.label}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setYear(opt.value)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-200'
-                }`}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
         </div>
       </div>
 
