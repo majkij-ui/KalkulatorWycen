@@ -244,6 +244,18 @@ another account reads like a statement transfer. No conflicts. 1,153 tests, `tsc
 quotes and every Finance year total identical; data files unchanged. Checked in the installed app: the tab name
 and the note. „Podatki" after this change was checked in the browser preview only.
 
+**Merged and installed 2026-11-16, Zakupy KSeF:** Sprzęt has a fourth tab, „Zakupy KSeF": purchase invoices from
+the KSeF copy split into lines, each decided as new gear (on set or „Zaplecze i drobiazgi"), a link to an item
+already in the catalogue, or an expense category for the line, the invoice or the seller (docs/PLAN-KSEF.md §11).
+Items remember their invoices and show them in the item panel. No conflicts. 1,191 tests, `tsc` clean. Real data,
+read-only: 37 quotes and every Finance year total identical on old and new code. The first build failed on a
+network timeout while fetching a font; the second passed. With the hub closed, a data patch then merged the 2026
+gear with its invoices (4 items corrected, 10 added to „Zaplecze", the monthly „Sprzęt" sums in fixed costs reduced
+by the purchases the catalogue now counts); Finance before/after on real data: only 2026 changed, fixed costs down
+and gear costs up by nearly the same amount, result up by about 74 zł, as computed beforehand on a copy. Checked in
+the installed app: the tab opens on real data and its gear totals match the linked invoices. Not clicked in the
+installed app: creating an item, linking and categories (clicked through in the browser preview on a data copy).
+
 ## 4a. Quote as a project document (Q1) and quote variants (Q2) *(decided with M.J. 2026-10-16)*
 
 **Why:** the hub still carries the original QuoteGen design: ONE global calculator that a project is
